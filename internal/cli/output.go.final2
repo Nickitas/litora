@@ -297,7 +297,6 @@ func writeFractalSeries(opts fractalSeriesOptions, output string, ctx exportCont
 			} else {
 				meta = append(meta, fmt.Sprintf("D: n/a, масштабов=%d", dimension.SampleCount))
 			}
-		}
 		if opts.ErosionStrength > 0 {
 			meta = append(meta, fmt.Sprintf("Эрозия: σ=%.0f м, seed=%d", opts.ErosionStrength, opts.ErosionSeed))
 		}
@@ -328,6 +327,13 @@ func writeFractalSeries(opts fractalSeriesOptions, output string, ctx exportCont
 			RelativeToModelBase: safeRatio(lengths[iter], modelSummary.LengthKM),
 			RelativeToReference: safeRatio(lengths[iter], referenceSummary.LengthKM),
 			Dimension:           dimensions[iter],
+		}
+		if theory, ok := opts.TheoryByIter[iter]; ok {
+			iterationMetrics.Theory = &theoryMetrics{
+				ExpectedLengthKM: theory.TheoreticalKM,
+				ErrorKM:          theory.ErrorKM,
+				ErrorPercent:     theory.ErrorPercent,
+			}
 		}
 		iterationsMetrics = append(iterationsMetrics, iterationMetrics)
 

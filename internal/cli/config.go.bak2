@@ -124,16 +124,6 @@ func parseConfig(args []string, stdout, stderr io.Writer) (config, error) {
 		fs.BoolVar(&cfg.Refresh, "refresh", false, "force refresh of the remote GeoJSON cache before running")
 		fs.StringVar(&cfg.OutputPath, "output", "", "output SVG path or directory (default: ./output)")
 		fs.Usage = func() { printCommandUsage(stdout, command) }
-	case cmdParadox:
-		fs.StringVar(&cfg.InputPath, "input", coastline.DefaultCoastlineJSONPath, "path to local coastline JSON/GeoJSON fallback file")
-		fs.StringVar(&cfg.SourceURL, "source-url", coastline.DefaultCoastlineGeoJSONURL, "remote GeoJSON URL for coastline data; empty string disables HTTP loading")
-		fs.BoolVar(&cfg.Refresh, "refresh", false, "force refresh of the remote GeoJSON cache before running")
-		fs.IntVar(&cfg.Iterations, "iterations", 4, fmt.Sprintf("maximum paradox detail levels (0-%d)", koch.MaxIterations))
-		fs.Int64Var(&cfg.Seed, "seed", 42, "random seed for paradox erosion/randomness")
-		fs.Float64Var(&cfg.ErosionStrength, "erosion-strength", 0, "Gaussian erosion strength in meters; applied after fractal growth (0 disables)")
-		fs.IntVar(&cfg.ModelMaxPoints, "model-max-points", 0, "max points for model base (0 keeps default budget); higher preserves details")
-		fs.BoolVar(&cfg.DisableSimplify, "no-model-simplify", false, "disable model base simplification before fractal growth")
-		fs.Usage = func() { printCommandUsage(stdout, command) }
 	case cmdKoch:
 		fs.StringVar(&cfg.InputPath, "input", coastline.DefaultCoastlineJSONPath, "path to local coastline JSON/GeoJSON fallback file")
 		fs.StringVar(&cfg.SourceURL, "source-url", coastline.DefaultCoastlineGeoJSONURL, "remote GeoJSON URL for coastline data; empty string disables HTTP loading")

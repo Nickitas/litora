@@ -297,7 +297,6 @@ func writeFractalSeries(opts fractalSeriesOptions, output string, ctx exportCont
 			} else {
 				meta = append(meta, fmt.Sprintf("D: n/a, масштабов=%d", dimension.SampleCount))
 			}
-		}
 		if opts.ErosionStrength > 0 {
 			meta = append(meta, fmt.Sprintf("Эрозия: σ=%.0f м, seed=%d", opts.ErosionStrength, opts.ErosionSeed))
 		}
@@ -328,6 +327,13 @@ func writeFractalSeries(opts fractalSeriesOptions, output string, ctx exportCont
 			RelativeToModelBase: safeRatio(lengths[iter], modelSummary.LengthKM),
 			RelativeToReference: safeRatio(lengths[iter], referenceSummary.LengthKM),
 			Dimension:           dimensions[iter],
+		}
+		if theory, ok := opts.TheoryByIter[iter]; ok {
+			iterationMetrics.Theory = &theoryMetrics{
+				ExpectedLengthKM: theory.TheoreticalKM,
+				ErrorKM:          theory.ErrorKM,
+				ErrorPercent:     theory.ErrorPercent,
+			}
 		}
 		iterationsMetrics = append(iterationsMetrics, iterationMetrics)
 
@@ -577,21 +583,6 @@ func makeSeriesCharts(currentIter int, lengths []float64, dimensions []*dimensio
 	return charts
 }
 
-func buildLengthChart(lengths []float64) svgrender.Chart {
-	chart := svgrender.Chart{
-		Title: "Длина по итерациям",
-		Series: []svgrender.ChartSeries{
-			{
-				Label:  "Измерено",
-				Values: append([]float64(nil), lengths...),
-				Stroke: "#1f6f8b",
-			},
-		},
-	}
-
-
-	return chart
-}
 
 func buildDimensionChart(dimensions []*dimensionMetrics) svgrender.Chart {
 	values := make([]float64, len(dimensions))
@@ -680,4 +671,19 @@ func resolveSeriesOutputDir(output string) (string, error) {
 	}
 
 	return filepath.Abs(output)
+}
+
+func buildLengthChart(lengths []float64) svgrender.Chart {
+	chart := svgrender.Chart{
+		Title: "Длина по итерациям",
+		Series: []svgrender.ChartSeries{
+			{
+				Label:  "Измерено",
+				Values: append([]float64(nil), lengths...),
+				Stroke: "#1f6f8b",
+			},
+		},
+	}
+
+	return chart
 }

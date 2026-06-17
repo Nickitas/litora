@@ -25,6 +25,7 @@ type fractalSeriesOptions struct {
 	ErosionStrength  float64
 	ErosionSeed      int64
 	IncludeDimension bool
+	TheoryByIter     map[int]koch.TheoryCheckSample
 	Builder          func([]geometry.LatLon, int) []geometry.LatLon
 }
 
@@ -285,7 +286,7 @@ func writeFractalSeries(opts fractalSeriesOptions, output string, ctx exportCont
 	for iter := 0; iter <= iterations; iter++ {
 		filename := filepath.Join(outputDir, fmt.Sprintf("%s_%d.svg", opts.Prefix, iter))
 		layers := makeFractalLayers(referenceRender, referenceSummary.LengthKM, renderCurves[:iter+1], lengths[:iter+1])
-		charts := makeSeriesCharts(iter, lengths[:iter+1], dimensions[:iter+1])
+		charts := makeSeriesCharts(iter, lengths[:iter+1], dimensions[:iter+1], opts.TheoryByIter)
 		meta := []string{
 			fmt.Sprintf("Реальная линия: %.0f км, %d т.", referenceSummary.LengthKM, referenceSummary.PointsCount),
 			fmt.Sprintf("База модели: %.0f км, %d т. (%+.1f%% к реальной)", modelSummary.LengthKM, modelSummary.PointsCount, modelSimplification.LengthDeltaPercent),
@@ -297,6 +298,8 @@ func writeFractalSeries(opts fractalSeriesOptions, output string, ctx exportCont
 			} else {
 				meta = append(meta, fmt.Sprintf("D: n/a, масштабов=%d", dimension.SampleCount))
 			}
+		} else if theory, ok := opts.TheoryByIter[iter]; ok {
+			meta = append(meta, fmt.Sprintf("Теория: %.0f км, ошибка %.2f%%", theory.TheoreticalKM, theory.ErrorPercent))
 		}
 		if opts.ErosionStrength > 0 {
 			meta = append(meta, fmt.Sprintf("Эрозия: σ=%.0f м, seed=%d", opts.ErosionStrength, opts.ErosionSeed))
@@ -328,6 +331,13 @@ func writeFractalSeries(opts fractalSeriesOptions, output string, ctx exportCont
 			RelativeToModelBase: safeRatio(lengths[iter], modelSummary.LengthKM),
 			RelativeToReference: safeRatio(lengths[iter], referenceSummary.LengthKM),
 			Dimension:           dimensions[iter],
+		}
+		if theory, ok := opts.TheoryByIter[iter]; ok {
+			iterationMetrics.Theory = &theoryMetrics{
+				ExpectedLengthKM: theory.TheoreticalKM,
+				ErrorKM:          theory.ErrorKM,
+				ErrorPercent:     theory.ErrorPercent,
+			}
 		}
 		iterationsMetrics = append(iterationsMetrics, iterationMetrics)
 
@@ -561,9 +571,9 @@ func fixStatTone(count int) string {
 	return "#3f6b4b"
 }
 
-func makeSeriesCharts(currentIter int, lengths []float64, dimensions []*dimensionMetrics) []svgrender.Chart {
+func makeSeriesCharts(currentIter int, lengths []float64, dimensions []*dimensionMetrics, theoryByIter map[int]koch.TheoryCheckSample) []svgrender.Chart {
 	charts := []svgrender.Chart{
-		buildLengthChart(lengths),
+		buildLengthChart(lengths, theoryByIter),
 	}
 
 	dimensionChart := buildDimensionChart(dimensions)
@@ -577,7 +587,7 @@ func makeSeriesCharts(currentIter int, lengths []float64, dimensions []*dimensio
 	return charts
 }
 
-func buildLengthChart(lengths []float64) svgrender.Chart {
+func buildLengthChart(lengths []float64, theoryByIter map[int]koch.TheoryCheckSample) svgrender.Chart {
 	chart := svgrender.Chart{
 		Title: "Длина по итерациям",
 		Series: []svgrender.ChartSeries{
@@ -589,6 +599,22 @@ func buildLengthChart(lengths []float64) svgrender.Chart {
 		},
 	}
 
+	if len(theoryByIter) > 0 {
+		theory := make([]float64, len(lengths))
+		for i := range theory {
+			if sample, ok := theoryByIter[i]; ok {
+				theory[i] = sample.TheoreticalKM
+				continue
+			}
+			theory[i] = math.NaN()
+		}
+		chart.Series = append(chart.Series, svgrender.ChartSeries{
+			Label:     "Теория",
+			Values:    theory,
+			Stroke:    "#c06c3f",
+			DashArray: "5 4",
+		})
+	}
 
 	return chart
 }
