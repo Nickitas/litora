@@ -32,8 +32,8 @@
     "elevation_subset": {
       "opendap_url": "https://dap.ceda.ac.uk/thredds/dodsC/bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/GEBCO_2026.nc",
       "local_file": "output/source/netcdf/GEBCO_2026_Black_Sea_40.5_47.5_27.0_42.5.nc",
-      "sha256": "c957981ff054f50d1cd87f730c1e6b08f948686f8342a8208655a512efaa77ac",
-      "size_bytes": 12569007,
+      "sha256": "a6f7d47f7659dcbebab12ebeafc8ec6f5fe8c270c8c7f8e2ee69219dc86f2ffe",
+      "size_bytes": 12565959,
       "dimensions": {
         "lat": 1680,
         "lon": 3720
@@ -60,7 +60,7 @@
     },
     "subset_processing": {
       "method": "OPeNDAP + xarray.sel по центрам ячеек без интерполяции и изменения значений",
-      "downloaded_at": "2026-08-20T20:28:48Z",
+      "downloaded_at": "2026-08-31T14:11:00Z",
       "software": {
         "python": "3.13.1",
         "xarray": "2026.4.0",
@@ -68,6 +68,17 @@
         "numpy": "2.4.6"
       },
       "hash_scope": "SHA-256 относится к региональному NetCDF после записи xarray, а не к глобальному файлу GEBCO размером 7 ГБ."
+    },
+    "regular_grid": {
+      "local_file": "output/source/regular/black-sea-gebco2026-15arcsec-lat-lon-depth.nc",
+      "metadata_file": "output/source/regular/black-sea-gebco2026-15arcsec-lat-lon-depth.metadata.json",
+      "sha256": "7ff9f195df7cf3d0cf8dea329c0a88e70a1cd739b5592c3215eed5310ddf0bdd",
+      "dimensions": {
+        "lat": 1680,
+        "lon": 3720
+      },
+      "coordinates": ["lat", "lon", "depth"],
+      "depth_sign": "Отрицательная донная отметка ниже уровня моря; создана переименованием elevation без интерполяции."
     },
     "limitations": [
       "Не предназначено для навигации или иных задач безопасности на море.",
@@ -78,17 +89,42 @@
   },
   "control": {
     "role": "контроль береговой и шельфовой зоны",
-    "product": "EMODnet Digital Bathymetry DTM 2024, MSL",
+    "product": "EMODnet Digital Bathymetry DTM 2024, elevation relative to Lowest Astronomical Tide",
     "publisher": "EMODnet Bathymetry Consortium",
     "doi": "10.12770/cf51df64-56f9-4a99-b1aa-36b8d7b743a1",
     "documentation_url": "https://emodnet.ec.europa.eu/en/bathymetry",
     "source_grid_interval_arc_seconds": 3.75,
     "horizontal_reference": "Географические широта/долгота; WGS 84 / EPSG:4326 для сервисов",
-    "vertical_reference": "Вариант MSL; исходный DTM также публикуется в LAT",
+    "vertical_reference": "Lowest Astronomical Tide; значения elevation отрицательны под уровнем отсчёта",
     "license": "CC BY 4.0 для продуктов EMODnet, если метаданные конкретного слоя не устанавливают иное",
     "license_url": "https://emodnet.ec.europa.eu/en/terms-use-emodnet-online-services-data-and-data-products",
     "attribution": "EMODnet Bathymetry Consortium. EMODnet Digital Bathymetry (DTM 2024). doi:10.12770/cf51df64-56f9-4a99-b1aa-36b8d7b743a1",
     "dependency_policy": "Сравниваются только ячейки с доступным Source Reference и без GEBCO как преобладающего источника. EMODnet заполняет пробелы GEBCO, а GEBCO интегрирует EMODnet, поэтому сравнение продуктов не считается полностью независимой валидацией.",
-    "download_status": "planned_for_qa_01"
+    "download_status": "восстановлена нативная сетка и производная контрольная выборка для QA-02",
+    "native_elevation_subset": {
+      "source_url": "https://erddap.emodnet.eu/erddap/griddap/bathymetry_dtm_2024.nc?elevation%5B(40.5)%3A1%3A(47.5)%5D%5B(27)%3A1%3A(42.5)%5D",
+      "local_file": "output/source/netcdf/EMODnet_DTM_2024_Black_Sea_40.5_47.5_27.0_42.5.nc",
+      "sha256": "38616b672c03c1c19f2a3ef36a616bf59cbf60273e24b95977a1605c5ce1aea9",
+      "size_bytes": 400238828,
+      "dimensions": {
+        "latitude": 6721,
+        "longitude": 14881
+      },
+      "actual_cell_centre_bounds": {
+        "min_lat": 40.500520833311846,
+        "max_lat": 47.50052083330548,
+        "min_lon": 27.000520833317122,
+        "max_lon": 42.50052083330303
+      },
+      "minimum_elevation_m": -2683.971435546875,
+      "maximum_elevation_m": 4.284762382507324
+    },
+    "derived_control_subset": {
+      "local_file": "output/source/emodnet-dtm2024-black-sea-0.02deg.json",
+      "metadata_file": "output/source/emodnet-dtm2024-black-sea-0.02deg.metadata.json",
+      "sha256": "bdba5400501e572c5d9ba68fca5618dd75fe1f438fafcb1e4b9ea64a2eb1945b",
+      "point_count": 132980,
+      "target_resolution_degrees": 0.0197916666666667
+    }
   }
 }

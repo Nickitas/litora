@@ -149,7 +149,7 @@ lito
 
 ## Модель дна: `seabed`
 
-`seabed` создаёт новый формат `lito-seabed/v1`, не изменяя входной MSH. Перед первой сборкой нужны полная четырёхугольная MSH, подтверждённый производный JSON-набор GEBCO с паспортом и, при необходимости, GeoJSON полного контура. См. [источник батиметрии](docs/bathymetry-source-selection.md) и [контракт данных](docs/adr/seabed-data-contract.md).
+`seabed` создаёт новый формат `lito-seabed/v1`, не изменяя входной MSH. Перед первой сборкой нужны полная четырёхугольная MSH, подтверждённый производный JSON-набор GEBCO с паспортом и, при необходимости, GeoJSON полного контура. Основная регулярная сетка хранится в исходном NetCDF GEBCO, а её совместимая с программой выборка — в `output/export-01-verification/`. Для межпродуктового контроля подготовлена отдельная выборка EMODnet в `output/source/`; порядок её воспроизведения приведён в [руководстве по подготовке батиметрии](cmd/bathymetry/README.md). См. также [источник батиметрии](docs/bathymetry-source-selection.md) и [контракт данных](docs/adr/seabed-data-contract.md).
 
 ### Основной маршрут
 
@@ -203,7 +203,7 @@ lito
 # Другой масштаб вертикального преувеличения
 ./lito seabed render --vertical-exaggeration 25
 
-# Независимая проверка
+# Проверка отдельной опорной модели с совпадающим вертикальным нулём
 ./lito seabed validate \
   --reference data/reference-depth.msh \
   --reference-passport data/reference-depth.passport.json
@@ -213,6 +213,11 @@ lito
 ```
 
 Документы: [CLI модели дна](docs/seabed-cli.md), [3D-рельеф и профили](docs/bathymetry-3d-profiles.md), [проверка качества](docs/relief-quality-validation.md), [адаптивные сетки](docs/adaptive-gmsh.md).
+
+> Контроль EMODnet подготовлен как межпродуктовый. Его отметки заданы
+> относительно Lowest Astronomical Tide, а основная GEBCO-модель использует
+> допущение среднего уровня моря. `seabed validate` намеренно не сравнивает их
+> до документированного вертикального преобразования.
 
 ## Эрозия и перенос наносов
 
