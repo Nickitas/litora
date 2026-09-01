@@ -1,0 +1,23 @@
+import { HeroSection } from "./ui/hero-section";
+import { FeaturesSection } from "./ui/features-section";
+import { ScientificSection } from "./ui/scientific-section";
+import { CommandsSection } from "./ui/commands-section";
+import { Meteors } from "@/shared/shadcn/ui/meteors";
+import { WorkflowSection } from "./ui/workflow-section";
+import { ObservatorySection } from "./ui/observatory-section";
+
+export function HomePage() {
+  return (
+    <div className="space-y-12 sm:space-y-16">
+      <div className="relative overflow-x-hidden">
+        <Meteors />
+        <HeroSection />
+      </div>
+      <FeaturesSection />
+      <ScientificSection />
+      <CommandsSection />
+      <WorkflowSection />
+      <ObservatorySection />
+    </div>
+  );
+}
