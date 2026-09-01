@@ -7,5 +7,6 @@ export const ROUTES = {
   downloads: "/downloads",
   releases: "/releases",
   gallery: "/gallery",
+  account: "/account",
   login: "/login",
 } as const;

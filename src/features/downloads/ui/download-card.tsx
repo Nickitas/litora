@@ -143,17 +143,17 @@ export function DownloadCard({ file, onDownload }: DownloadCardProps) {
   return (
     <div className="flex h-full flex-col rounded-lg border p-6 transition-colors hover:border-primary/50">
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="mb-4 flex min-w-0 items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {getOsIcon(file.os)}
-          <div>
-            <h3 className="font-semibold">{file.name}</h3>
+          <div className="min-w-0">
+            <h3 className="break-all font-semibold">{file.name}</h3>
             <p className="text-sm text-muted-foreground capitalize">
               {file.os}
             </p>
           </div>
         </div>
-        <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">
+        <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium">
           {file.version}
         </span>
       </div>

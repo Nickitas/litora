@@ -16,9 +16,9 @@ export function Navbar() {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <nav className="fixed z-50 w-screen border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex items-center justify-between px-4">
-        <div className="flex items-center gap-6">
+    <nav className="fixed z-50 w-full max-w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container mx-auto flex min-w-0 items-center justify-between px-4">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-6">
           <Brand
             setMobileMenuOpen={() => setMobileMenuOpen(false)}
             to={ROUTES.home}
@@ -26,8 +26,8 @@ export function Navbar() {
           <DesktopNavigation isActive={isActive} />
         </div>
 
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-4">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-4">
             <AnimatedThemeToggler className="relative size-9 rounded-lg border p-2" />
             <DesktopActions />
           </div>

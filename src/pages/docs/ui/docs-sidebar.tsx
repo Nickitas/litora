@@ -9,7 +9,8 @@ export const DocsSidebar = () => {
   const isDocsPage = location.pathname === "/docs";
   const isDetailPage =
     location.pathname.startsWith("/docs/modules/") ||
-    location.pathname.startsWith("/docs/capabilities/");
+    location.pathname.startsWith("/docs/capabilities/") ||
+    location.pathname.startsWith("/docs/reference/");
 
   // Hide sidebar on main docs page
   if (isDocsPage) {

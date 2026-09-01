@@ -20,10 +20,11 @@ export function Layout({ children }: LayoutProps) {
   const isDocsPage =
     location.pathname === "/docs" ||
     location.pathname.startsWith("/docs/modules/") ||
-    location.pathname.startsWith("/docs/capabilities/");
+    location.pathname.startsWith("/docs/capabilities/") ||
+    location.pathname.startsWith("/docs/reference/");
 
   return (
-    <div className="relative min-h-screen bg-background">
+    <div className="relative min-h-screen overflow-x-clip bg-background">
       <ScrollToTop />
       <Particles
         className="fixed inset-0 z-0"

@@ -4,7 +4,7 @@ import { useAuth } from "@/features/auth";
 import { ROUTES } from "@/shared/config/routes";
 import { motion, AnimatePresence } from "motion/react";
 import type { Dispatch, SetStateAction } from "react";
-import { ChevronRight, LogOut, User } from "lucide-react";
+import { ChevronRight, LogOut, User, UserRound } from "lucide-react";
 import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
 
 type MobileMenuProps = {
@@ -124,6 +124,18 @@ export const MobileMenu = ({
                       </p>
                     </div>
                   </div>
+
+                  <Link
+                    to={ROUTES.account}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="group flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-primary/10"
+                  >
+                    <span className="flex items-center gap-2">
+                      <UserRound className="size-4 text-primary" />
+                      Личный кабинет
+                    </span>
+                    <ChevronRight className="size-4 text-primary transition-transform group-hover:translate-x-0.5" />
+                  </Link>
 
                   {/* Logout button */}
                   <RippleButton
