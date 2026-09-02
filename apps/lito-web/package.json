@@ -13,6 +13,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@litora/api-client": "workspace:*",
+    "@litora/contracts": "workspace:*",
     "@fontsource-variable/geist": "^5.2.9",
     "@icons-pack/react-simple-icons": "^13.13.0",
     "@react-three/drei": "^10.7.7",

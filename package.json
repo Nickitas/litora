@@ -1,0 +1,11 @@
+{
+  "name": "litora",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "build:web": "pnpm --filter litora-web build",
+    "build:api": "pnpm --filter litora-api build",
+    "typecheck": "pnpm --filter @litora/api-client typecheck && pnpm --filter @litora/contracts typecheck && pnpm --filter litora-web typecheck",
+    "test:cli": "go test ./..."
+  }
+}
