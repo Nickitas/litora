@@ -3,6 +3,9 @@
   "private": true,
   "packageManager": "pnpm@10.15.0",
   "scripts": {
+    "infra:up": "docker compose --env-file .env.local -f infra/compose.yaml up -d",
+    "infra:down": "docker compose --env-file .env.local -f infra/compose.yaml down",
+    "infra:logs": "docker compose --env-file .env.local -f infra/compose.yaml logs -f",
     "build:web": "pnpm --filter litora-web build",
     "build:api": "pnpm --filter litora-api build",
     "typecheck": "pnpm --filter @litora/api-client typecheck && pnpm --filter @litora/contracts typecheck && pnpm --filter litora-web typecheck",

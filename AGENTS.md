@@ -1,126 +1,118 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+Инструкции для AI-агентов и разработчиков монорепозитория Litora.
 
-## Language Rule
+## Язык
 
-**This program is for Russian-speaking users.** All user-facing text, command descriptions, output messages, and comments must be in Russian. Do not translate or replace Russian text with English when modifying CLI commands, help text, or output messages.
+Пользовательский интерфейс, сообщения CLI/API, документация и комментарии к
+экспортируемому коду пишутся на русском языке. Имена программных сущностей,
+HTTP-полей и технические идентификаторы остаются на английском.
 
-## Table Output Format
+## Назначение системы
 
-When outputting data in tabular format, use tab-separated columns with the `text/tabwriter` package:
+Litora — платформа для расчётов и исследований береговой линии и рельефа дна
+Чёрного моря. Go является единственным источником математической и научной
+логики. TypeScript-приложения не должны дублировать формулы или алгоритмы.
 
-```go
-w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-fmt.Fprintln(w, "Заголовок1\tЗаголовок2\tЗаголовок3")
-fmt.Fprintln(w, "----------\t----------\t----------")
-// data rows
-w.Flush()
-```
+## Компоненты и ответственность
 
-Key points:
-- Use `\t` (tab character) to separate columns
-- Use `tabwriter.Writer` for proper alignment
-- Column headers should be in Russian
-- Include a separator line with dashes after headers
+### `apps/lito-cli`
 
-## Output Rule
+- самостоятельное CLI-приложение и вычислительное ядро;
+- чтение и валидация геоданных, расчёты, построение сеток и отчётов;
+- генерация машинно-читаемого манифеста результата;
+- не отвечает за пользователей, авторизацию, HTTP и долговременное хранение.
 
-**All command execution results must be saved to the `output/` directory.** Each command should create a corresponding subdirectory (e.g., `output/dimension/`, `output/erosion/`, `output/source/`) and save:
-- Generated files (SVG visualizations, CSV exports, GIF animations)
-- Analysis results and metrics
-- Logs and snapshots
+Доменная логика находится в Go-пакетах и не зависит от Cobra. Cobra — только
+транспортный адаптер. Новые расчёты должны вызываться и из CLI, и из Go worker.
 
-Do not change output paths to other locations unless explicitly requested by the user.
+### `apps/lito-api`
 
-## Documentation Rule
+- NestJS control plane и единственный публичный backend для web;
+- регистрация, авторизация, пользователи и права доступа;
+- приём параметров, создание заданий и выдача результатов;
+- метаданные в PostgreSQL, файлы через S3 API;
+- не содержит научных формул и не выполняет расчёты внутри HTTP-запроса.
 
-**Every code change requires documentation updates.** For any modification:
-1. Add/update package documentation in the affected package (godoc comments)
-2. Update the root `README.md` with relevant changes
-3. Document new functions, types, or exported elements with Russian comments
-4. **General documentation must be stored in `docs/` directory** (architecture guides, usage examples, installation instructions, etc.)
+### `apps/lito-web`
 
-Do not skip documentation when implementing features or fixes.
+- React-интерфейс, работающий через `@litora/api-client`;
+- не обращается напрямую к PostgreSQL, S3 или процессу CLI;
+- не дублирует DTO и серверную бизнес-логику.
 
-## Project Overview
+### Общие пакеты
 
-**Lito** is a Go CLI tool for coastal geomorphology modeling, specifically for analyzing Black Sea coastline geometry. The tool combines:
-- Fractal analysis via box-counting dimension
-- Wave erosion modeling with bathymetry support
+- `packages/contracts` — публичные DTO, статусы заданий и типы API;
+- `packages/api-client` — типизированный HTTP-клиент;
+- `packages/config` — общая безопасная конфигурация без секретов;
+- `packages/docs/content` — единственный источник общей документации;
+- `packages/generated-data` — небольшие версионируемые примеры и артефакты.
 
-Module name: `coastal-geometry`
+## Целевой поток расчёта
 
-## Build and Test Commands
+1. Web отправляет параметры через API client.
+2. API проверяет пользователя и DTO, создаёт `calculation_job` в PostgreSQL.
+3. Go worker получает задание и запускает вычислительное ядро.
+4. Worker загружает крупные артефакты в S3-совместимое хранилище.
+5. Worker записывает статус, метрики и ссылки на артефакты в PostgreSQL.
+6. API возвращает web состояние и временные подписанные URL файлов.
+
+На первом этапе допустим запуск CLI как дочернего процесса из отдельного worker.
+Запуск CLI непосредственно из controller запрещён.
+
+## Инфраструктурные решения
+
+- PostgreSQL обязателен для пользователей, сессий, заданий, статусов, метаданных
+  результатов и аудита.
+- S3-совместимое хранилище обязательно для входных файлов и крупных результатов.
+  Локально используется MinIO, в production — AWS S3 или совместимый сервис.
+- Docker Compose используется для локальных PostgreSQL и MinIO.
+- Redis не добавляется до подтверждённой потребности. Сначала очередь строится на
+  PostgreSQL с безопасным захватом заданий worker'ом.
+- Крупные расчётные файлы не хранятся в PostgreSQL и не коммитятся в Git.
+
+## Контракты и совместимость
+
+Изменение API выполняется в порядке:
+
+1. `packages/contracts`;
+2. controller/service в `apps/lito-api`;
+3. `packages/api-client`;
+4. потребитель в `apps/lito-web`;
+5. Swagger и документация.
+
+Статусы задания: `queued`, `running`, `succeeded`, `failed`, `cancelled`.
+Каждый расчёт имеет UUID, владельца, тип, версию ядра, входные параметры,
+временные метки и список артефактов.
+
+## Безопасность
+
+- секреты берутся только из environment variables и не коммитятся;
+- пароли хешируются Argon2id, пароль никогда не возвращается через API;
+- access token короткоживущий, refresh sessions отзывные и хранятся в PostgreSQL;
+- S3-объекты приватные, доступ выдаётся через ограниченные signed URL;
+- входные файлы проверяются по размеру, типу и контрольной сумме;
+- запросы на данные ограничиваются владельцем или ролью пользователя.
+
+## Документация
+
+Изменение поведения требует обновления документации. Общие документы создаются в
+`packages/docs/content/`; локальные копии в приложениях запрещены. Новые экспортируемые
+Go-типы и функции документируются godoc-комментариями.
+
+## Правила CLI
+
+Результаты команд сохраняются в `apps/lito-cli/output/` или в явно переданный
+`--output`. Табличный вывод формируется через `text/tabwriter`, разделитель — `\t`,
+заголовки — на русском языке.
+
+## Проверки
 
 ```bash
-# Build
-go build -o lito ./cmd/lito
-# or
-make build
-
-# Run
-./lito --help
-
-# Tests
-go test ./...
-go test -v ./internal/domain/geometry/... -run TestSpecific
-
-# Format check
-gofmt -l .  # list unformatted files
-gofmt -w .  # format in-place
+pnpm typecheck
+pnpm --filter litora-api build
+pnpm --filter litora-web build
+cd apps/lito-cli && go test ./...
 ```
 
-## Architecture
-
-### Entry Point
-`cmd/lito/main.go` → `internal/cli/cobra.Execute()`
-
-### CLI Layer (`internal/cli/cobra/`)
-Commands use `github.com/spf13/cobra`:
-- `source` - inspect and validate coastline data sources
-- `dimension` - fractal box-counting analysis
-- `erosion` - wave erosion simulation
-- `all` - full pipeline (validation + fractal + erosion)
-
-Each command file follows the pattern: flag variables in `init()`, command logic in `run*()` function.
-
-### Domain Layer (`internal/domain/`)
-
-**coastline/** - Data loading and validation
-- `source.go` - GeoJSON fetching, caching, snapshot generation
-- `validation.go` - geometric and topological validation
-- `data.go` - coordinate parsing from GeoJSON/JSON arrays
-- Default data: Black Sea coastline from remote URL with local fallback
-
-**geometry/** - Core geometric operations
-- `erosion.go`, `sediment*.go` - wave erosion physics
-- `length.go`, `area.go` - geodesic measurements
-- `haversine.go` - great-circle distance calculations
-- `simplify.go` - polyline simplification (Visvalingam)
-- `bathymetry.go` - depth grid integration
-- `lithology.go` - rock type erosion resistance
-- `temporal.go` - storm dynamics and sea-level rise
-- `types.go` - `LatLon{Lat, Lon float64}` is the core coordinate type
-
-**fractal/** - Box-counting dimension analysis
-- `dimension.go` - `AnalyzeBoxCounting()` returns fractal D with stability metrics
-
-### Render Layer (`internal/render/svg/`)
-SVG visualization with multi-layer rendering, stat cards, charts, scale bars. Key function: `DrawSVG()`.
-
-## Key Data Flows
-
-1. **Coastline loading**: `coastline.Load()` → local file or remote URL with caching → `[]geometry.LatLon`
-2. **Fractal analysis**: Coastline → `fractal.AnalyzeBoxCounting()`
-3. **Erosion**: Coastline → `geometry.SimulateWaveErosionWithSeed()` → snapshots array with optional temporal dynamics
-
-## Important Constants and Defaults
-
-- Default coastline path: `data/black-sea-coastline.geojson`
-- Default bathymetry: `data/black-sea-bathymetry.json`
-- Default output: `./output/`
-
-## Testing Patterns
-
-Tests use standard Go testing (`_test.go` files). For geometry tests, fixtures are often small synthetic coastlines.
+Запускайте проверки пропорционально затронутым компонентам.

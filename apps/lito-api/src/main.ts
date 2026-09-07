@@ -3,6 +3,10 @@ import { Controller, Get, Module } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { HealthDto, ReleaseDto } from "@litora/contracts";
+import { CalculationsController } from "./calculations/calculations.controller.js";
+import { CalculationsRepository } from "./calculations/calculations.repository.js";
+import { DatabaseService } from "./infrastructure/database.service.js";
+import { ObjectStorageService } from "./infrastructure/object-storage.service.js";
 
 @Controller()
 @ApiTags("system")
@@ -18,7 +22,10 @@ class AppController {
   @Get("releases/latest") releases(): ReleaseDto { return { version: "0.1.0", releaseDate: new Date().toISOString().slice(0, 10), changelog: [], files: [] }; }
 }
 
-@Module({ controllers: [AppController] })
+@Module({
+  controllers: [AppController, CalculationsController],
+  providers: [DatabaseService, ObjectStorageService, CalculationsRepository],
+})
 class AppModule {}
 
 async function bootstrap() {

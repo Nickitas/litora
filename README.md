@@ -22,6 +22,25 @@ corepack enable
 pnpm install
 ```
 
+Подготовьте локальную конфигурацию и инфраструктуру:
+
+```bash
+cp .env.example .env.local
+pnpm infra:up
+```
+
+Команда поднимает PostgreSQL на `localhost:5432`, MinIO S3 API на
+`localhost:9000` и MinIO Console на `http://localhost:9001`.
+
+Схема БД и приватный bucket `litora` создаются автоматически. Уже созданные
+результаты CLI можно импортировать в PostgreSQL и MinIO:
+
+```bash
+pnpm --filter litora-api artifacts:import -- ../lito-cli/output/platform-smoke smoke
+```
+
+После импорта задания доступны через `GET /api/calculations`.
+
 Запустите API и web в двух терминалах:
 
 ```bash
@@ -125,6 +144,7 @@ go run ./cmd/lito map black-sea
 5. Выполните `pnpm typecheck` и `pnpm --filter litora-web build`.
 6. Для изменений CLI выполните `cd apps/lito-cli && go test ./...`.
 
-Документация хранится только в `packages/docs/content/`. CLI и web используют этот
-каталог; новые Markdown-документы и связанные схемы добавляйте туда. Крупные
+Документация хранится только в `packages/docs/content/`: CLI ссылается прямо на
+общий пакет, а web собирает из него все Markdown-документы рекурсивно. Новые Markdown-документы и
+связанные схемы добавляйте только туда. Крупные
 наборы данных храните через Git LFS или объектное хранилище, а не в npm-пакетах.

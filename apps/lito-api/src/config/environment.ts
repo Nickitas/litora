@@ -1,0 +1,32 @@
+import dotenv from "dotenv";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+
+const candidates = [
+  process.env.LITORA_ENV_FILE,
+  resolve(process.cwd(), ".env.local"),
+  resolve(process.cwd(), "../../.env.local"),
+].filter((path): path is string => Boolean(path));
+
+const envFile = candidates.find(existsSync);
+if (envFile) dotenv.config({ path: envFile });
+
+function required(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Не задана обязательная переменная окружения ${name}`);
+  return value;
+}
+
+export const environment = {
+  port: Number(process.env.PORT ?? 3000),
+  databaseUrl: required("DATABASE_URL"),
+  s3: {
+    endpoint: required("S3_ENDPOINT"),
+    region: process.env.S3_REGION ?? "us-east-1",
+    bucket: required("S3_BUCKET"),
+    accessKey: required("S3_ACCESS_KEY"),
+    secretKey: required("S3_SECRET_KEY"),
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
+  },
+};
+

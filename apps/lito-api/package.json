@@ -2,7 +2,31 @@
   "name": "litora-api",
   "version": "0.1.0",
   "private": true,
-  "scripts": { "build": "tsc -p tsconfig.json", "start:dev": "tsx watch src/main.ts" },
-  "dependencies": { "@litora/contracts": "workspace:*", "@nestjs/common": "^11.0.0", "@nestjs/core": "^11.0.0", "@nestjs/platform-express": "^11.0.0", "@nestjs/swagger": "^11.0.0", "reflect-metadata": "^0.2.2", "rxjs": "^7.8.2" },
-  "devDependencies": { "@types/node": "^22.0.0", "tsx": "^4.19.0", "typescript": "^5.9.3" }
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start:dev": "tsx watch src/main.ts",
+    "artifacts:import": "tsx src/scripts/import-cli-output.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1127.0",
+    "@aws-sdk/lib-storage": "^3.1127.0",
+    "@aws-sdk/s3-request-presigner": "^3.1127.0",
+    "@litora/contracts": "workspace:*",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/swagger": "^11.0.0",
+    "dotenv": "^17.4.2",
+    "mime-types": "^3.0.2",
+    "pg": "^8.23.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/mime-types": "^3.0.1",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3"
+  }
 }

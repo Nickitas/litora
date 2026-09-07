@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-litora}
+      POSTGRES_USER: ${POSTGRES_USER:-litora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-litora_local_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - litora_postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-litora} -d ${POSTGRES_DB:-litora}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-litora}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-litora_local_password}
+    ports:
+      - "${S3_PORT:-9000}:9000"
+      - "${S3_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - litora_minio_data:/data
+
+  postgres-init:
+    image: postgres:17-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-litora_local_password}
+    volumes:
+      - ./postgres/init:/migrations:ro
+    command:
+      - psql
+      - --host=postgres
+      - --username=${POSTGRES_USER:-litora}
+      - --dbname=${POSTGRES_DB:-litora}
+      - --file=/migrations/001_schema.sql
+    restart: "no"
+
+volumes:
+  litora_postgres_data:
+  litora_minio_data:

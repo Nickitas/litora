@@ -1,4 +1,4 @@
-import type { HealthDto, ReleaseDto } from "@litora/contracts";
+import type { CalculationJobDto, HealthDto, ReleaseDto } from "@litora/contracts";
 
 export interface ApiClientOptions { baseUrl?: string; fetch?: typeof globalThis.fetch; }
 
@@ -13,6 +13,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
   return {
     health: () => get<HealthDto>("/health"),
     releases: () => get<ReleaseDto>("/releases/latest"),
+    calculations: () => get<CalculationJobDto[]>("/calculations"),
+    calculation: (id: string) => get<CalculationJobDto>(`/calculations/${encodeURIComponent(id)}`),
   };
 }
 

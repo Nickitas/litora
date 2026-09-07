@@ -18,3 +18,31 @@ export interface ReleaseDto {
 }
 
 export interface HealthDto { status: "ok"; service: "lito-api"; version: string; }
+
+export type CalculationStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export interface CalculationArtifactDto {
+  id: string;
+  category: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  sha256: string;
+  downloadUrl: string;
+}
+
+export interface CalculationJobDto {
+  id: string;
+  kind: string;
+  status: CalculationStatus;
+  input: Record<string, unknown>;
+  resultSummary: Record<string, unknown> | null;
+  coreVersion: string | null;
+  commandLine: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  updatedAt: string;
+  artifacts: CalculationArtifactDto[];
+}

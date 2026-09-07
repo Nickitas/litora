@@ -22,14 +22,14 @@ Lito — программа командной строки для воспро�
 
 ## Галерея
 
-Иллюстрации хранятся в `docs/assets/readme/`, поэтому остаются доступными после очистки `output/`.
+Иллюстрации хранятся в общем пакете `packages/docs`, поэтому остаются доступными после очистки `output/`.
 
 <p align="center">
-  <img src="docs/assets/readme/black-sea-coastline.svg" width="49%" alt="Нормализованная береговая линия Чёрного моря">
-  <img src="docs/assets/readme/black-sea-bathymetry.svg" width="49%" alt="Обзорная карта глубин Чёрного моря">
+  <img src="../../packages/docs/content/assets/readme/black-sea-coastline.svg" width="49%" alt="Нормализованная береговая линия Чёрного моря">
+  <img src="../../packages/docs/content/assets/readme/black-sea-bathymetry.svg" width="49%" alt="Обзорная карта глубин Чёрного моря">
 </p>
 <p align="center">
-  <img src="docs/assets/readme/black-sea-mesh-fragments.svg" width="100%" alt="Фрагменты фактической четырёхугольной сетки">
+  <img src="../../packages/docs/content/assets/readme/black-sea-mesh-fragments.svg" width="100%" alt="Фрагменты фактической четырёхугольной сетки">
 </p>
 
 *Слева — контур с покрывающими ячейками, справа — батиметрическая карта, ниже — увеличенные фрагменты фактической сетки.*
@@ -145,11 +145,11 @@ lito
 
 Результаты: `output/mesh/` — MSH, SVG, таблицы и `mesh-comparison.json`.
 
-> Для всей акватории метод Делоне показал лучший итоговый результат. Уровень 500–1000 м предпочтителен для сохранения площадей береговых форм, а 200–1000 м — когда важнее точность глубин. Подробнее: [сравнение генераторов](docs/adaptive-generator-comparison.md).
+> Для всей акватории метод Делоне показал лучший итоговый результат. Уровень 500–1000 м предпочтителен для сохранения площадей береговых форм, а 200–1000 м — когда важнее точность глубин. Подробнее: [сравнение генераторов](../../packages/docs/content/adaptive-generator-comparison.md).
 
 ## Модель дна: `seabed`
 
-`seabed` создаёт новый формат `lito-seabed/v1`, не изменяя входной MSH. Перед первой сборкой нужны полная четырёхугольная MSH, подтверждённый производный JSON-набор GEBCO с паспортом и, при необходимости, GeoJSON полного контура. Основная регулярная сетка хранится в исходном NetCDF GEBCO, а её совместимая с программой выборка — в `output/export-01-verification/`. Для межпродуктового контроля подготовлена отдельная выборка EMODnet в `output/source/`; порядок её воспроизведения приведён в [руководстве по подготовке батиметрии](cmd/bathymetry/README.md). См. также [источник батиметрии](docs/bathymetry-source-selection.md) и [контракт данных](docs/adr/seabed-data-contract.md).
+`seabed` создаёт новый формат `lito-seabed/v1`, не изменяя входной MSH. Перед первой сборкой нужны полная четырёхугольная MSH, подтверждённый производный JSON-набор GEBCO с паспортом и, при необходимости, GeoJSON полного контура. Основная регулярная сетка хранится в исходном NetCDF GEBCO, а её совместимая с программой выборка — в `output/export-01-verification/`. Для межпродуктового контроля подготовлена отдельная выборка EMODnet в `output/source/`; порядок её воспроизведения приведён в [руководстве по подготовке батиметрии](cmd/bathymetry/README.md). См. также [источник батиметрии](../../packages/docs/content/bathymetry-source-selection.md) и [контракт данных](../../packages/docs/content/adr/seabed-data-contract.md).
 
 ### Основной маршрут
 
@@ -212,7 +212,7 @@ lito
 ./lito seabed check-full --generator frontal-quad --target-edge 1000
 ```
 
-Документы: [CLI модели дна](docs/seabed-cli.md), [3D-рельеф и профили](docs/bathymetry-3d-profiles.md), [проверка качества](docs/relief-quality-validation.md), [адаптивные сетки](docs/adaptive-gmsh.md).
+Документы: [CLI модели дна](../../packages/docs/content/seabed-cli.md), [3D-рельеф и профили](../../packages/docs/content/bathymetry-3d-profiles.md), [проверка качества](../../packages/docs/content/relief-quality-validation.md), [адаптивные сетки](../../packages/docs/content/adaptive-gmsh.md).
 
 > Контроль EMODnet подготовлен как межпродуктовый. Его отметки заданы
 > относительно Lowest Astronomical Tide, а основная GEBCO-модель использует
@@ -240,7 +240,7 @@ lito
 
 Полезные параметры: `--cerc-coefficient`, `--closure-depth`, `--berm-height`, `--porosity`, `--structures`, `--sediment-sources`, `--left-boundary-transport`, `--right-boundary-transport`, `--output-csv`, `--output-gif`.
 
-Результаты: `output/erosion/` — SVG-состояния, метрики, CSV и при запросе GIF. Ограничения модели: [руководство CERC](docs/cerc-one-line-model.md).
+Результаты: `output/erosion/` — SVG-состояния, метрики, CSV и при запросе GIF. Ограничения модели: [руководство CERC](../../packages/docs/content/cerc-one-line-model.md).
 
 ### `calibrate-cerc` — физическая калибровка
 
@@ -305,7 +305,7 @@ source <(./lito completion zsh)
 - Уровень 500–1000 м лучше сохраняет площади существенных форм всей акватории, но локальные участки требуют отдельной проверки.
 - Проверка `seabed validate` независима лишь при отдельной опорной модели и отдельном паспорте происхождения.
 
-Дополнительные материалы: [источник береговой линии](docs/coastline-source-selection.md), [построение сеток](docs/mesh-generation.md), [сравнение генераторов](docs/adaptive-generator-comparison.md), [экспорт модели дна](docs/seabed-msh-export.md), [контроль полного моря](docs/full-black-sea-quality.md).
+Дополнительные материалы: [источник береговой линии](../../packages/docs/content/coastline-source-selection.md), [построение сеток](../../packages/docs/content/mesh-generation.md), [сравнение генераторов](../../packages/docs/content/adaptive-generator-comparison.md), [экспорт модели дна](../../packages/docs/content/seabed-msh-export.md), [контроль полного моря](../../packages/docs/content/full-black-sea-quality.md).
 
 ## Лицензия
 
