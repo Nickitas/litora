@@ -3,12 +3,22 @@
   "private": true,
   "packageManager": "pnpm@10.15.0",
   "scripts": {
+    "env:init": "node scripts/setup.mjs",
+    "up": "pnpm env:init && docker compose --env-file .env.local -f infra/compose.yaml --profile app up -d --build",
+    "down": "docker compose --env-file .env.local -f infra/compose.yaml --profile app down",
+    "logs": "docker compose --env-file .env.local -f infra/compose.yaml --profile app logs -f",
+    "build:cli": "cd apps/lito-cli && go build -o bin/lito ./cmd/lito",
+    "dev:api": "pnpm --filter litora-api start:dev",
+    "dev:worker": "pnpm --filter litora-api worker",
+    "dev:web": "pnpm --filter litora-web dev",
+    "test:api": "pnpm --filter litora-api test",
+    "test:integration": "node scripts/integration-test.mjs",
     "infra:up": "docker compose --env-file .env.local -f infra/compose.yaml up -d",
     "infra:down": "docker compose --env-file .env.local -f infra/compose.yaml down",
     "infra:logs": "docker compose --env-file .env.local -f infra/compose.yaml logs -f",
     "build:web": "pnpm --filter litora-web build",
     "build:api": "pnpm --filter litora-api build",
-    "typecheck": "pnpm --filter @litora/api-client typecheck && pnpm --filter @litora/contracts typecheck && pnpm --filter litora-web typecheck",
-    "test:cli": "go test ./..."
+    "typecheck": "pnpm --filter @litora/api-client typecheck && pnpm --filter @litora/contracts typecheck && pnpm --filter litora-api typecheck && pnpm --filter litora-web typecheck",
+    "test:cli": "cd apps/lito-cli && go test ./..."
   }
 }

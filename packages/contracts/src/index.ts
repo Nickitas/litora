@@ -17,9 +17,14 @@ export interface ReleaseDto {
   files: ReleaseFile[];
 }
 
-export interface HealthDto { status: "ok"; service: "lito-api"; version: string; }
+export interface HealthDto {
+  status: "ok";
+  service: "lito-api";
+  version: string;
+}
 
-export type CalculationStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+export type CalculationStatus =
+  "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface CalculationArtifactDto {
   id: string;
@@ -45,4 +50,32 @@ export interface CalculationJobDto {
   finishedAt: string | null;
   updatedAt: string;
   artifacts: CalculationArtifactDto[];
+}
+
+export interface UserDto {
+  id: string;
+  email: string;
+  name: string;
+}
+export interface LoginDto {
+  email: string;
+  password: string;
+}
+export interface RegisterDto extends LoginDto {
+  name: string;
+}
+export interface AuthDto {
+  user: UserDto;
+  accessToken: string;
+  expiresIn: number;
+}
+export type CalculationKind = "dimension" | "map" | "erosion";
+export interface CreateCalculationDto {
+  kind: CalculationKind;
+  input?: { steps?: number };
+}
+export interface CalculationKindDto {
+  kind: CalculationKind;
+  title: string;
+  description: string;
 }

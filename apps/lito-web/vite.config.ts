@@ -5,6 +5,7 @@ import { defineConfig } from "vite";
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: { proxy: { "/api": { target: process.env.API_PROXY_TARGET ?? "http://localhost:3000", changeOrigin: true } } },
   plugins: [react(), tailwindcss()],
   resolve: {
     // В workspace React должен резолвиться одной копией, иначе hooks получают

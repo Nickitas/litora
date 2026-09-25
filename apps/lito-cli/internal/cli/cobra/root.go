@@ -1,6 +1,7 @@
 package cobra
 
 import (
+	"coastal-geometry/internal/cli"
 	"os"
 	"strings"
 
@@ -82,12 +83,20 @@ var rootCmd = &cobra.Command{
 моделирование волновой эрозии и визуализация рельефа дна. Входные данные
 других акваторий не поддерживаются.`,
 	SilenceUsage: true,
+	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+		if manifestPath == "" {
+			return nil
+		}
+		return cli.WriteResultManifest(manifestPath, cmd.CommandPath())
+	},
 }
 
 var (
-	quiet bool
+	quiet        bool
+	manifestPath string
 )
 
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "тихий режим (подавить вывод)")
+	rootCmd.PersistentFlags().StringVar(&manifestPath, "manifest", "", "путь к JSON-манифесту внутри каталога --output")
 }

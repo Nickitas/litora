@@ -3,3 +3,7 @@ dist/
 .env
 .env.*
 !.env.example
+
+.DS_Store
+.litora/
+apps/lito-cli/bin/

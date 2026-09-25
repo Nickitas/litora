@@ -1,9 +1,18 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { CalculationArtifactDto, CalculationJobDto } from "@litora/contracts";
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import type {
+  CalculationArtifactDto,
+  CalculationJobDto,
+  CreateCalculationDto,
+} from "@litora/contracts";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
 
-interface JobRow {
+export interface JobRow {
   id: string;
   kind: string;
   status: CalculationJobDto["status"];
@@ -16,6 +25,7 @@ interface JobRow {
   started_at: Date | null;
   finished_at: Date | null;
   updated_at: Date;
+  worker_id: string | null;
 }
 
 interface ArtifactRow {
@@ -47,19 +57,36 @@ export class CalculationsRepository {
   }
 
   async addArtifact(input: {
-    jobId: string; category: string; filename: string; bucket: string;
-    objectKey: string; contentType: string; sizeBytes: number; sha256: string;
+    jobId: string;
+    category: string;
+    filename: string;
+    bucket: string;
+    objectKey: string;
+    contentType: string;
+    sizeBytes: number;
+    sha256: string;
   }): Promise<void> {
     await this.database.query(
       `INSERT INTO calculation_artifacts
        (job_id, category, filename, bucket, object_key, content_type, size_bytes, sha256)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [input.jobId, input.category, input.filename, input.bucket, input.objectKey,
-        input.contentType, input.sizeBytes, input.sha256],
+      [
+        input.jobId,
+        input.category,
+        input.filename,
+        input.bucket,
+        input.objectKey,
+        input.contentType,
+        input.sizeBytes,
+        input.sha256,
+      ],
     );
   }
 
-  async complete(jobId: string, summary: Record<string, unknown>): Promise<void> {
+  async complete(
+    jobId: string,
+    summary: Record<string, unknown>,
+  ): Promise<void> {
     await this.database.query(
       `UPDATE calculation_jobs SET status = 'succeeded', result_summary = $2,
        finished_at = now(), updated_at = now() WHERE id = $1`,
@@ -75,30 +102,87 @@ export class CalculationsRepository {
     );
   }
 
-  async list(): Promise<CalculationJobDto[]> {
-    const result = await this.database.query<JobRow>(
-      "SELECT * FROM calculation_jobs ORDER BY created_at DESC LIMIT 100",
-    );
-    return Promise.all(result.rows.map((row) => this.toDto(row)));
+  async create(
+    userId: string,
+    job: CreateCalculationDto,
+  ): Promise<CalculationJobDto> {
+    const row = await this.database.transaction(async (client) => {
+      await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
+        userId,
+      ]);
+      const result = await client.query<JobRow>(
+        `INSERT INTO calculation_jobs(user_id,kind,input)
+        SELECT $1,$2,$3 WHERE (SELECT count(*) FROM calculation_jobs WHERE user_id=$1 AND status IN ('queued','running')) < 5 RETURNING *`,
+        [userId, job.kind, job.input ?? {}],
+      );
+      if (!result.rows[0])
+        throw new ConflictException(
+          "Уже есть 5 незавершённых расчётов. Дождитесь завершения или отмените лишние",
+        );
+      await client.query(
+        "INSERT INTO calculation_events(job_id,event_type) VALUES($1,'queued')",
+        [result.rows[0].id],
+      );
+      return result.rows[0];
+    });
+    return this.toDto(row);
   }
 
-  async get(id: string): Promise<CalculationJobDto> {
-    const result = await this.database.query<JobRow>("SELECT * FROM calculation_jobs WHERE id = $1", [id]);
+  async list(userId: string): Promise<CalculationJobDto[]> {
+    const result = await this.database.query<JobRow>(
+      "SELECT * FROM calculation_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100",
+      [userId],
+    );
+    return Promise.all(result.rows.map((row) => this.toDto(row, false)));
+  }
+
+  async get(id: string, userId: string): Promise<CalculationJobDto> {
+    const result = await this.database.query<JobRow>(
+      "SELECT * FROM calculation_jobs WHERE id = $1 AND user_id=$2",
+      [id, userId],
+    );
     if (!result.rows[0]) throw new NotFoundException("Расчёт не найден");
     return this.toDto(result.rows[0]);
   }
 
-  private async toDto(row: JobRow): Promise<CalculationJobDto> {
-    const artifacts = await this.database.query<ArtifactRow>(
-      "SELECT * FROM calculation_artifacts WHERE job_id = $1 ORDER BY created_at",
-      [row.id],
+  async cancel(id: string, userId: string): Promise<CalculationJobDto> {
+    await this.get(id, userId);
+    await this.database.query(
+      `WITH cancelled AS (UPDATE calculation_jobs SET status='cancelled', finished_at=now(), updated_at=now()
+      WHERE id=$1 AND user_id=$2 AND status IN ('queued','running') RETURNING id)
+      INSERT INTO calculation_events(job_id,event_type) SELECT id,'cancelled' FROM cancelled`,
+      [id, userId],
     );
+    return this.get(id, userId);
+  }
+
+  async claim(workerId: string): Promise<JobRow | undefined> {
+    const result = await this.database.query<JobRow>(
+      `WITH candidate AS (
+      SELECT id FROM calculation_jobs WHERE status='queued' AND user_id IS NOT NULL ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
+    ) UPDATE calculation_jobs j SET status='running', worker_id=$1, heartbeat_at=now(), started_at=now(), updated_at=now()
+      FROM candidate c WHERE j.id=c.id RETURNING j.*`,
+      [workerId],
+    );
+    return result.rows[0];
+  }
+
+  private async toDto(
+    row: JobRow,
+    includeArtifacts = true,
+  ): Promise<CalculationJobDto> {
+    const artifacts = includeArtifacts
+      ? await this.database.query<ArtifactRow>(
+          "SELECT * FROM calculation_artifacts WHERE job_id = $1 ORDER BY created_at",
+          [row.id],
+        )
+      : { rows: [] };
     return {
       id: row.id,
       kind: row.kind,
       status: row.status,
       input: row.input,
-      resultSummary: row.result_summary,
+      resultSummary: includeArtifacts ? row.result_summary : null,
       coreVersion: row.core_version,
       commandLine: row.command_line,
       errorMessage: row.error_message,
@@ -106,15 +190,19 @@ export class CalculationsRepository {
       startedAt: row.started_at?.toISOString() ?? null,
       finishedAt: row.finished_at?.toISOString() ?? null,
       updatedAt: row.updated_at.toISOString(),
-      artifacts: await Promise.all(artifacts.rows.map(async (artifact): Promise<CalculationArtifactDto> => ({
-        id: artifact.id,
-        category: artifact.category,
-        filename: artifact.filename,
-        contentType: artifact.content_type,
-        sizeBytes: Number(artifact.size_bytes),
-        sha256: artifact.sha256,
-        downloadUrl: await this.storage.downloadUrl(artifact.object_key),
-      }))),
+      artifacts: await Promise.all(
+        artifacts.rows.map(
+          async (artifact): Promise<CalculationArtifactDto> => ({
+            id: artifact.id,
+            category: artifact.category,
+            filename: artifact.filename,
+            contentType: artifact.content_type,
+            sizeBytes: Number(artifact.size_bytes),
+            sha256: artifact.sha256,
+            downloadUrl: await this.storage.downloadUrl(artifact.object_key),
+          }),
+        ),
+      ),
     };
   }
 }

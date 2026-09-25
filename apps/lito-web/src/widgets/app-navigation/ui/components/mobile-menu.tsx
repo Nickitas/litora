@@ -3,7 +3,7 @@ import { NAV_ITEMS } from "../../config";
 import { useAuth } from "@/features/auth";
 import { ROUTES } from "@/shared/config/routes";
 import { motion, AnimatePresence } from "motion/react";
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { ChevronRight, LogOut, User, UserRound } from "lucide-react";
 import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
 
@@ -19,6 +19,7 @@ export const MobileMenu = ({
   setMobileMenuOpen,
 }: MobileMenuProps) => {
   const { isAuthenticated, logout, user } = useAuth();
+  const [logoutError, setLogoutError] = useState("");
 
   const menuVariants = {
     closed: {
@@ -138,10 +139,10 @@ export const MobileMenu = ({
                   </Link>
 
                   {/* Logout button */}
+                  {logoutError && <p role="alert" className="text-sm text-destructive">{logoutError}</p>}
                   <RippleButton
                     onClick={() => {
-                      logout();
-                      setMobileMenuOpen(false);
+                      void logout().then(() => setMobileMenuOpen(false)).catch(() => setLogoutError("Не удалось завершить сессию. Повторите попытку."));
                     }}
                     className="w-full"
                   >

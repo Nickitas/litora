@@ -33,9 +33,10 @@ PostgreSQL хранит пользователей, refresh-сессии, зад
 
 ## Docker
 
-Docker Compose поднимает одинаковые PostgreSQL и MinIO на машинах разработчиков.
-Go CLI и Node-приложения во время разработки запускаются на хосте для быстрого hot
-reload. Контейнеризация приложений добавляется перед первым deployment.
+Docker Compose поднимает PostgreSQL и MinIO, а с профилем `app` — также API,
+отдельный Node worker, запускающий Go CLI, и web через nginx. Для hot reload
+приложения можно запускать на хосте. Подробности и актуальный план:
+[Единая платформа](platform-integration.md).
 
 ## Почему пока без Redis
 
@@ -59,12 +60,13 @@ reload. Контейнеризация приложений добавляетс
 PostgreSQL инициализируется идемпотентным SQL из
 `infra/postgres/init/001_schema.sql`. Используются таблицы:
 
-- `users` и `auth_sessions` — будущая авторизация;
+- `users` и `auth_sessions` — пользователи и отзывные access/refresh-сессии;
 - `calculation_jobs` — параметры, состояние и итоговая сводка расчёта;
 - `calculation_artifacts` — метаданные объектов в S3;
 - `calculation_events` — журнал переходов и прогресса.
 
-Объекты сохраняются с ключом `calculations/{jobId}/{relativePath}`. API возвращает
+Worker сохраняет объекты с ключом `users/{jobId}/{relativePath}`, импортёр —
+`calculations/{jobId}/{relativePath}`. API возвращает
 не постоянный публичный URL, а подписанную ссылку с ограниченным временем жизни.
 
 Для импорта уже созданного каталога CLI используется:
@@ -74,4 +76,5 @@ pnpm --filter litora-api artifacts:import -- ../lito-cli/output/platform-smoke s
 ```
 
 Импортёр вычисляет SHA-256, загружает каждый файл в MinIO/S3 и записывает его
-метаданные в PostgreSQL.
+метаданные в PostgreSQL. Старые импортированные задания без владельца не выдаются
+через пользовательский API; используйте запуск в кабинете для новых расчётов.

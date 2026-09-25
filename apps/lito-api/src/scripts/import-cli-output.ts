@@ -10,16 +10,19 @@ import { ObjectStorageService } from "../infrastructure/object-storage.service.j
 
 async function filesIn(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
-  const nested = await Promise.all(entries.map((entry) => {
-    const path = resolve(directory, entry.name);
-    return entry.isDirectory() ? filesIn(path) : Promise.resolve([path]);
-  }));
+  const nested = await Promise.all(
+    entries.map((entry) => {
+      const path = resolve(directory, entry.name);
+      return entry.isDirectory() ? filesIn(path) : Promise.resolve([path]);
+    }),
+  );
   return nested.flat();
 }
 
 async function sha256(path: string): Promise<string> {
   const hash = createHash("sha256");
-  for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+  for await (const chunk of createReadStream(path))
+    hash.update(chunk as Buffer);
   return hash.digest("hex");
 }
 
@@ -32,7 +35,10 @@ async function main(): Promise<void> {
   await database.initialize();
   await storage.initialize();
   const repository = new CalculationsRepository(database, storage);
-  const jobId = await repository.createImportedJob(kind, `import ${outputDirectory}`);
+  const jobId = await repository.createImportedJob(
+    kind,
+    `import ${outputDirectory}`,
+  );
 
   try {
     const files = await filesIn(outputDirectory);
@@ -56,10 +62,19 @@ async function main(): Promise<void> {
       });
       totalBytes += info.size;
     }
-    await repository.complete(jobId, { fileCount: files.length, totalBytes, sourceDirectory: outputDirectory });
-    console.log(`Импорт завершён: job=${jobId}, файлов=${files.length}, байт=${totalBytes}`);
+    await repository.complete(jobId, {
+      fileCount: files.length,
+      totalBytes,
+      sourceDirectory: outputDirectory,
+    });
+    console.log(
+      `Импорт завершён: job=${jobId}, файлов=${files.length}, байт=${totalBytes}`,
+    );
   } catch (error) {
-    await repository.fail(jobId, error instanceof Error ? error.message : String(error));
+    await repository.fail(
+      jobId,
+      error instanceof Error ? error.message : String(error),
+    );
     throw error;
   } finally {
     await database.onModuleDestroy();

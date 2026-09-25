@@ -1,0 +1,9 @@
+.git
+**/node_modules
+**/dist
+**/output
+**/bin
+.litora
+.env*
+**/.env*
+**/.DS_Store

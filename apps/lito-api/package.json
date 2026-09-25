@@ -4,7 +4,12 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "start:dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "worker": "tsx src/worker/main.ts",
+    "worker:start": "node dist/worker/main.js",
+    "test": "tsx --test src/**/*.test.ts",
     "artifacts:import": "tsx src/scripts/import-cli-output.ts"
   },
   "dependencies": {
@@ -17,6 +22,7 @@
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/swagger": "^11.0.0",
     "dotenv": "^17.4.2",
+    "argon2": "^0.44.0",
     "mime-types": "^3.0.2",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",

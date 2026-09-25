@@ -1,5 +1,1 @@
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-}
+export type { UserDto as User } from "@litora/contracts";

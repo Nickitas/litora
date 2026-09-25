@@ -9,6 +9,7 @@ import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
 export const DesktopActions = () => {
   const { isAuthenticated, logout, user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
 
   return (
     <div className="hidden items-center gap-4 md:flex">
@@ -33,7 +34,8 @@ export const DesktopActions = () => {
               <span>Тема</span>
               <AnimatedThemeToggler className="size-8 rounded-lg border p-1.5" />
             </div>
-            <button onClick={() => { logout(); setOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-500 hover:bg-red-500/10">
+            {logoutError && <p role="alert" className="px-3 text-xs text-destructive">{logoutError}</p>}
+            <button onClick={() => { void logout().then(() => setOpen(false)).catch(() => setLogoutError("Не удалось завершить сессию. Повторите попытку.")); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-500 hover:bg-red-500/10">
               <LogOut className="size-4" />
               Выйти
             </button>

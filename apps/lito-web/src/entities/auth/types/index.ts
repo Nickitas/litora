@@ -5,13 +5,4 @@ export interface AuthState {
   isAuthenticated: boolean;
 }
 
-export interface LoginCredentials {
-  email: string;
-  password: string;
-}
-
-export interface RegisterData {
-  email: string;
-  password: string;
-  name: string;
-}
+export type { LoginDto as LoginCredentials, RegisterDto as RegisterData } from "@litora/contracts";

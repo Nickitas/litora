@@ -1,123 +1,110 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../model";
-import { ROUTES } from "@/shared/config/routes";
-import { loginPageContent } from "../constants";
-import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
-import { MagicCard } from "@/shared/shadcn/ui/magic-card";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/shared/shadcn/components/ui/card";
 
 export function LoginForm() {
+  const [registering, setRegistering] = useState(false);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const [pending, setPending] = useState(false);
+  const auth = useAuth();
   const navigate = useNavigate();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  if (auth.loading) return <p role="status">Проверяем сессию…</p>;
+  if (auth.isAuthenticated) return <Navigate to="/account" replace />;
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setPending(true);
     setError("");
-    setLoading(true);
-
     try {
-      await login({ email, password });
-      navigate(ROUTES.downloads);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : loginPageContent.errorDefault
-      );
+      if (registering) await auth.register({ name, email, password });
+      else await auth.login({ email, password });
+      navigate("/account");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Не удалось войти");
     } finally {
-      setLoading(false);
+      setPending(false);
     }
-  };
-
+  }
+  const field = "mt-2 w-full rounded-lg border bg-background p-3";
   return (
-    <div className="flex w-full max-w-sm items-center justify-center p-4">
-      <Card className="border-none p-0 shadow-none">
-        <MagicCard
-          gradientSize={200}
-          gradientColor="rgba(139, 92, 246, 0.4)"
-          gradientFrom="rgba(59, 130, 246, 0.3)"
-          gradientTo="rgba(6, 182, 212, 0.3)"
-          className="p-0 shadow-xl"
+    <section className="w-full max-w-md rounded-2xl border bg-background p-6 shadow-sm">
+      <h1 className="text-2xl font-bold">
+        {registering ? "Создать аккаунт" : "Войти в Litora"}
+      </h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Запускайте расчёты и храните отчёты в личном кабинете.
+      </p>
+      <form onSubmit={submit} className="mt-6 space-y-4">
+        {registering && (
+          <label className="block">
+            Имя
+            <input
+              className={field}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoComplete="name"
+              maxLength={100}
+              required
+            />
+          </label>
+        )}
+        <label className="block">
+          Почта
+          <input
+            className={field}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            maxLength={254}
+            required
+          />
+        </label>
+        <label className="block">
+          Пароль
+          <input
+            className={field}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete={registering ? "new-password" : "current-password"}
+            minLength={10}
+            maxLength={128}
+            required
+          />
+        </label>
+        <p className="text-xs text-muted-foreground">От 10 до 128 символов.</p>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <button
+          disabled={pending}
+          className="w-full rounded-lg bg-primary px-4 py-3 text-primary-foreground disabled:opacity-50"
         >
-          <CardHeader className="border-b border-border/50 p-6 [.border-b]:pb-4">
-            <CardTitle className="text-xl">{loginPageContent.title}</CardTitle>
-            <CardDescription className="text-sm">
-              {loginPageContent.subtitle}
-            </CardDescription>
-          </CardHeader>
-
-          {error && (
-            <div className="px-6 pt-4">
-              <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
-              </div>
-            </div>
-          )}
-
-          <CardContent className="p-6 pt-4">
-            <form className="grid gap-4">
-              <div className="grid gap-2">
-                <label
-                  htmlFor="email"
-                  className="text-sm leading-none font-medium"
-                >
-                  Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-none transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-                  placeholder="name@example.com"
-                />
-              </div>
-              <div className="grid gap-2">
-                <label
-                  htmlFor="password"
-                  className="text-sm leading-none font-medium"
-                >
-                  Password
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-none transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-                  placeholder="••••••••"
-                />
-              </div>
-            </form>
-          </CardContent>
-
-          <CardFooter className="flex-col gap-4 border-t border-border/50 p-6 [.border-t]:pt-4">
-            <RippleButton
-              type="submit"
-              disabled={loading}
-              className="w-full"
-              onClick={handleSubmit}
-            >
-              {loading ? "Загрузка..." : "Войти"}
-            </RippleButton>
-            <p className="text-center text-xs text-muted-foreground">
-              {loginPageContent.demoCredentials}
-            </p>
-          </CardFooter>
-        </MagicCard>
-      </Card>
-    </div>
+          {pending
+            ? "Подождите…"
+            : registering
+              ? "Зарегистрироваться"
+              : "Войти"}
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          className="w-full text-sm underline"
+          onClick={() => {
+            setRegistering((value) => !value);
+            setError("");
+          }}
+        >
+          {registering
+            ? "Уже есть аккаунт? Войти"
+            : "Нет аккаунта? Зарегистрироваться"}
+        </button>
+      </form>
+    </section>
   );
 }

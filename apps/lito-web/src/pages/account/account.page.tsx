@@ -1,106 +1,365 @@
-import { useEffect } from "react";
-import { Link, useNavigate } from "react-router";
-import { Activity, ArrowRight, FileText, Waves } from "lucide-react";
-import { motion } from "motion/react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Navigate } from "react-router-dom";
+import type {
+  CalculationJobDto,
+  CalculationKind,
+  CalculationKindDto,
+  CalculationStatus,
+} from "@litora/contracts";
 import { useAuth } from "@/features/auth";
-import { ReliefViewer } from "./ui/relief-viewer";
+import { api } from "@/shared/api/client";
 
-const reports = [
-  {
-    title: "Обзор батиметрии Чёрного моря",
-    date: "v2.0 · SVG",
-    image: "/gallery/bathymetry-overview.svg",
-  },
-  {
-    title: "Адаптивное поле размеров",
-    date: "Gmsh · SVG",
-    image: "/gallery/adaptive-size-field.svg",
-  },
-  {
-    title: "Баланс переноса наносов",
-    date: "erosion · PNG",
-    image: "/gallery/sediment-budget.png",
-  },
-];
+const labels: Record<CalculationStatus, string> = {
+  queued: "В очереди",
+  running: "Выполняется",
+  succeeded: "Готово",
+  failed: "Ошибка",
+  cancelled: "Отменён",
+};
+const active = (job: CalculationJobDto) =>
+  job.status === "queued" || job.status === "running";
 
 export function AccountPage() {
-  const { user, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
+  const auth = useAuth();
+  if (auth.loading) return <p role="status">Проверяем сессию…</p>;
+  if (!auth.isAuthenticated || !auth.user)
+    return <Navigate to="/login" replace />;
+  return <Workspace name={auth.user.name} key={auth.user.id} />;
+}
+
+function Workspace({ name }: { name: string }) {
+  const [jobs, setJobs] = useState<CalculationJobDto[]>([]);
+  const [kinds, setKinds] = useState<CalculationKindDto[]>([]);
+  const [kind, setKind] = useState<CalculationKind>("dimension");
+  const [steps, setSteps] = useState(3);
+  const [selectedId, setSelectedId] = useState<string>();
+  const [detail, setDetail] = useState<CalculationJobDto>();
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  const fail = useCallback(
+    (error: unknown) =>
+      setError(
+        error instanceof Error ? error.message : "Не удалось получить данные"
+      ),
+    []
+  );
+
   useEffect(() => {
-    if (!isAuthenticated) navigate("/login");
-  }, [isAuthenticated, navigate]);
-  if (!isAuthenticated || !user) return null;
+    let mounted = true;
+    api
+      .calculationKinds()
+      .then((result) => {
+        if (mounted) setKinds(result);
+      })
+      .catch((error) => {
+        if (mounted) fail(error);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [fail]);
+  useEffect(() => {
+    let mounted = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      try {
+        const result = await api.calculations();
+        if (mounted) {
+          setJobs(result);
+          setLoading(false);
+        }
+      } catch (error) {
+        if (mounted) {
+          fail(error);
+          setLoading(false);
+        }
+      } finally {
+        if (mounted) timer = setTimeout(poll, 4000);
+      }
+    }
+    void poll();
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+    };
+  }, [revision, fail]);
+  useEffect(() => {
+    if (!selectedId) return;
+    let mounted = true;
+    let timer: ReturnType<typeof setTimeout>;
+    setDetail(undefined);
+    async function poll() {
+      try {
+        const result = await api.calculation(selectedId!);
+        if (mounted) {
+          setDetail(result);
+          timer = setTimeout(poll, active(result) ? 2000 : 600000);
+        }
+      } catch (error) {
+        if (mounted) fail(error);
+      }
+    }
+    void poll();
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+    };
+  }, [selectedId, revision, fail]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const job = await api.createCalculation({
+        kind,
+        input: kind === "erosion" ? { steps } : {},
+      });
+      setSelectedId(job.id);
+      setRevision((value) => value + 1);
+    } catch (error) {
+      fail(error);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function cancel(id: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await api.cancelCalculation(id);
+      setRevision((value) => value + 1);
+    } catch (error) {
+      fail(error);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const scenario = kinds.find((item) => item.kind === kind);
   return (
     <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-2xl border bg-zinc-950 p-5 text-white sm:p-8">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <p className="text-xs tracking-[0.2em] text-cyan-300 uppercase">
-              Live relief viewer
-            </p>
-            <h2 className="mt-2 text-2xl font-bold">3D-сетка морского дна</h2>
-          </div>
-          <Waves className="size-7 text-cyan-300" />
-        </div>
-        <ReliefViewer />
-        <div className="mt-4 flex flex-wrap gap-3 text-xs text-zinc-400">
-          <span className="rounded-full bg-white/10 px-3 py-1">
-            Источник: EMODnet bathymetry
-          </span>
-          <span className="rounded-full bg-white/10 px-3 py-1">
-            WebGL · Three.js
-          </span>
-          <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-300">
-            ● числовые точки подключены
-          </span>
-        </div>
-      </section>
-      <section className="space-y-5">
-        <div className="flex items-end justify-between">
-          <div>
-            <p className="text-xs tracking-[0.2em] text-primary uppercase">
-              Архив запусков
-            </p>
-            <h2 className="mt-2 text-2xl font-bold">Последние отчёты</h2>
-          </div>
-          <Link
-            to="/gallery"
-            className="hidden items-center gap-2 text-sm text-primary sm:flex"
+      <header>
+        <p className="text-sm text-muted-foreground">Личный кабинет · {name}</p>
+        <h1 className="mt-2 text-3xl font-bold">Мои исследования</h1>
+        <p className="mt-3 text-muted-foreground">
+          Параметры, отчёты и история ваших расчётов береговой линии.
+        </p>
+      </header>
+      {error && (
+        <div
+          role="alert"
+          className="rounded-xl border border-destructive/40 p-4 text-destructive"
+        >
+          {error}
+          <button
+            className="ml-4 underline"
+            onClick={() => {
+              setError("");
+              setRevision((value) => value + 1);
+            }}
           >
-            Вся галерея <ArrowRight className="size-4" />
-          </Link>
+            Повторить
+          </button>
         </div>
-        <div className="grid gap-5 md:grid-cols-3">
-          {reports.map((report, index) => (
-            <motion.article
-              key={report.title}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="overflow-hidden rounded-xl border bg-background shadow-sm"
+      )}
+      <div className="grid items-start gap-6 lg:grid-cols-[320px_1fr]">
+        <form
+          onSubmit={submit}
+          className="space-y-4 rounded-2xl border bg-background p-5"
+        >
+          <h2 className="text-xl font-semibold">Новый расчёт</h2>
+          <label className="block text-sm">
+            Сценарий
+            <select
+              className="mt-2 w-full rounded-lg border bg-background p-3"
+              value={kind}
+              onChange={(event) =>
+                setKind(event.target.value as CalculationKind)
+              }
             >
-              <div className="flex aspect-video items-center justify-center bg-muted/30 p-3">
-                <img
-                  src={report.image}
-                  alt={report.title}
-                  className="max-h-full max-w-full object-contain"
-                />
-              </div>
-              <div className="p-4">
-                <div className="flex items-center gap-2 text-xs text-primary">
-                  <FileText className="size-3.5" />
-                  {report.date}
-                </div>
-                <h3 className="mt-2 font-semibold">{report.title}</h3>
-              </div>
-            </motion.article>
-          ))}
-        </div>
-      </section>
-      <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.05] p-4 text-sm text-muted-foreground">
-        <Activity className="size-4 text-primary" /> Отчёты сформированы из
-        реальных результатов `lito-cli` и доступны для просмотра в галерее.
+              {kinds.map((item) => (
+                <option key={item.kind} value={item.kind}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-sm text-muted-foreground">
+            {scenario?.description}
+          </p>
+          {kind === "erosion" && (
+            <label className="block text-sm">
+              Шаги волнового ряда (1–48)
+              <input
+                className="mt-2 w-full rounded-lg border bg-background p-3"
+                type="number"
+                min={1}
+                max={48}
+                required
+                value={steps}
+                onChange={(event) => setSteps(Number(event.target.value))}
+              />
+            </label>
+          )}
+          <button
+            disabled={busy || !kinds.length}
+            className="w-full rounded-lg bg-primary p-3 text-primary-foreground disabled:opacity-50"
+          >
+            {busy ? "Подождите…" : "Запустить расчёт"}
+          </button>
+          <p className="text-xs text-muted-foreground">
+            Используются поставляемые данные Чёрного моря. Результаты доступны
+            только в вашем аккаунте.
+          </p>
+        </form>
+        <section className="space-y-3" aria-label="История расчётов">
+          <h2 className="text-xl font-semibold">История расчётов</h2>
+          {loading ? (
+            <p role="status">Загружаем историю…</p>
+          ) : jobs.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-8 text-muted-foreground">
+              Пока нет расчётов. Выберите сценарий и запустите первый.
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {jobs.map((job) => (
+                <li
+                  key={job.id}
+                  className={`rounded-xl border p-4 ${selectedId === job.id ? "border-primary bg-primary/5" : ""}`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <button
+                      className="text-left font-medium underline-offset-4 hover:underline"
+                      onClick={() => setSelectedId(job.id)}
+                    >
+                      {kinds.find((item) => item.kind === job.kind)?.title ??
+                        job.kind}
+                    </button>
+                    <span
+                      className="rounded-full bg-muted px-3 py-1 text-xs"
+                      role="status"
+                    >
+                      {labels[job.status]}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {new Date(job.createdAt).toLocaleString("ru-RU")} ·{" "}
+                    {job.id.slice(0, 8)}
+                  </p>
+                  <div className="mt-3 flex gap-4 text-sm">
+                    <button
+                      className="text-primary underline"
+                      onClick={() => setSelectedId(job.id)}
+                    >
+                      Результаты и параметры
+                    </button>
+                    {active(job) && (
+                      <button
+                        disabled={busy}
+                        onClick={() => void cancel(job.id)}
+                        className="text-destructive underline"
+                      >
+                        Отменить
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
+      {selectedId && (
+        <section
+          className="space-y-4 rounded-2xl border p-5"
+          aria-label="Результат расчёта"
+        >
+          <h2 className="text-xl font-semibold">Результат расчёта</h2>
+          {!detail ? (
+            <p role="status">Загружаем результаты…</p>
+          ) : (
+            <>
+              <p className="text-sm">
+                {labels[detail.status]} · {detail.id}
+              </p>
+              {detail.errorMessage && (
+                <p
+                  role="alert"
+                  className="text-sm whitespace-pre-wrap text-destructive"
+                >
+                  {detail.errorMessage}
+                </p>
+              )}
+              {active(detail) && (
+                <p role="status" className="text-muted-foreground">
+                  Результаты появятся здесь автоматически после выполнения.
+                </p>
+              )}
+              {detail.resultSummary?.scenario === "demo" && (
+                <p className="rounded-lg bg-amber-500/10 p-3 text-sm">
+                  Демонстрационный сценарий. Не является прогнозом годового
+                  размыва или калиброванным научным отчётом.
+                </p>
+              )}
+              <div className="grid gap-4 md:grid-cols-2">
+                {detail.artifacts
+                  .filter((file) => file.contentType.startsWith("image/"))
+                  .map((file) => (
+                    <figure
+                      className="overflow-hidden rounded-xl border"
+                      key={file.id}
+                    >
+                      <img
+                        src={file.downloadUrl}
+                        alt={file.filename}
+                        loading="lazy"
+                        className="max-h-96 w-full bg-white object-contain"
+                      />
+                      <figcaption className="p-3 text-sm">
+                        {file.filename}
+                      </figcaption>
+                    </figure>
+                  ))}
+              </div>
+              <ul className="space-y-2 text-sm">
+                {detail.artifacts.map((file) => (
+                  <li key={file.id}>
+                    <a
+                      className="text-primary underline"
+                      href={file.downloadUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {file.filename}
+                    </a>
+                    <span className="ml-3 text-muted-foreground">
+                      {(file.sizeBytes / 1024).toFixed(1)} КБ
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <details>
+                <summary className="cursor-pointer">
+                  Параметры и метрики JSON
+                </summary>
+                <pre className="mt-3 max-h-96 overflow-auto rounded-lg bg-muted p-4 text-xs">
+                  {JSON.stringify(
+                    {
+                      input: detail.input,
+                      result: detail.resultSummary,
+                      coreVersion: detail.coreVersion,
+                    },
+                    null,
+                    2
+                  )}
+                </pre>
+              </details>
+            </>
+          )}
+        </section>
+      )}
     </div>
   );
 }
