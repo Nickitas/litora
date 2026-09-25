@@ -9,7 +9,8 @@
     "start": "node dist/main.js",
     "worker": "tsx src/worker/main.ts",
     "worker:start": "node dist/worker/main.js",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "node scripts/test.mjs",
+    "storage:smoke": "node scripts/storage-smoke.mjs",
     "artifacts:import": "tsx src/scripts/import-cli-output.ts"
   },
   "dependencies": {

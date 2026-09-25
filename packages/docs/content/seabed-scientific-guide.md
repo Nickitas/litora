@@ -125,8 +125,8 @@ CERC. Она не принимает полную Gmsh-сетку как 2D-ре
 быть сохранены в созданных паспортах и журналах.
 
 ```bash
-git clone https://github.com/Nickitas/litora-cli.git lito-clean
-cd lito-clean
+git clone https://github.com/Nickitas/litora.git lito-clean
+cd lito-clean/apps/lito-cli
 go build -o lito ./cmd/lito
 ./scripts/install-gmsh.sh
 python3 -m pip install -r cmd/bathymetry/convert/requirements.txt

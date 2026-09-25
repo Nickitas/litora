@@ -14,7 +14,7 @@ export const installationPageContent = {
     steps: [
       {
         title: "1. Клонирование репозитория",
-        code: "git clone https://github.com/Nickitas/litora-cli.git\ncd litora-cli",
+        code: "git clone https://github.com/Nickitas/litora.git\ncd litora/apps/lito-cli",
         note: "",
       },
       {

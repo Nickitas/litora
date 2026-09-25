@@ -290,7 +290,7 @@ export const DocsOverview = () => {
             </Link>
 
             <a
-              href="https://github.com/Nickitas/litora-cli"
+              href="https://github.com/Nickitas/litora"
               target="_blank"
               rel="noopener noreferrer"
               className="group flex flex-col items-center gap-3 rounded-xl border border-transparent p-6 transition-all hover:border-border/50 hover:bg-muted/50"
@@ -302,7 +302,7 @@ export const DocsOverview = () => {
             </a>
 
             <a
-              href="https://github.com/Nickitas/litora-cli/issues"
+              href="https://github.com/Nickitas/litora/issues"
               target="_blank"
               rel="noopener noreferrer"
               className="group flex flex-col items-center gap-3 rounded-xl border border-transparent p-6 transition-all hover:border-border/50 hover:bg-muted/50"

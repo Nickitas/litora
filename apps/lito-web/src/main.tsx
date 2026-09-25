@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider, createBrowserRouter } from "react-router-dom";
 import { AppProviders } from "./app/providers";
 import { routes } from "./app/routes";
+import { RouteError } from "./app/route-error";
 import { Layout } from "./shared/ui";
 
 import "./shared/styles/index.css";
@@ -15,6 +16,7 @@ const router = createBrowserRouter(
         <route.Component />
       </Layout>
     ),
+    errorElement: <RouteError />,
   }))
 );
 

@@ -18,7 +18,7 @@ export const VersionList = () => {
             <h2 className="text-xl font-bold sm:text-2xl">Все версии</h2>
           </div>
           <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-            {releases.length} {releases.length === 1 ? "релиз" : "релиза"}
+            {releases.length} {releases.length === 1 ? "версия" : "версии"}
           </span>
         </div>
 

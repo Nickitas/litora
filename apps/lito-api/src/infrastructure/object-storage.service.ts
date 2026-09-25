@@ -50,6 +50,12 @@ export class ObjectStorageService implements OnModuleInit {
           ?.httpStatusCode !== 404
       )
         throw error;
+      if (!environment.s3.autoCreateBucket) {
+        throw new Error(
+          `S3 bucket "${this.bucket}" не найден. Создайте приватный bucket до запуска API.`,
+          { cause: error },
+        );
+      }
       try {
         await this.client.send(
           new CreateBucketCommand({ Bucket: this.bucket }),

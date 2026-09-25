@@ -35,7 +35,7 @@ export function Layout({ children }: LayoutProps) {
       />
       <div className="relative z-10">
         <Navbar />
-        <main className="container mx-auto px-4 pt-15 pb-12">
+        <main className="container mx-auto px-4 pt-20 pb-12">
           {isDocsPage ? (
             <div className="mx-auto">
               <MobileDocsNav />

@@ -34,6 +34,7 @@ function Workspace({ name }: { name: string }) {
   const [steps, setSteps] = useState(3);
   const [selectedId, setSelectedId] = useState<string>();
   const [detail, setDetail] = useState<CalculationJobDto>();
+  const selectedDetail = detail?.id === selectedId ? detail : undefined;
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -89,16 +90,19 @@ function Workspace({ name }: { name: string }) {
     if (!selectedId) return;
     let mounted = true;
     let timer: ReturnType<typeof setTimeout>;
-    setDetail(undefined);
+    const jobId = selectedId;
     async function poll() {
+      let delay = 4000;
       try {
-        const result = await api.calculation(selectedId!);
+        const result = await api.calculation(jobId);
         if (mounted) {
           setDetail(result);
-          timer = setTimeout(poll, active(result) ? 2000 : 600000);
+          delay = active(result) ? 2000 : 600000;
         }
       } catch (error) {
         if (mounted) fail(error);
+      } finally {
+        if (mounted) timer = setTimeout(poll, delay);
       }
     }
     void poll();
@@ -277,34 +281,34 @@ function Workspace({ name }: { name: string }) {
           aria-label="Результат расчёта"
         >
           <h2 className="text-xl font-semibold">Результат расчёта</h2>
-          {!detail ? (
+          {!selectedDetail ? (
             <p role="status">Загружаем результаты…</p>
           ) : (
             <>
               <p className="text-sm">
-                {labels[detail.status]} · {detail.id}
+                {labels[selectedDetail.status]} · {selectedDetail.id}
               </p>
-              {detail.errorMessage && (
+              {selectedDetail.errorMessage && (
                 <p
                   role="alert"
                   className="text-sm whitespace-pre-wrap text-destructive"
                 >
-                  {detail.errorMessage}
+                  {selectedDetail.errorMessage}
                 </p>
               )}
-              {active(detail) && (
+              {active(selectedDetail) && (
                 <p role="status" className="text-muted-foreground">
                   Результаты появятся здесь автоматически после выполнения.
                 </p>
               )}
-              {detail.resultSummary?.scenario === "demo" && (
+              {selectedDetail.resultSummary?.scenario === "demo" && (
                 <p className="rounded-lg bg-amber-500/10 p-3 text-sm">
                   Демонстрационный сценарий. Не является прогнозом годового
                   размыва или калиброванным научным отчётом.
                 </p>
               )}
               <div className="grid gap-4 md:grid-cols-2">
-                {detail.artifacts
+                {selectedDetail.artifacts
                   .filter((file) => file.contentType.startsWith("image/"))
                   .map((file) => (
                     <figure
@@ -324,7 +328,7 @@ function Workspace({ name }: { name: string }) {
                   ))}
               </div>
               <ul className="space-y-2 text-sm">
-                {detail.artifacts.map((file) => (
+                {selectedDetail.artifacts.map((file) => (
                   <li key={file.id}>
                     <a
                       className="text-primary underline"
@@ -347,9 +351,9 @@ function Workspace({ name }: { name: string }) {
                 <pre className="mt-3 max-h-96 overflow-auto rounded-lg bg-muted p-4 text-xs">
                   {JSON.stringify(
                     {
-                      input: detail.input,
-                      result: detail.resultSummary,
-                      coreVersion: detail.coreVersion,
+                      input: selectedDetail.input,
+                      result: selectedDetail.resultSummary,
+                      coreVersion: selectedDetail.coreVersion,
                     },
                     null,
                     2

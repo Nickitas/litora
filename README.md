@@ -1,7 +1,9 @@
 # Litora
 
-Платформа исследования береговой линии Чёрного моря: Go вычисляет, NestJS
-управляет пользователями и заданиями, React отображает результаты.
+[![Go](https://img.shields.io/badge/Go-1.25.4-00ADD8?logo=go)](go.mod)
+[![Лицензия: MIT](https://img.shields.io/badge/Лицензия-MIT-green.svg)](LICENSE)
+
+Платформа исследования береговой линии Чёрного моря.
 
 ## Быстрый запуск всей системы
 
@@ -22,16 +24,16 @@ pnpm up
 Если pnpm ещё не установлен: `npm install --global pnpm@10.15.0`.
 При конфликте с Corepack сначала выполните `corepack disable pnpm`.
 
-| Сервис | Адрес |
-| --- | --- |
-| Сайт и личный кабинет | http://localhost:5173/account |
-| Регистрация / вход | http://localhost:5173/login |
-| Swagger | http://localhost:3000/api/docs |
-| OpenAPI JSON | http://localhost:3000/api/docs-json |
-| API health | http://localhost:3000/api/health |
-| MinIO Console | http://localhost:9001 |
-| MinIO S3 | http://localhost:9000 |
-| PostgreSQL | localhost:55432 |
+| Сервис                | Адрес                               |
+| --------------------- | ----------------------------------- |
+| Сайт и личный кабинет | http://localhost:5173/account       |
+| Регистрация / вход    | http://localhost:5173/login         |
+| Swagger               | http://localhost:3000/api/docs      |
+| OpenAPI JSON          | http://localhost:3000/api/docs-json |
+| API health            | http://localhost:3000/api/health    |
+| MinIO Console         | http://localhost:9001               |
+| MinIO S3              | http://localhost:9000               |
+| PostgreSQL            | localhost:55432                     |
 
 Порты настраиваются в `.env.local`. Логин MinIO — `S3_ACCESS_KEY`, пароль —
 `S3_SECRET_KEY`. PostgreSQL использует `POSTGRES_*`. Пароли не коммитятся.
@@ -159,10 +161,22 @@ pnpm --filter litora-api artifacts:import -- ../lito-cli/output/example manual-i
 
 ## Проверки
 
+Единый локальный прогон и CI:
+
 ```bash
+pnpm verify
+```
+
+Он проверяет структуру workspace и документации, типы, lint, тесты web/API/Go
+и сборку API/web. Отдельные команды:
+
+```bash
+pnpm check:workspace
 pnpm typecheck
+pnpm lint
 pnpm build:api
 pnpm build:web
+pnpm test:web
 pnpm test:api
 pnpm test:cli
 pnpm test:integration   # при работающих API, worker, PostgreSQL и MinIO

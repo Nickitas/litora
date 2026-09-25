@@ -17,7 +17,9 @@
 - воспроизводимые метрики и паспорта входных данных;
 - обновлённый русскоязычный CLI.
 
-Исходный проект: [github.com/Nickitas/litora-cli](https://github.com/Nickitas/litora-cli).
+Исходный код и развитие системы: [монорепозиторий Litora](https://github.com/Nickitas/litora).
+Ссылки на исторический релиз CLI пока находятся в `src/shared/config/releases.json`;
+перед удалением старого репозитория их нужно перенести вместе с файлами релиза.
 
 ## Технологии
 
@@ -46,15 +48,18 @@ src/
 public/downloads/        исполняемые файлы CLI
 ```
 
-Документы CLI хранятся локально в [`src/pages/docs/docs`](src/pages/docs/docs) и импортируются в приложение во время сборки.
+Описательные документы CLI и научные методики находятся в
+[`packages/docs/content`](../../packages/docs/content) и импортируются в приложение
+во время сборки. Правила разработки расположены отдельно в [`sdd`](../../sdd).
 
 ## Запуск
 
-Требуется Node.js и pnpm.
+Требуются Node.js, pnpm и зависимости workspace. Команды выполнять из корня
+монорепозитория по [инструкции разработки](../../sdd/development.md).
 
 ```bash
-pnpm install
-pnpm dev
+pnpm install --frozen-lockfile
+pnpm dev:web
 ```
 
 Сайт будет доступен по адресу `http://localhost:5173`.
@@ -62,16 +67,16 @@ pnpm dev
 ## Проверка и сборка
 
 ```bash
-pnpm typecheck  # проверка TypeScript
-pnpm build      # production-сборка
-pnpm preview    # предпросмотр production-сборки
-pnpm lint       # ESLint
-pnpm format     # форматирование TypeScript и TSX
+pnpm typecheck
+pnpm build:web
+pnpm lint
+pnpm test:web
 ```
 
 ## Конфигурация
 
-Для локальной настройки используйте `.env.local`:
+Локальные API и worker берут корневой `.env.local`; его создаёт `pnpm env:init`.
+У web есть необязательная настройка версии CLI в `apps/lito-web/.env.local`:
 
 ```env
 VITE_CLI_VERSION_NUMBER=v2.0

@@ -1,9 +1,11 @@
 name: Проверка Litora
+
 on: [push, pull_request]
+
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,11 +23,11 @@ jobs:
           cache-dependency-path: apps/lito-cli/go.sum
       - run: pnpm install --frozen-lockfile
       - run: pnpm env:init
-      - run: pnpm typecheck && pnpm build:api && pnpm build:web
-      - run: pnpm test:api && pnpm test:cli
+      - run: pnpm verify
+
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:

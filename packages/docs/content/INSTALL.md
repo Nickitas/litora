@@ -94,5 +94,5 @@ pip install pandas matplotlib seaborn numpy scipy
 
 ## Поддержка
 
-- Репозиторий: https://github.com/Nickitas/litora-cli
+- Репозиторий: https://github.com/Nickitas/litora
 - Лицензия: MIT

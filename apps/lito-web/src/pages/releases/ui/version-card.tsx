@@ -19,7 +19,7 @@ interface VersionCardProps {
 
 export const VersionCard = ({ release, index }: VersionCardProps) => {
   const { unavailableLabel, availableLabel } = releasesPageContent;
-  const releaseUrl = release.releaseUrl;
+  const releaseUrl = release.releaseUrl ?? release.downloadUrl ?? null;
   const isAvailable = releaseUrl !== null;
 
   return (
@@ -71,7 +71,7 @@ export const VersionCard = ({ release, index }: VersionCardProps) => {
               )}
               {!isAvailable && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                  <Clock className="size-3" />В разработке
+                  <Clock className="size-3" />Архив восстанавливается
                 </span>
               )}
             </div>
@@ -99,15 +99,17 @@ export const VersionCard = ({ release, index }: VersionCardProps) => {
             {isAvailable ? (
               <a
                 href={releaseUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                target={release.releaseUrl ? "_blank" : undefined}
+                rel={release.releaseUrl ? "noopener noreferrer" : undefined}
                 className="w-full sm:w-auto"
               >
                 <RippleButton className="group w-full sm:min-w-52">
                   <span className="inline-flex items-center justify-center gap-2">
                     <Download className="size-4" />
-                    Скачать на GitHub
-                    <ExternalLink className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                    {release.releaseUrl ? "Скачать на GitHub" : "Скачать с сайта"}
+                    {release.releaseUrl && (
+                      <ExternalLink className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                    )}
                   </span>
                 </RippleButton>
               </a>

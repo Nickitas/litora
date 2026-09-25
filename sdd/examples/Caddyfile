@@ -1,0 +1,19 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$LITORA_DOMAIN} {
+	# Прямой доступ к серверу: IP клиента, без доверия произвольному X-Forwarded-For.
+	@outside not remote_ip {$LITORA_ALLOWED_CIDRS}
+	respond @outside "Доступ разрешён только участникам пилота" 403
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		-Server
+	}
+
+	# Оба пути, web и /api, идут через существующий nginx web-контейнера.
+	reverse_proxy web:80
+}

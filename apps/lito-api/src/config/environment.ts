@@ -44,5 +44,9 @@ export const environment = {
     accessKey: required("S3_ACCESS_KEY"),
     secretKey: required("S3_SECRET_KEY"),
     forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
+    autoCreateBucket:
+      process.env.S3_AUTO_CREATE_BUCKET === "true" ||
+      (process.env.S3_AUTO_CREATE_BUCKET === undefined &&
+        process.env.NODE_ENV !== "production"),
   },
 };

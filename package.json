@@ -18,6 +18,10 @@
     "infra:logs": "docker compose --env-file .env.local -f infra/compose.yaml logs -f",
     "build:web": "pnpm --filter litora-web build",
     "build:api": "pnpm --filter litora-api build",
+    "lint": "pnpm --filter litora-web lint",
+    "check:workspace": "node scripts/check-workspace.mjs",
+    "test:web": "pnpm --filter litora-web test:verify",
+    "verify": "pnpm check:workspace && pnpm typecheck && pnpm lint && pnpm test:web && pnpm test:api && pnpm test:cli && pnpm build:api && pnpm build:web",
     "typecheck": "pnpm --filter @litora/api-client typecheck && pnpm --filter @litora/contracts typecheck && pnpm --filter litora-api typecheck && pnpm --filter litora-web typecheck",
     "test:cli": "cd apps/lito-cli && go test ./..."
   }
