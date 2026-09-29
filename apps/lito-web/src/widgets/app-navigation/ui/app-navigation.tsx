@@ -1,16 +1,22 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { ROUTES } from "@/shared/config/routes";
 import { DesktopNavigation } from "./components/desktop-navigation";
 import { Brand } from "./components/brand";
 import { DesktopActions } from "./components/desktop-actions";
-import { MobileMenu } from "./components/mobile-menu";
 import { AnimatedThemeToggler } from "@/shared/shadcn/ui/animated-theme-toggler";
 import { ScrollProgress } from "@/shared/shadcn/ui/scroll-progress";
 
+const MobileMenu = lazy(() =>
+  import("./components/mobile-menu").then((module) => ({
+    default: module.MobileMenu,
+  }))
+);
+
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileMenuRequested, setMobileMenuRequested] = useState(false);
   const location = useLocation();
 
   const isActive = (path: string) => location.pathname === path;
@@ -35,7 +41,11 @@ export function Navbar() {
           {/* Animated Mobile Menu Button */}
           <button
             className="group relative flex size-10 items-center justify-center rounded-lg border border-border/50 bg-background transition-all hover:border-border hover:bg-muted md:hidden"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            onClick={() => {
+              setMobileMenuRequested(true);
+              setMobileMenuOpen(!mobileMenuOpen);
+            }}
+            aria-expanded={mobileMenuOpen}
             aria-label={mobileMenuOpen ? "Закрыть меню" : "Открыть меню"}
           >
             <div className="relative">
@@ -61,11 +71,23 @@ export function Navbar() {
       </div>
 
       {/* Mobile Menu with animation */}
-      <MobileMenu
-        isActive={isActive}
-        isOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
-      />
+      {mobileMenuRequested && (
+        <Suspense
+          fallback={
+            mobileMenuOpen ? (
+              <div role="status" className="px-4 py-6 md:hidden">
+                Загрузка меню…
+              </div>
+            ) : null
+          }
+        >
+          <MobileMenu
+            isActive={isActive}
+            isOpen={mobileMenuOpen}
+            setMobileMenuOpen={setMobileMenuOpen}
+          />
+        </Suspense>
+      )}
       <ScrollProgress />
     </nav>
   );

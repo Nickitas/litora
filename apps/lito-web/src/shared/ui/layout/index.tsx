@@ -2,15 +2,19 @@ import { useTheme } from "@/shared/shadcn/components/theme-provider";
 import { Particles } from "@/shared/shadcn/ui/particles";
 import { Navbar } from "@/widgets/app-navigation";
 import { Footer } from "@/widgets/footer";
-import { DocsSidebar } from "@/pages/docs/ui/docs-sidebar";
-import { MobileDocsNav } from "@/pages/docs/ui/mobile-docs-nav";
 import { ScrollToTop } from "@/shared/ui/scroll-to-top";
-import { type ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 
 interface LayoutProps {
   children: ReactNode;
 }
+
+const DocsShell = lazy(() =>
+  import("@/pages/docs/ui/docs-shell").then((module) => ({
+    default: module.DocsShell,
+  }))
+);
 
 export function Layout({ children }: LayoutProps) {
   const { theme } = useTheme();
@@ -37,13 +41,15 @@ export function Layout({ children }: LayoutProps) {
         <Navbar />
         <main className="container mx-auto px-4 pt-20 pb-12">
           {isDocsPage ? (
-            <div className="mx-auto">
-              <MobileDocsNav />
-              <div className="flex items-start gap-8">
-                <DocsSidebar />
-                <div className="min-w-0 flex-1">{children}</div>
-              </div>
-            </div>
+            <Suspense
+              fallback={
+                <div role="status" className="min-h-64">
+                  Загрузка документации…
+                </div>
+              }
+            >
+              <DocsShell>{children}</DocsShell>
+            </Suspense>
           ) : (
             <div className="mx-auto">{children}</div>
           )}

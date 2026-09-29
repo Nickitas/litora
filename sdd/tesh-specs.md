@@ -74,6 +74,10 @@ production-вариант объяснён в [deployment](deployment.md).
 
 ### TypeScript / NestJS
 
+- Reverse proxy: пустой `TRUSTED_PROXY_CIDRS` по умолчанию; только явные IP/CIDR,
+  без `true`, hops и `/0`. Не извлекать IP из заголовка вручную. Для production
+  использовать отдельную edge-сеть из deployment и не публиковать порт API.
+
 - `strict`; не ослаблять tsconfig ради прохождения сборки. `unknown` на внешней
   границе, затем runtime-проверка. Тип TS сам по себе вход не валидирует.
 - `any`, двойные `as`, non-null assertions и `@ts-ignore` требуют конкретного

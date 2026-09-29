@@ -7,6 +7,8 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
+import { configureTrustedProxies } from "./config/trusted-proxies.js";
 import {
   DocumentBuilder,
   SwaggerModule,
@@ -78,7 +80,8 @@ class AppController {
 class AppModule {}
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  configureTrustedProxies(app, environment.trustedProxies);
   app.setGlobalPrefix("api");
   app.enableCors({ origin: environment.webOrigin, credentials: true });
   app.enableShutdownHooks();

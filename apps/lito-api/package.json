@@ -10,7 +10,9 @@
     "worker": "tsx src/worker/main.ts",
     "worker:start": "node dist/worker/main.js",
     "test": "node scripts/test.mjs",
+    "test:db": "node scripts/test.mjs --require-database",
     "storage:smoke": "node scripts/storage-smoke.mjs",
+    "invitations": "tsx src/scripts/invitations.ts",
     "artifacts:import": "tsx src/scripts/import-cli-output.ts"
   },
   "dependencies": {

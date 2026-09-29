@@ -14,6 +14,11 @@
 		-Server
 	}
 
-	# Оба пути, web и /api, идут через существующий nginx web-контейнера.
-	reverse_proxy web:80
+	# Один доверенный hop для API; nginx не участвует в цепочке auth-запроса.
+	handle /api/* {
+		reverse_proxy api-edge:3000
+	}
+	handle {
+		reverse_proxy web:80
+	}
 }

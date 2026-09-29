@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -14,6 +15,7 @@ import type {
   UserDto,
 } from "@litora/contracts";
 import { DatabaseService } from "../infrastructure/database.service.js";
+import { invitationDigest, validateInvitationCode } from "./invitations.js";
 
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -33,14 +35,14 @@ const userDto = (row: UserRow): UserDto => ({
 export function validateCredentials(
   body: unknown,
   register = false,
-): LoginDto & { name?: string } {
+): LoginDto & { name?: string; invitationCode?: string } {
   if (!body || typeof body !== "object" || Array.isArray(body))
     throw new BadRequestException("Ожидается объект с данными входа");
   const data = body as Record<string, unknown>;
   if (
     Object.keys(data).some(
       (key) =>
-        !["email", "password", ...(register ? ["name"] : [])].includes(key),
+        !["email", "password", ...(register ? ["name", "invitationCode"] : [])].includes(key),
     )
   )
     throw new BadRequestException("Неизвестные поля");
@@ -68,7 +70,10 @@ export function validateCredentials(
   return {
     email: data.email.trim().toLowerCase(),
     password: data.password,
-    ...(register ? { name: (data.name as string).trim() } : {}),
+    ...(register ? {
+      name: (data.name as string).trim(),
+      invitationCode: validateInvitationCode(data.invitationCode),
+    } : {}),
   };
 }
 
@@ -85,11 +90,25 @@ export class AuthService {
       parallelism: 1,
     });
     try {
-      const result = await this.db.query<UserRow>(
-        "INSERT INTO users(email,password_hash,display_name) VALUES($1,$2,$3) RETURNING *",
-        [data.email, hash, data.name],
-      );
-      return this.issue(result.rows[0]);
+      return await this.db.transaction(async (client) => {
+        const invitation = await client.query<{ id: string }>(
+          `UPDATE registration_invitations SET used_at=clock_timestamp()
+           WHERE code_hash=$1 AND used_at IS NULL AND revoked_at IS NULL
+             AND expires_at>clock_timestamp() RETURNING id`,
+          [invitationDigest(data.invitationCode)],
+        );
+        if (!invitation.rows[0])
+          throw new ForbiddenException("Приглашение недействительно или срок его действия истёк");
+        const result = await client.query<UserRow>(
+          "INSERT INTO users(email,password_hash,display_name) VALUES($1,$2,$3) RETURNING *",
+          [data.email, hash, data.name],
+        );
+        await client.query(
+          "UPDATE registration_invitations SET used_by=$2 WHERE id=$1",
+          [invitation.rows[0].id, result.rows[0].id],
+        );
+        return this.issue(result.rows[0], client);
+      });
     } catch (error) {
       if ((error as { code?: string }).code === "23505")
         throw new ConflictException(
@@ -111,10 +130,10 @@ export class AuthService {
     return this.issue(row);
   }
 
-  private async issue(user: UserRow) {
+  private async issue(user: UserRow, database: Pick<DatabaseService, "query"> = this.db) {
     const accessToken = token(),
       refreshToken = token();
-    await this.db.query(
+    await database.query(
       `INSERT INTO auth_sessions(user_id,refresh_token_hash,access_token_hash,access_expires_at,expires_at)
       VALUES($1,$2,$3,now()+interval '15 minutes',now()+interval '30 days')`,
       [user.id, digest(refreshToken), digest(accessToken)],

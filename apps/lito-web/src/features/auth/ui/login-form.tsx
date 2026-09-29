@@ -7,6 +7,7 @@ export function LoginForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [invitationCode, setInvitationCode] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const auth = useAuth();
@@ -18,7 +19,7 @@ export function LoginForm() {
     setPending(true);
     setError("");
     try {
-      if (registering) await auth.register({ name, email, password });
+      if (registering) await auth.register({ name, email, password, invitationCode });
       else await auth.login({ email, password });
       navigate("/account");
     } catch (error) {
@@ -36,7 +37,7 @@ export function LoginForm() {
       <p className="mt-2 text-sm text-muted-foreground">
         Запускайте расчёты и храните отчёты в личном кабинете.
       </p>
-      <form onSubmit={submit} className="mt-6 space-y-4">
+      <form onSubmit={submit} className="mt-6 space-y-4" aria-busy={pending}>
         {registering && (
           <label className="block">
             Имя
@@ -76,6 +77,25 @@ export function LoginForm() {
           />
         </label>
         <p className="text-xs text-muted-foreground">От 10 до 128 символов.</p>
+        {registering ? (
+          <label className="block">
+            Ключ приглашения
+            <input
+              className={field}
+              type="password"
+              value={invitationCode}
+              onChange={(e) => setInvitationCode(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={128}
+              aria-describedby="invitation-hint"
+              required
+            />
+            <span id="invitation-hint" className="mt-2 block text-xs text-muted-foreground">
+              Получите одноразовый ключ у оператора Litora. Без него регистрация недоступна.
+            </span>
+          </label>
+        ) : null}
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -97,6 +117,7 @@ export function LoginForm() {
           className="w-full text-sm underline"
           onClick={() => {
             setRegistering((value) => !value);
+            setInvitationCode("");
             setError("");
           }}
         >

@@ -59,6 +59,7 @@ services:
     environment: &app-environment
       DATABASE_URL: postgresql://${POSTGRES_USER:-litora}:${POSTGRES_PASSWORD:-litora_local_password}@postgres:5432/${POSTGRES_DB:-litora}
       S3_ENDPOINT: http://minio:9000
+      S3_AUTO_CREATE_BUCKET: "true"
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
       LITO_CLI_BINARY: /usr/local/bin/lito

@@ -49,26 +49,35 @@ const credentialsSchema = {
 
 @Controller("auth")
 @ApiTags("Авторизация")
+@ApiResponse({
+  status: 429,
+  description: "Более 30 auth POST-запросов за минуту на IP; повторите после Retry-After",
+  headers: { "Retry-After": { schema: { type: "integer", minimum: 1, maximum: 60 } } },
+})
 export class AuthController {
   constructor(
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(DatabaseService) private readonly db: DatabaseService,
   ) {}
 
-  private async check(origin: string | undefined, ip: string) {
+  private async check(origin: string | undefined, ip: string, res: CookieResponse) {
     if (
       origin &&
       ![environment.webOrigin, environment.apiOrigin].includes(origin)
     )
       throw new ForbiddenException("Недопустимый источник запроса");
-    const result = await this.db.query<{ attempts: number }>(
+    const result = await this.db.query<{ attempts: number; retry_after: number }>(
       `INSERT INTO auth_rate_limits(key,window_start,attempts) VALUES($1,date_trunc('minute',now()),1)
-      ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN auth_rate_limits.window_start=date_trunc('minute',now()) THEN auth_rate_limits.attempts+1 ELSE 1 END,
-      window_start=date_trunc('minute',now()) RETURNING attempts`,
+      ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN auth_rate_limits.window_start=date_trunc('minute',now()) THEN LEAST(auth_rate_limits.attempts+1,31) ELSE 1 END,
+      window_start=date_trunc('minute',now()) RETURNING attempts,
+      GREATEST(1,ceil(extract(epoch FROM (window_start+interval '1 minute'-now()))))::int AS retry_after`,
       [ip],
     );
-    if (result.rows[0].attempts > 30)
+    if (result.rows[0].attempts > 30) {
+      res.setHeader("Retry-After", String(result.rows[0].retry_after));
+      res.setHeader("Cache-Control", "no-store");
       throw new HttpException("Слишком много попыток. Подождите минуту", 429);
+    }
   }
   private cookie(res: CookieResponse, value: string, clear = false) {
     res.setHeader(
@@ -88,14 +97,20 @@ export class AuthController {
   }
 
   @Post("register")
-  @ApiOperation({ summary: "Создать пользователя и сессию" })
+  @ApiOperation({ summary: "Создать пользователя и сессию по одноразовому приглашению" })
   @ApiBody({
     schema: {
       ...credentialsSchema,
-      required: ["email", "password", "name"],
+      required: ["email", "password", "name", "invitationCode"],
       properties: {
         ...credentialsSchema.properties,
         name: { type: "string", maxLength: 100, example: "Исследователь" },
+        invitationCode: {
+          type: "string",
+          pattern: "^litora_[A-Za-z0-9_-]{43}$",
+          writeOnly: true,
+          description: "Одноразовый ключ от оператора платформы",
+        },
       },
     },
   })
@@ -105,13 +120,16 @@ export class AuthController {
     description:
       "Пользователь, accessToken (15 минут); refresh-сессия в HttpOnly cookie",
   })
+  @ApiResponse({ status: 400, description: "Нет ключа или некорректные поля регистрации" })
+  @ApiResponse({ status: 403, description: "Приглашение недействительно или истекло" })
+  @ApiResponse({ status: 409, description: "Почта уже зарегистрирована; ключ не погашается" })
   async register(
     @Body() body: unknown,
     @Headers("origin") origin: string | undefined,
     @Req() req: { ip: string },
     @Res({ passthrough: true }) res: CookieResponse,
   ) {
-    await this.check(origin, req.ip);
+    await this.check(origin, req.ip, res);
     const session = await this.auth.register(body);
     this.cookie(res, session.refreshToken);
     return session.body;
@@ -129,7 +147,7 @@ export class AuthController {
     @Req() req: { ip: string },
     @Res({ passthrough: true }) res: CookieResponse,
   ) {
-    await this.check(origin, req.ip);
+    await this.check(origin, req.ip, res);
     const session = await this.auth.login(body);
     this.cookie(res, session.refreshToken);
     return session.body;
@@ -146,7 +164,7 @@ export class AuthController {
     @Req() req: { ip: string },
     @Res({ passthrough: true }) res: CookieResponse,
   ) {
-    await this.check(origin, req.ip);
+    await this.check(origin, req.ip, res);
     const session = await this.auth.refresh(this.refreshToken(cookie));
     this.cookie(res, session.refreshToken);
     return session.body;
@@ -160,7 +178,7 @@ export class AuthController {
     @Req() req: { ip: string },
     @Res({ passthrough: true }) res: CookieResponse,
   ) {
-    await this.check(origin, req.ip);
+    await this.check(origin, req.ip, res);
     await this.auth.logout(this.refreshToken(cookie));
     this.cookie(res, "", true);
     return { ok: true };

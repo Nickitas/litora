@@ -63,6 +63,7 @@ export interface LoginDto {
 }
 export interface RegisterDto extends LoginDto {
   name: string;
+  invitationCode: string;
 }
 export interface AuthDto {
   user: UserDto;

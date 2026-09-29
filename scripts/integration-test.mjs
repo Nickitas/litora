@@ -3,6 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 const base = process.env.TEST_API_URL ?? "http://localhost:3000/api";
+const invitations = JSON.parse(process.env.TEST_INVITATIONS_JSON ?? "{}").invitations;
+assert.ok(Array.isArray(invitations) && invitations.length >= 3,
+  "Передайте TEST_INVITATIONS_JSON с тремя одноразовыми приглашениями тестовой БД");
+const codes = invitations.map((invitation) => invitation.code);
 function client() {
   let cookie = "",
     access = "";
@@ -25,7 +29,9 @@ function client() {
       assert.equal(
         response.status,
         expected,
-        `${method} ${path}: ${JSON.stringify(payload)}`,
+        path.startsWith("/auth/")
+          ? `${method} ${path}: HTTP ${response.status}`
+          : `${method} ${path}: ${JSON.stringify(payload)}`,
       );
       if (response.headers.get("set-cookie"))
         cookie = response.headers.get("set-cookie").split(";")[0];
@@ -45,13 +51,23 @@ const blockedOrigin = await fetch(`${base}/auth/refresh`, {
 });
 assert.equal(blockedOrigin.status, 403);
 await anonymous.request("/calculations", "GET", undefined, 401);
+await anonymous.request("/auth/register", "POST", { email, password, name: "Без ключа" }, 400);
+await anonymous.request("/auth/register", "POST", {
+  email, password, name: "Неизвестный ключ", invitationCode: `litora_${"x".repeat(43)}`,
+}, 403);
 await first.request(
   "/auth/register",
   "POST",
-  { email, password, name: "Проверка интеграции" },
+  { email, password, name: "Проверка интеграции", invitationCode: codes[0] },
   201,
 );
 await first.request("/auth/login", "POST", { email, password });
+await anonymous.request("/auth/register", "POST", {
+  email: `reuse-${randomUUID()}@example.test`, password, name: "Повтор", invitationCode: codes[0],
+}, 403);
+await anonymous.request("/auth/register", "POST", {
+  email, password, name: "Дубликат почты", invitationCode: codes[1],
+}, 409);
 await second.request(
   "/auth/register",
   "POST",
@@ -59,9 +75,22 @@ await second.request(
     email: `other-${randomUUID()}@example.test`,
     password,
     name: "Проверка изоляции",
+    invitationCode: codes[1],
   },
   201,
 );
+const race = await Promise.all([0, 1].map(async () => {
+  const response = await fetch(`${base}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: new URL(base).origin },
+    body: JSON.stringify({ email: `race-${randomUUID()}@example.test`, password,
+      name: "Одновременная регистрация", invitationCode: codes[2] }),
+  });
+  // Не выводим body: успешный ответ содержит access token.
+  await response.arrayBuffer();
+  return response.status;
+}));
+assert.deepEqual(race.sort(), [201, 403]);
 const previousToken = first.token;
 await first.request("/auth/refresh", "POST");
 assert.notEqual(first.token, previousToken);
@@ -141,6 +170,7 @@ assert.equal((await second.request("/calculations")).length, 0);
 const swagger = await (await fetch(`${base}/docs-json`)).json();
 assert.ok(swagger.paths["/api/calculations"].post);
 assert.ok(swagger.components.securitySchemes.bearer);
+assert.ok(swagger.paths["/api/auth/register"].post.requestBody.content["application/json"].schema.required.includes("invitationCode"));
 await first.request("/auth/logout", "POST");
 await first.request("/auth/me", "GET", undefined, 401);
 await first.request("/auth/refresh", "POST", undefined, 401);

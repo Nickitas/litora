@@ -15,6 +15,7 @@ x-app-environment: &app-environment
   WEB_ORIGIN: https://${LITORA_DOMAIN:?domain required}
   API_ORIGIN: https://${LITORA_DOMAIN:?domain required}
   COOKIE_SECURE: "true"
+  TRUSTED_PROXY_CIDRS: ${LITORA_PROXY_IP:-172.30.10.2}/32
   S3_ENDPOINT: ${S3_ENDPOINT:?S3 endpoint required}
   S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:?public S3 endpoint required}
   S3_REGION: ${S3_REGION:?region required}
@@ -47,6 +48,10 @@ services:
   api:
     image: ${API_IMAGE:?release API image required}
     environment: *app-environment
+    networks:
+      default: {}
+      edge:
+        aliases: [api-edge]
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:
@@ -92,6 +97,10 @@ services:
       ACME_EMAIL: ${ACME_EMAIL:?ACME email required}
       LITORA_ALLOWED_CIDRS: ${LITORA_ALLOWED_CIDRS:?pilot allowlist required}
     ports: ["80:80", "443:443"]
+    networks:
+      default: {}
+      edge:
+        ipv4_address: ${LITORA_PROXY_IP:-172.30.10.2}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -106,3 +115,10 @@ volumes:
   postgres-data:
   caddy-data:
   caddy-config:
+
+networks:
+  edge:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${LITORA_EDGE_SUBNET:-172.30.10.0/24}

@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { parseTrustedProxies } from "./trusted-proxies.js";
 
 const candidates = [
   process.env.LITORA_ENV_FILE,
@@ -9,7 +10,7 @@ const candidates = [
 ].filter((path): path is string => Boolean(path));
 
 const envFile = candidates.find(existsSync);
-if (envFile) dotenv.config({ path: envFile });
+if (envFile) dotenv.config({ path: envFile, quiet: true });
 
 function required(name: string): string {
   const value = process.env[name];
@@ -23,6 +24,7 @@ export const environment = {
   webOrigin: process.env.WEB_ORIGIN ?? "http://localhost:5173",
   apiOrigin: process.env.API_ORIGIN ?? "http://localhost:3000",
   secureCookies: process.env.COOKIE_SECURE === "true",
+  trustedProxies: parseTrustedProxies(process.env.TRUSTED_PROXY_CIDRS),
   cliDirectory: resolve(
     process.env.LITO_CLI_DIRECTORY ?? resolve(process.cwd(), "../lito-cli"),
   ),

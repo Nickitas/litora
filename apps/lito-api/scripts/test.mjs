@@ -3,6 +3,20 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+if ((process.argv.includes("--require-database") || process.env.CI === "true") &&
+    !process.env.TEST_DATABASE_URL) {
+  throw new Error("Для проверки API с БД задайте TEST_DATABASE_URL выделенной БД litora_test_*");
+}
+if (process.env.TEST_DATABASE_URL) {
+  let database;
+  try { database = new URL(process.env.TEST_DATABASE_URL); }
+  catch { throw new Error("TEST_DATABASE_URL имеет некорректный формат"); }
+  if (!["postgres:", "postgresql:"].includes(database.protocol) ||
+      !database.hostname || !/^\/litora_test_[a-z0-9_]+$/.test(database.pathname)) {
+    throw new Error("Тест разрешён только для выделенной PostgreSQL БД litora_test_*");
+  }
+}
+
 const source = fileURLToPath(new URL("../src/", import.meta.url));
 
 function testsIn(directory) {

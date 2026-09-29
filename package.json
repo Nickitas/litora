@@ -12,6 +12,7 @@
     "dev:worker": "pnpm --filter litora-api worker",
     "dev:web": "pnpm --filter litora-web dev",
     "test:api": "pnpm --filter litora-api test",
+    "test:api:db": "pnpm --filter litora-api test:db",
     "test:integration": "node scripts/integration-test.mjs",
     "infra:up": "docker compose --env-file .env.local -f infra/compose.yaml up -d",
     "infra:down": "docker compose --env-file .env.local -f infra/compose.yaml down",
@@ -21,7 +22,8 @@
     "lint": "pnpm --filter litora-web lint",
     "check:workspace": "node scripts/check-workspace.mjs",
     "test:web": "pnpm --filter litora-web test:verify",
-    "verify": "pnpm check:workspace && pnpm typecheck && pnpm lint && pnpm test:web && pnpm test:api && pnpm test:cli && pnpm build:api && pnpm build:web",
+    "test:bundle": "pnpm --filter litora-web analyze:bundle --check",
+    "verify": "pnpm check:workspace && pnpm typecheck && pnpm lint && pnpm test:web && pnpm test:api && pnpm test:cli && pnpm build:api && pnpm build:web && pnpm test:bundle",
     "typecheck": "pnpm --filter @litora/api-client typecheck && pnpm --filter @litora/contracts typecheck && pnpm --filter litora-api typecheck && pnpm --filter litora-web typecheck",
     "test:cli": "cd apps/lito-cli && go test ./..."
   }
