@@ -37,6 +37,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm env:init
       - run: pnpm verify
+      - run: pnpm --filter litora-web exec playwright install --with-deps chromium
+      - run: pnpm test:web:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-e2e-failure
+          path: apps/lito-web/test-results/
+          if-no-files-found: ignore
 
   integration:
     runs-on: ubuntu-latest

@@ -70,13 +70,40 @@ export interface AuthDto {
   accessToken: string;
   expiresIn: number;
 }
-export type CalculationKind = "dimension" | "map" | "erosion";
+export type CalculationKind = "dimension" | "dimension_dataset" | "map" | "erosion";
 export interface CreateCalculationDto {
   kind: CalculationKind;
-  input?: { steps?: number };
+  input?: { steps?: number; datasetId?: string };
 }
 export interface CalculationKindDto {
   kind: CalculationKind;
   title: string;
   description: string;
+}
+
+export interface GeoJsonLineStringDto {
+  type: "LineString";
+  coordinates: [number, number][];
+}
+
+export interface CreateDatasetDto {
+  name: string;
+  source: string;
+  license: string;
+  crs: "EPSG:4326";
+  coordinateUnit: "degrees";
+  geometry: GeoJsonLineStringDto;
+}
+
+export interface DatasetDto {
+  id: string;
+  name: string;
+  source: string;
+  license: string;
+  crs: "EPSG:4326";
+  coordinateUnit: "degrees";
+  pointCount: number;
+  sizeBytes: number;
+  sha256: string;
+  createdAt: string;
 }

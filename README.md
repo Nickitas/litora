@@ -272,9 +272,13 @@ pnpm build:web
 pnpm test:web
 pnpm test:api
 pnpm test:api:db        # нужен TEST_DATABASE_URL отдельной БД litora_test_*
+pnpm test:web:e2e       # после playwright install chromium; отдельный Vite на 5189
 pnpm test:cli
 pnpm test:integration   # дополнительно нужен TEST_INVITATIONS_JSON, см. ниже
 ```
+
+Браузерный `test:web:e2e` подменяет ответы `/api/**` и не затрагивает рабочую
+БД или S3. Установка Chromium и подробности — в [SDD](sdd/development.md).
 
 Локальный `test:api` без `TEST_DATABASE_URL` пропускает две PostgreSQL suites.
 `test:api:db` и CI требуют выделенную тестовую БД: проверяются приглашения,
