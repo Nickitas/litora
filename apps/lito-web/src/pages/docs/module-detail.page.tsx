@@ -34,17 +34,16 @@ export function ModuleDetailPage() {
     stable: {
       label: "Стабильный",
       className:
-        "bg-green-500/10 text-green-500 border-green-500/20 hover:bg-green-500/20",
+        "bg-status-succeeded-background text-status-succeeded border-status-succeeded",
     },
     experimental: {
       label: "Экспериментальный",
-      className:
-        "bg-yellow-500/10 text-yellow-500 border-yellow-500/20 hover:bg-yellow-500/20",
+      className: "bg-warning-background text-warning border-warning",
     },
     planned: {
       label: "Запланирован",
       className:
-        "bg-gray-500/10 text-gray-500 border-gray-500/20 hover:bg-gray-500/20",
+        "bg-status-queued-background text-status-queued border-status-queued",
     },
   };
 
@@ -67,7 +66,7 @@ export function ModuleDetailPage() {
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
-            <h1 className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-4xl font-bold text-transparent">
+            <h1 className="text-3xl font-semibold text-foreground sm:text-4xl">
               {module.title}
             </h1>
             <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground">
@@ -128,9 +127,9 @@ export function ModuleDetailPage() {
           {module.features.map((feature, i) => (
             <div
               key={i}
-              className="group flex items-start gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-4 transition-colors hover:border-green-500/50"
+              className="group flex items-start gap-3 rounded-lg border bg-card p-4 transition-colors hover:border-status-succeeded"
             >
-              <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 fill-green-500/20 text-green-500" />
+              <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-status-succeeded" />
               <span className="leading-relaxed text-muted-foreground transition-colors group-hover:text-foreground">
                 {feature}
               </span>
@@ -151,9 +150,9 @@ export function ModuleDetailPage() {
           {detailedContent.useCases.map((useCase, i) => (
             <div
               key={i}
-              className="flex items-start gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-4 transition-colors hover:border-purple-500/50"
+              className="flex items-start gap-3 rounded-lg border bg-card p-4 transition-colors hover:border-primary"
             >
-              <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 fill-purple-500/20 text-purple-500" />
+              <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
               <span className="leading-relaxed text-muted-foreground">
                 {useCase}
               </span>

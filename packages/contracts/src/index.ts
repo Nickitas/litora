@@ -70,7 +70,8 @@ export interface AuthDto {
   accessToken: string;
   expiresIn: number;
 }
-export type CalculationKind = "dimension" | "dimension_dataset" | "map" | "erosion";
+export type CalculationKind =
+  "dimension" | "dimension_dataset" | "map" | "erosion";
 export interface CreateCalculationDto {
   kind: CalculationKind;
   input?: { steps?: number; datasetId?: string };

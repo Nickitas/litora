@@ -104,11 +104,32 @@ await first.request(
   { kind: "dimension", input: { input: "/etc/passwd" } },
   400,
 );
-for (const kind of ["dimension", "map", "erosion"]) {
+const inputGeometry = { type: "LineString", coordinates: [
+  [39.667927, 43.6442458], [39.6739089, 43.6407472],
+  [39.6792709, 43.6389198], [39.6853954, 43.6341751],
+] };
+const uploaded = await first.request("/datasets", "POST", {
+  name: "Тестовый участок Сочи", source: "Тестовая линия интеграции",
+  license: "Только для интеграционного теста", crs: "EPSG:4326",
+  coordinateUnit: "degrees", geometry: inputGeometry,
+}, 201);
+assert.equal(uploaded.pointCount, inputGeometry.coordinates.length);
+assert.match(uploaded.sha256, /^[a-f0-9]{64}$/);
+assert.equal((await first.request("/datasets"))[0].id, uploaded.id);
+assert.deepEqual(await second.request("/datasets"), []);
+await first.request("/datasets", "POST", {
+  name: "Неверный CRS", source: "Тест", license: "Тест", crs: "EPSG:3857",
+  coordinateUnit: "meters", geometry: inputGeometry,
+}, 400);
+await second.request("/calculations", "POST", {
+  kind: "dimension_dataset", input: { datasetId: uploaded.id },
+}, 404);
+for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
   const job = await first.request(
     "/calculations",
     "POST",
-    { kind, input: kind === "erosion" ? { steps: 2 } : {} },
+    { kind, input: kind === "erosion" ? { steps: 2 } :
+      kind === "dimension_dataset" ? { datasetId: uploaded.id } : {} },
     201,
   );
   await second.request(`/calculations/${job.id}`, "GET", undefined, 404);
@@ -125,6 +146,11 @@ for (const kind of ["dimension", "map", "erosion"]) {
     await delay(1000);
   }
   assert.equal(result.status, "succeeded", JSON.stringify(result));
+  if (kind === "dimension_dataset") {
+    assert.equal(result.resultSummary.provenance.datasetId, uploaded.id);
+    assert.equal(result.resultSummary.provenance.sha256, uploaded.sha256);
+    assert.equal(result.resultSummary.scenario, "user-data");
+  }
   assert.ok(result.artifacts.length > 1);
   const artifact = result.artifacts.find((file) =>
     file.filename.endsWith("manifest.json"),
@@ -149,6 +175,39 @@ for (const kind of ["dimension", "map", "erosion"]) {
     `${kind}: готово, ${result.artifacts.length} файлов, проверены манифест, SHA-256 и приватность S3`,
   );
 }
+const rejectedDataset = await first.request("/datasets", "POST", {
+  name: "Контур вне Чёрного моря",
+  source: "Негативный интеграционный тест",
+  license: "Тестовое использование",
+  crs: "EPSG:4326",
+  coordinateUnit: "degrees",
+  geometry: {
+    type: "LineString",
+    coordinates: [[0, 0], [1, 1], [2, 2]],
+  },
+}, 201);
+const rejectedJob = await first.request("/calculations", "POST", {
+  kind: "dimension_dataset",
+  input: { datasetId: rejectedDataset.id },
+}, 201);
+let failed;
+for (let attempt = 0; attempt < 30; attempt++) {
+  failed = await first.request(`/calculations/${rejectedJob.id}`);
+  if (!["queued", "running"].includes(failed.status)) break;
+  await delay(1000);
+}
+assert.equal(failed.status, "failed", JSON.stringify(failed));
+assert.match(failed.errorMessage, /вне области Чёрного моря/);
+assert.ok(
+  failed.artifacts.some((artifact) => artifact.filename === "failure.log"),
+  "Отказ Go должен оставить диагностический журнал",
+);
+assert.equal(
+  failed.artifacts.some((artifact) => artifact.filename === "manifest.json"),
+  false,
+  "Неуспешный расчёт не должен иметь manifest успешного результата",
+);
+console.log("Невалидная для Go геометрия завершилась failed с журналом");
 const cancelled = await first.request(
   "/calculations",
   "POST",
@@ -169,6 +228,7 @@ assert.equal(
 assert.equal((await second.request("/calculations")).length, 0);
 const swagger = await (await fetch(`${base}/docs-json`)).json();
 assert.ok(swagger.paths["/api/calculations"].post);
+assert.ok(swagger.paths["/api/datasets"].post);
 assert.ok(swagger.components.securitySchemes.bearer);
 assert.ok(swagger.paths["/api/auth/register"].post.requestBody.content["application/json"].schema.required.includes("invitationCode"));
 await first.request("/auth/logout", "POST");

@@ -76,9 +76,9 @@ export function CapabilityDetailPage() {
           {detailedContent.features.map((feature, i) => (
             <div
               key={i}
-              className="group flex items-start gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-4 transition-colors hover:border-green-500/50"
+              className="group flex items-start gap-3 rounded-lg border bg-card p-4 transition-colors hover:border-status-succeeded"
             >
-              <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 fill-green-500/20 text-green-500" />
+              <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-status-succeeded" />
               <span className="leading-relaxed text-muted-foreground transition-colors group-hover:text-foreground">
                 {feature}
               </span>
@@ -119,9 +119,9 @@ export function CapabilityDetailPage() {
           {capability.useCases.map((useCase, i) => (
             <div
               key={i}
-              className="flex items-start gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-4 transition-colors hover:border-purple-500/50"
+              className="flex items-start gap-3 rounded-lg border bg-card p-4 transition-colors hover:border-primary"
             >
-              <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 fill-purple-500/20 text-purple-500" />
+              <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
               <span className="leading-relaxed text-muted-foreground">
                 {useCase}
               </span>

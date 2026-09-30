@@ -101,9 +101,9 @@ const InstallationStep = ({
         <TypingAnimation>{step.code}</TypingAnimation>
         <AnimatedSpan
           delay={1500}
-          className={`${isCompleted ? "text-green-500" : "text-muted-foreground"}`}
+          className={`${isCompleted ? "text-status-succeeded" : "text-muted-foreground"}`}
         >
-          {isCompleted ? "✓ Выполнено успешно" : "> Ожидание выполнения..."}
+          {isCompleted ? "✓ Выполнено успешно" : "> Ожидание выполнения…"}
         </AnimatedSpan>
         {step.note && (
           <AnimatedSpan delay={2500} className="text-xs text-muted-foreground">
@@ -143,7 +143,7 @@ export const BinaryInstallation = () => {
             <button
               key={os}
               onClick={() => setActiveOs(os)}
-              className={`relative px-4 py-2 font-medium transition-colors ${
+              className={`relative min-h-11 px-4 py-2 font-medium transition-colors ${
                 activeOs === os
                   ? "border-b-2 border-primary text-foreground"
                   : "text-muted-foreground hover:border-b-2 hover:border-border hover:text-foreground"
@@ -172,11 +172,9 @@ export const BinaryInstallation = () => {
           return (
             <div className="space-y-6">
               {"warning" in instructions && instructions.warning && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
-                  <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <p className="text-sm text-amber-700 dark:text-amber-300">
-                    {instructions.warning}
-                  </p>
+                <div className="flex items-start gap-3 rounded-lg border border-warning bg-warning-background p-4 text-warning">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <p className="text-sm">{instructions.warning}</p>
                 </div>
               )}
 
@@ -188,14 +186,14 @@ export const BinaryInstallation = () => {
 
               <div className="border-t border-border/50 pt-4">
                 <h4 className="mb-3 flex items-center gap-2 font-medium">
-                  <Check className="size-4 text-green-500" />
+                  <Check className="size-4 text-status-succeeded" />
                   Проверка установки
                 </h4>
                 <Terminal>
                   <TypingAnimation>
                     {instructions.verification.code}
                   </TypingAnimation>
-                  <AnimatedSpan delay={1500} className="text-green-500">
+                  <AnimatedSpan delay={1500} className="text-status-succeeded">
                     ✓ Команда доступна
                   </AnimatedSpan>
                   <AnimatedSpan
@@ -214,7 +212,7 @@ export const BinaryInstallation = () => {
       {/* First Run Section */}
       <div className="border-t border-border/50 pt-4">
         <h3 className="mb-3 flex items-center gap-2 font-semibold">
-          <Check className="size-4 text-green-500" />
+          <Check className="size-4 text-status-succeeded" />
           Первый запуск
         </h3>
         <div className="space-y-3">
@@ -224,7 +222,7 @@ export const BinaryInstallation = () => {
             </p>
             <Terminal>
               <TypingAnimation>lito source</TypingAnimation>
-              <AnimatedSpan delay={1500} className="text-green-500">
+              <AnimatedSpan delay={1500} className="text-status-succeeded">
                 ✓ Источник данных доступен
               </AnimatedSpan>
             </Terminal>
@@ -237,7 +235,7 @@ export const BinaryInstallation = () => {
               <TypingAnimation>
                 lito all --iterations 3 --steps 5
               </TypingAnimation>
-              <AnimatedSpan delay={1500} className="text-green-500">
+              <AnimatedSpan delay={1500} className="text-status-succeeded">
                 ✓ Моделирование завершено успешно
               </AnimatedSpan>
             </Terminal>
@@ -248,12 +246,12 @@ export const BinaryInstallation = () => {
       {/* Additional Tools Section */}
       <div className="border-t border-border/50 pt-4">
         <h3 className="mb-3 flex items-center gap-2 font-semibold">
-          <Info className="size-4 text-blue-500" />
+          <Info className="size-4 text-primary" />
           Дополнительные инструменты
         </h3>
-        <div className="flex items-start gap-3 rounded-lg border border-purple-500/20 bg-purple-500/10 p-4">
-          <Info className="mt-0.5 size-4 shrink-0 text-purple-600 dark:text-purple-400" />
-          <div className="text-sm text-purple-700 dark:text-purple-300">
+        <div className="flex items-start gap-3 rounded-lg border border-accent-foreground bg-accent p-4 text-accent-foreground">
+          <Info className="mt-0.5 size-4 shrink-0" />
+          <div className="text-sm">
             <p className="mb-2">
               Для использования Python скриптов анализа данных требуется Python
               3.8+:
@@ -262,7 +260,7 @@ export const BinaryInstallation = () => {
               <TypingAnimation>
                 pip install pandas matplotlib seaborn numpy scipy
               </TypingAnimation>
-              <AnimatedSpan delay={1500} className="text-green-500">
+              <AnimatedSpan delay={1500} className="text-status-succeeded">
                 ✓ Пакеты установлены
               </AnimatedSpan>
             </Terminal>

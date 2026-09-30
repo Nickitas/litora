@@ -1,7 +1,9 @@
 import { Injectable, OnModuleInit } from "@nestjs/common";
 import { createReadStream } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
@@ -81,6 +83,59 @@ export class ObjectStorageService implements OnModuleInit {
         Body: createReadStream(path),
         ContentType: contentType,
       }),
+    );
+  }
+
+  async uploadBytes(
+    objectKey: string,
+    bytes: Buffer,
+    contentType: string,
+  ): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+        Body: bytes,
+        ContentLength: bytes.length,
+        ContentType: contentType,
+      }),
+    );
+  }
+
+  async downloadFile(
+    objectKey: string,
+    path: string,
+    maxBytes: number,
+  ): Promise<void> {
+    const response = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      { abortSignal: AbortSignal.timeout(30_000) },
+    );
+    if (
+      response.ContentLength !== undefined &&
+      response.ContentLength > maxBytes
+    )
+      throw new Error("Размер сохранённого набора превышает лимит");
+    if (!response.Body || !(Symbol.asyncIterator in response.Body))
+      throw new Error("S3 не вернул поток набора данных");
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += bytes.length;
+      if (size > maxBytes)
+        throw new Error("Размер сохранённого набора превышает лимит");
+      chunks.push(bytes);
+    }
+    await writeFile(path, Buffer.concat(chunks, size), {
+      flag: "wx",
+      mode: 0o600,
+    });
+  }
+
+  async deleteObject(objectKey: string): Promise<void> {
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: this.bucket, Key: objectKey }),
     );
   }
 

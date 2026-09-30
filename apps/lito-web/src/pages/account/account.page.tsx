@@ -4,18 +4,16 @@ import type {
   CalculationJobDto,
   CalculationKind,
   CalculationKindDto,
-  CalculationStatus,
+  DatasetDto,
 } from "@litora/contracts";
+import { defaultCoastlineDataset } from "@litora/generated-data";
+import { CalculationStatus } from "@/entities/calculation/ui/calculation-status";
 import { useAuth } from "@/features/auth";
 import { api } from "@/shared/api/client";
+import { Button } from "@/shared/shadcn/components/ui/button";
+import { fieldControlClass } from "@/shared/ui/field-styles";
+import { DatasetUpload } from "./ui/dataset-upload";
 
-const labels: Record<CalculationStatus, string> = {
-  queued: "В очереди",
-  running: "Выполняется",
-  succeeded: "Готово",
-  failed: "Ошибка",
-  cancelled: "Отменён",
-};
 const active = (job: CalculationJobDto) =>
   job.status === "queued" || job.status === "running";
 
@@ -30,6 +28,8 @@ export function AccountPage() {
 function Workspace({ name }: { name: string }) {
   const [jobs, setJobs] = useState<CalculationJobDto[]>([]);
   const [kinds, setKinds] = useState<CalculationKindDto[]>([]);
+  const [datasets, setDatasets] = useState<DatasetDto[]>([]);
+  const [datasetId, setDatasetId] = useState("");
   const [kind, setKind] = useState<CalculationKind>("dimension");
   const [steps, setSteps] = useState(3);
   const [selectedId, setSelectedId] = useState<string>();
@@ -47,6 +47,20 @@ function Workspace({ name }: { name: string }) {
     []
   );
 
+  useEffect(() => {
+    let mounted = true;
+    api
+      .datasets()
+      .then((result) => {
+        if (mounted) setDatasets(result);
+      })
+      .catch((error) => {
+        if (mounted) fail(error);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [fail]);
   useEffect(() => {
     let mounted = true;
     api
@@ -117,9 +131,21 @@ function Workspace({ name }: { name: string }) {
     setBusy(true);
     setError("");
     try {
+      let selectedDatasetId = datasetId;
+      if (kind === "dimension_dataset" && !selectedDatasetId) {
+        const example = await api.createDataset(defaultCoastlineDataset);
+        setDatasets((current) => [example, ...current]);
+        setDatasetId(example.id);
+        selectedDatasetId = example.id;
+      }
       const job = await api.createCalculation({
         kind,
-        input: kind === "erosion" ? { steps } : {},
+        input:
+          kind === "erosion"
+            ? { steps }
+            : kind === "dimension_dataset"
+              ? { datasetId: selectedDatasetId }
+              : {},
       });
       setSelectedId(job.id);
       setRevision((value) => value + 1);
@@ -143,41 +169,51 @@ function Workspace({ name }: { name: string }) {
   }
   const scenario = kinds.find((item) => item.kind === kind);
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-[1440px] space-y-8">
       <header>
         <p className="text-sm text-muted-foreground">Личный кабинет · {name}</p>
-        <h1 className="mt-2 text-3xl font-bold">Мои исследования</h1>
+        <h1 className="mt-2 text-[28px] leading-9 font-semibold sm:text-[32px] sm:leading-10">
+          Мои исследования
+        </h1>
         <p className="mt-3 text-muted-foreground">
           Параметры, отчёты и история ваших расчётов береговой линии.
         </p>
       </header>
+      <DatasetUpload
+        onSaved={(dataset) => {
+          setDatasets((current) => [dataset, ...current]);
+          setDatasetId(dataset.id);
+          setKind("dimension_dataset");
+        }}
+      />
       {error && (
         <div
           role="alert"
-          className="rounded-xl border border-destructive/40 p-4 text-destructive"
+          className="rounded-xl border border-destructive bg-status-failed-background p-4 text-status-failed"
         >
           {error}
-          <button
-            className="ml-4 underline"
+          <Button
+            variant="link"
+            className="ml-2"
             onClick={() => {
               setError("");
               setRevision((value) => value + 1);
             }}
           >
             Повторить
-          </button>
+          </Button>
         </div>
       )}
-      <div className="grid items-start gap-6 lg:grid-cols-[320px_1fr]">
+      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <form
           onSubmit={submit}
-          className="space-y-4 rounded-2xl border bg-background p-5"
+          className="space-y-4 rounded-2xl border bg-card p-5 text-card-foreground"
         >
-          <h2 className="text-xl font-semibold">Новый расчёт</h2>
+          <h2 className="text-2xl font-semibold">Новый расчёт</h2>
           <label className="block text-sm">
             Сценарий
             <select
-              className="mt-2 w-full rounded-lg border bg-background p-3"
+              className={fieldControlClass}
               value={kind}
               onChange={(event) =>
                 setKind(event.target.value as CalculationKind)
@@ -197,7 +233,7 @@ function Workspace({ name }: { name: string }) {
             <label className="block text-sm">
               Шаги волнового ряда (1–48)
               <input
-                className="mt-2 w-full rounded-lg border bg-background p-3"
+                className={fieldControlClass}
                 type="number"
                 min={1}
                 max={48}
@@ -207,23 +243,42 @@ function Workspace({ name }: { name: string }) {
               />
             </label>
           )}
-          <button
-            disabled={busy || !kinds.length}
-            className="w-full rounded-lg bg-primary p-3 text-primary-foreground disabled:opacity-50"
-          >
+          {kind === "dimension_dataset" && (
+            <label className="block text-sm">
+              Ваш набор данных
+              <select
+                value={datasetId}
+                onChange={(event) => setDatasetId(event.target.value)}
+                className={fieldControlClass}
+              >
+                <option value="">Пример GeoJSON Сочи (по умолчанию)</option>
+                {datasets.map((dataset) => (
+                  <option key={dataset.id} value={dataset.id}>
+                    {dataset.name} · {dataset.pointCount} точек
+                  </option>
+                ))}
+              </select>
+              <span className="mt-2 block text-xs text-muted-foreground">
+                {datasets.find((dataset) => dataset.id === datasetId)?.source ??
+                  "При первом запуске пример сохранится в вашем аккаунте; для своей линии загрузите файл выше."}
+              </span>
+            </label>
+          )}
+          <Button disabled={busy || !kinds.length} className="w-full">
             {busy ? "Подождите…" : "Запустить расчёт"}
-          </button>
+          </Button>
           <p className="text-xs text-muted-foreground">
-            Используются поставляемые данные Чёрного моря. Результаты доступны
-            только в вашем аккаунте.
+            {kind === "dimension_dataset"
+              ? "Без выбранного набора используется пример Сочи (OpenStreetMap, ODbL). Go проверит геометрию при запуске."
+              : "Используются поставляемые данные Чёрного моря. Результаты доступны только в вашем аккаунте."}
           </p>
         </form>
-        <section className="space-y-3" aria-label="История расчётов">
-          <h2 className="text-xl font-semibold">История расчётов</h2>
+        <section className="min-w-0 space-y-3" aria-label="История расчётов">
+          <h2 className="text-2xl font-semibold">История расчётов</h2>
           {loading ? (
             <p role="status">Загружаем историю…</p>
           ) : jobs.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-muted-foreground">
+            <div className="rounded-xl border border-dashed bg-card p-8 text-muted-foreground">
               Пока нет расчётов. Выберите сценарий и запустите первый.
             </div>
           ) : (
@@ -231,7 +286,7 @@ function Workspace({ name }: { name: string }) {
               {jobs.map((job) => (
                 <li
                   key={job.id}
-                  className={`rounded-xl border p-4 ${selectedId === job.id ? "border-primary bg-primary/5" : ""}`}
+                  className={`rounded-xl border bg-card p-4 text-card-foreground ${selectedId === job.id ? "border-primary bg-accent" : ""}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <button
@@ -241,12 +296,7 @@ function Workspace({ name }: { name: string }) {
                       {kinds.find((item) => item.kind === job.kind)?.title ??
                         job.kind}
                     </button>
-                    <span
-                      className="rounded-full bg-muted px-3 py-1 text-xs"
-                      role="status"
-                    >
-                      {labels[job.status]}
-                    </span>
+                    <CalculationStatus status={job.status} />
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
                     {new Date(job.createdAt).toLocaleString("ru-RU")} ·{" "}
@@ -277,17 +327,23 @@ function Workspace({ name }: { name: string }) {
       </div>
       {selectedId && (
         <section
-          className="space-y-4 rounded-2xl border p-5"
+          className="min-w-0 space-y-4 rounded-2xl border bg-card p-5 text-card-foreground"
           aria-label="Результат расчёта"
         >
-          <h2 className="text-xl font-semibold">Результат расчёта</h2>
+          <h2 className="text-2xl font-semibold">Результат расчёта</h2>
           {!selectedDetail ? (
             <p role="status">Загружаем результаты…</p>
           ) : (
             <>
-              <p className="text-sm">
-                {labels[selectedDetail.status]} · {selectedDetail.id}
-              </p>
+              <div
+                aria-live="polite"
+                className="flex flex-wrap items-center gap-2 text-sm"
+              >
+                <CalculationStatus status={selectedDetail.status} />
+                <code className="break-all text-muted-foreground">
+                  {selectedDetail.id}
+                </code>
+              </div>
               {selectedDetail.errorMessage && (
                 <p
                   role="alert"
@@ -302,7 +358,7 @@ function Workspace({ name }: { name: string }) {
                 </p>
               )}
               {selectedDetail.resultSummary?.scenario === "demo" && (
-                <p className="rounded-lg bg-amber-500/10 p-3 text-sm">
+                <p className="rounded-lg bg-warning-background p-3 text-sm text-warning">
                   Демонстрационный сценарий. Не является прогнозом годового
                   размыва или калиброванным научным отчётом.
                 </p>

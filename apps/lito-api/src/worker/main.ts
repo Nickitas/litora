@@ -25,11 +25,16 @@ import {
   commandArguments,
   validateCalculation,
 } from "../calculations/commands.js";
+import { DatasetsRepository } from "../datasets/datasets.repository.js";
+import { maxDatasetBytes } from "../datasets/validation.js";
 
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
 const repository = new CalculationsRepository(db, storage);
+const datasets = new DatasetsRepository(db, storage);
 const workerId = randomUUID();
+const maxOutputFiles = 256;
+const maxOutputBytes = 100 * 1024 * 1024;
 let stopping = false;
 let active: ChildProcess | undefined;
 function stopProcess() {
@@ -101,10 +106,41 @@ async function run(job: JobRow) {
       join(directory, "data"),
       "dir",
     );
+    let datasetPath: string | undefined;
+    let provenance: Record<string, unknown> | undefined;
+    if (job.kind === "dimension_dataset") {
+      if (!job.dataset_id || !job.user_id)
+        throw new Error("У расчёта нет набора данных или владельца");
+      const dataset = await datasets.getOwned(job.dataset_id, job.user_id);
+      datasetPath = join(directory, "input.geojson");
+      await storage.downloadFile(
+        dataset.object_key,
+        datasetPath,
+        maxDatasetBytes,
+      );
+      const inputSize = (await stat(datasetPath)).size;
+      const inputHash = await sha256(datasetPath);
+      if (inputSize !== dataset.size_bytes || inputHash !== dataset.sha256)
+        throw new Error(
+          "Контрольная сумма или размер набора не совпадает с паспортом",
+        );
+      provenance = {
+        datasetId: dataset.id,
+        sha256: dataset.sha256,
+        source: dataset.source,
+        license: dataset.license,
+        crs: dataset.crs,
+        coordinateUnit: dataset.coordinate_unit,
+        pointCount: dataset.point_count,
+      };
+    }
+    if (interrupted || stopping)
+      throw new Error("Выполнение прервано до запуска CLI");
     const args = [
       ...commandArguments(
         validateCalculation({ kind: job.kind, input: job.input }),
         output,
+        datasetPath,
       ),
       "--manifest",
       join(output, "manifest.json"),
@@ -144,6 +180,16 @@ async function run(job: JobRow) {
           : `CLI завершился с кодом ${exitCode}. ${log.slice(-2000)}`,
       );
     if (outputs.length <= 1) throw new Error("CLI не создал отчётов");
+    if (outputs.length > maxOutputFiles)
+      throw new Error("Превышен лимит файлов результата");
+    const outputSizes = await Promise.all(
+      outputs.map(async (path) => (await stat(path)).size),
+    );
+    if (
+      outputSizes.some((size) => size > maxOutputBytes) ||
+      outputSizes.reduce((sum, size) => sum + size, 0) > maxOutputBytes
+    )
+      throw new Error("Превышен лимит размера результата");
     const metrics: Record<string, unknown> = {};
     let totalBytes = 0;
     for (const path of outputs) {
@@ -176,7 +222,13 @@ async function run(job: JobRow) {
     const summary = {
       fileCount: outputs.length,
       totalBytes,
-      scenario: job.kind === "erosion" ? "demo" : "bundled-data",
+      scenario:
+        job.kind === "erosion"
+          ? "demo"
+          : job.kind === "dimension_dataset"
+            ? "user-data"
+            : "bundled-data",
+      ...(provenance ? { provenance } : {}),
       metrics,
     };
     await db.query(

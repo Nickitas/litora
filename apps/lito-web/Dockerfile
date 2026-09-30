@@ -4,6 +4,7 @@ WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
+COPY packages/generated-data/package.json packages/generated-data/package.json
 COPY apps/lito-web/package.json apps/lito-web/package.json
 RUN pnpm install --frozen-lockfile --filter litora-web...
 COPY packages/ packages/

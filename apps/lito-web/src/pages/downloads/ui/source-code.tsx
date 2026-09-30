@@ -1,5 +1,5 @@
 import { downloadsPageContent } from "../constants";
-import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
+import { Button } from "@/shared/shadcn/components/ui/button";
 
 export const SourceCode = () => {
   const { sourceCode } = downloadsPageContent;
@@ -13,9 +13,11 @@ export const SourceCode = () => {
         {sourceCode.description}
       </p>
       <div className="mt-4">
-        <a href={sourceCode.url} target="_blank" rel="noopener noreferrer">
-          <RippleButton>{sourceCode.buttonText}</RippleButton>
-        </a>
+        <Button asChild variant="outline">
+          <a href={sourceCode.url} target="_blank" rel="noopener noreferrer">
+            {sourceCode.buttonText}
+          </a>
+        </Button>
       </div>
     </section>
   );

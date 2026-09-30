@@ -23,6 +23,8 @@ import { ObjectStorageService } from "./infrastructure/object-storage.service.js
 import { AuthController } from "./auth/auth.controller.js";
 import { AuthService } from "./auth/auth.service.js";
 import { AuthGuard } from "./auth/auth.guard.js";
+import { DatasetsController } from "./datasets/datasets.controller.js";
+import { DatasetsRepository } from "./datasets/datasets.repository.js";
 import { environment } from "./config/environment.js";
 
 @Controller()
@@ -68,11 +70,17 @@ class AppController {
 }
 
 @Module({
-  controllers: [AppController, AuthController, CalculationsController],
+  controllers: [
+    AppController,
+    AuthController,
+    CalculationsController,
+    DatasetsController,
+  ],
   providers: [
     DatabaseService,
     ObjectStorageService,
     CalculationsRepository,
+    DatasetsRepository,
     AuthService,
     AuthGuard,
   ],

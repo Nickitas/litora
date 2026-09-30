@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { installationPageContent } from "../constants";
 import { ROUTES } from "@/shared/config/routes";
-import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
+import { Button } from "@/shared/shadcn/components/ui/button";
 import { RetroGrid } from "@/shared/shadcn/ui/retro-grid";
 import { ArrowRight } from "lucide-react";
 
@@ -16,8 +16,8 @@ export const HelpSection = () => {
           angle={65}
           cellSize={50}
           opacity={0.3}
-          lightLineColor="#3b82f6"
-          darkLineColor="#8b5cf6"
+          lightLineColor="var(--primary)"
+          darkLineColor="var(--primary)"
         />
       </div>
 
@@ -43,14 +43,14 @@ export const HelpSection = () => {
         </p>
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <Link to={ROUTES.downloads} className="w-full sm:w-auto">
-            <RippleButton className="group w-full sm:w-auto">
+          <Button asChild variant="outline" className="w-full sm:w-auto">
+            <Link to={ROUTES.downloads}>
               <span className="flex items-center gap-2">
                 {helpSection.ctaButton}
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
               </span>
-            </RippleButton>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </div>
 

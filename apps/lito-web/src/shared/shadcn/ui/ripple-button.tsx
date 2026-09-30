@@ -14,7 +14,7 @@ export const RippleButton = React.forwardRef<
     {
       className,
       children,
-      rippleColor = "#ffffff",
+      rippleColor = "currentColor",
       duration = "600ms",
       onClick,
       ...props
@@ -31,6 +31,7 @@ export const RippleButton = React.forwardRef<
     };
 
     const createRipple = (event: MouseEvent<HTMLButtonElement>) => {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       const button = event.currentTarget;
       const rect = button.getBoundingClientRect();
       const size = Math.max(rect.width, rect.height);
@@ -63,7 +64,7 @@ export const RippleButton = React.forwardRef<
     return (
       <button
         className={cn(
-          "relative flex cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 bg-background px-4 py-2 text-center text-primary",
+          "relative flex min-h-11 cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 bg-background px-4 py-2 text-center text-primary",
           className
         )}
         onClick={handleClick}

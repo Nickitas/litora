@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
+import { Button } from "@/shared/shadcn/components/ui/button";
 import { RetroGrid } from "@/shared/shadcn/ui/retro-grid";
 import { releasesPageContent } from "../constants";
 
@@ -14,8 +14,8 @@ export const RepoBanner = () => {
           angle={65}
           cellSize={50}
           opacity={0.15}
-          lightLineColor="#3b82f6"
-          darkLineColor="#8b5cf6"
+          lightLineColor="var(--primary)"
+          darkLineColor="var(--primary)"
         />
       </div>
 
@@ -50,19 +50,18 @@ export const RepoBanner = () => {
           </a>
         </div>
 
-        <a
-          href={githubRepo.baseUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full sm:w-auto"
-        >
-          <RippleButton className="group w-full sm:w-auto">
+        <Button asChild variant="outline" className="w-full sm:w-auto">
+          <a
+            href={githubRepo.baseUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             <span className="inline-flex items-center gap-2">
               {repoSection.buttonText}
               <ExternalLink className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </span>
-          </RippleButton>
-        </a>
+          </a>
+        </Button>
       </div>
     </section>
   );

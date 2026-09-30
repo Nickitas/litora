@@ -83,6 +83,9 @@ importers:
       '@litora/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@litora/generated-data':
+        specifier: workspace:*
+        version: link:../../packages/generated-data
       '@react-three/drei':
         specifier: ^10.7.7
         version: 10.7.8(@react-three/fiber@9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.184.0))(@types/react@19.2.18)(@types/three@0.185.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.184.0)
@@ -215,6 +218,12 @@ importers:
         version: 5.9.3
 
   packages/docs: {}
+
+  packages/generated-data:
+    dependencies:
+      '@litora/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
 packages:
 

@@ -19,8 +19,8 @@ export const BasicCommands = () => {
             <h3 className="mb-3 font-medium">{cmd.title}</h3>
             <Terminal>
               <TypingAnimation>{cmd.code}</TypingAnimation>
-              <AnimatedSpan className="text-green-500">
-                ✓ Command executed successfully
+              <AnimatedSpan className="text-status-succeeded">
+                ✓ Команда выполнена успешно
               </AnimatedSpan>
             </Terminal>
           </div>

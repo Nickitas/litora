@@ -3,6 +3,8 @@ import type {
   CalculationJobDto,
   CalculationKindDto,
   CreateCalculationDto,
+  CreateDatasetDto,
+  DatasetDto,
   HealthDto,
   LoginDto,
   RegisterDto,
@@ -84,6 +86,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
       accessToken = undefined;
     },
     calculationKinds: () => send<CalculationKindDto[]>("/calculations/kinds"),
+    datasets: () => send<DatasetDto[]>("/datasets"),
+    createDataset: (body: CreateDatasetDto) =>
+      send<DatasetDto>("/datasets", "POST", body),
     createCalculation: (body: CreateCalculationDto) =>
       send<CalculationJobDto>("/calculations", "POST", body),
     calculations: () => send<CalculationJobDto[]>("/calculations"),

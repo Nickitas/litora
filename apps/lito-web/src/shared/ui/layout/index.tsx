@@ -1,5 +1,3 @@
-import { useTheme } from "@/shared/shadcn/components/theme-provider";
-import { Particles } from "@/shared/shadcn/ui/particles";
 import { Navbar } from "@/widgets/app-navigation";
 import { Footer } from "@/widgets/footer";
 import { ScrollToTop } from "@/shared/ui/scroll-to-top";
@@ -17,8 +15,6 @@ const DocsShell = lazy(() =>
 );
 
 export function Layout({ children }: LayoutProps) {
-  const { theme } = useTheme();
-  const color = theme === "dark" ? "#ffffff" : "#000000";
   const location = useLocation();
   const isAuthPage = location.pathname === "/login";
   const isDocsPage =
@@ -30,16 +26,19 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="relative min-h-screen overflow-x-clip bg-background">
       <ScrollToTop />
-      <Particles
-        className="fixed inset-0 z-0"
-        quantity={100}
-        ease={80}
-        color={color}
-        refresh
-      />
-      <div className="relative z-10">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:border focus:bg-card focus:px-4 focus:py-3 focus:text-card-foreground focus:shadow-lg"
+      >
+        Перейти к содержимому
+      </a>
+      <div>
         <Navbar />
-        <main className="container mx-auto px-4 pt-20 pb-12">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="container mx-auto px-4 pt-20 pb-12"
+        >
           {isDocsPage ? (
             <Suspense
               fallback={

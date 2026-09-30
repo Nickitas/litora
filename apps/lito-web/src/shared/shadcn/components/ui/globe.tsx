@@ -1,9 +1,9 @@
 /* eslint-disable */
 
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef } from "react";
 import createGlobe, { type COBEOptions } from "cobe";
-import { useMotionValue, useSpring } from "motion/react";
-import { useTheme } from "next-themes";
+import { useMotionValue, useReducedMotion, useSpring } from "motion/react";
+import { CircleAlert, LoaderCircle } from "lucide-react";
 import {
   useWeather,
   getWeatherEmoji,
@@ -73,11 +73,12 @@ export function Globe({
   const weatherRef = useRef<HTMLDivElement>(null);
 
   const phiRef = useRef(0);
+  const reduceMotion = useReducedMotion();
+  const reduceMotionRef = useRef(reduceMotion);
 
-  const { theme, systemTheme } = useTheme();
-  const isDark = useMemo(() => {
-    return theme === "dark" || (theme === "system" && systemTheme === "dark");
-  }, [theme, systemTheme]);
+  useEffect(() => {
+    reduceMotionRef.current = reduceMotion;
+  }, [reduceMotion]);
 
   const { weather, loading, error } = useWeather(
     WEATHER_LOCATION[0],
@@ -152,7 +153,7 @@ export function Globe({
 
     const animate = () => {
       if (globe && width > 0) {
-        if (!pointerInteracting.current) {
+        if (pointerInteracting.current === null && !reduceMotionRef.current) {
           phiRef.current += 0.005;
         }
 
@@ -224,45 +225,24 @@ export function Globe({
           transform: "translate(-50%, 120%)",
         }}
       >
-        <div
-          className={cn(
-            "relative w-48 overflow-hidden rounded-xl px-3 py-2 shadow-2xl ring-1 backdrop-blur-sm",
-            isDark
-              ? "bg-gradient-to-br from-blue-500/95 to-blue-600/95 ring-white/20"
-              : "bg-white/95 ring-blue-500/30"
-          )}
-        >
-          <div
-            className={cn(
-              "absolute inset-0",
-              isDark
-                ? "bg-gradient-to-t from-white/10 to-transparent"
-                : "bg-gradient-to-t from-blue-50/50 to-transparent"
-            )}
-          />
+        <div className="relative w-48 overflow-hidden rounded-xl border border-border bg-card px-3 py-2 text-card-foreground shadow-lg">
           {loading ? (
             <div className="relative flex items-center justify-center gap-1.5">
-              <div className="animate-pulse text-xl">🔄</div>
-              <div
-                className={cn(
-                  "text-xs font-medium",
-                  isDark ? "text-white/90" : "text-gray-600"
-                )}
-              >
-                Загрузка...
+              <LoaderCircle
+                aria-hidden="true"
+                className="size-4 text-primary motion-safe:animate-spin"
+              />
+              <div className="text-xs font-medium text-muted-foreground">
+                Загрузка…
               </div>
             </div>
           ) : error ? (
             <div className="relative flex items-center justify-center gap-1.5">
-              <div className="text-xl">❌</div>
-              <div
-                className={cn(
-                  "text-xs font-medium",
-                  isDark ? "text-white/90" : "text-gray-600"
-                )}
-              >
-                Ошибка
-              </div>
+              <CircleAlert
+                aria-hidden="true"
+                className="size-4 text-destructive"
+              />
+              <div className="text-xs font-medium text-destructive">Ошибка</div>
             </div>
           ) : weather ? (
             <>
@@ -273,117 +253,52 @@ export function Globe({
                   </div>
                 </div>
                 <div className="flex flex-1 flex-col">
-                  <div
-                    className={cn(
-                      "text-xl font-bold drop-shadow-md",
-                      isDark ? "text-white" : "text-gray-900"
-                    )}
-                  >
+                  <div className="text-xl font-bold">
                     {weather.temperature}°C
                   </div>
-                  <div
-                    className={cn(
-                      "text-[10px] font-medium",
-                      isDark ? "text-white/90" : "text-gray-600"
-                    )}
-                  >
+                  <div className="text-xs font-medium text-muted-foreground">
                     {weather.location}
                   </div>
                 </div>
               </div>
-              <div
-                className={cn(
-                  "mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 border-t pt-1.5",
-                  isDark ? "border-white/20" : "border-gray-200"
-                )}
-              >
+              <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 border-t border-border pt-1.5">
                 <div className="flex flex-col">
-                  <div
-                    className={cn(
-                      "text-[8px] leading-tight uppercase",
-                      isDark ? "text-white/60" : "text-gray-500"
-                    )}
-                  >
+                  <div className="text-xs leading-tight text-muted-foreground">
                     Ощущается
                   </div>
-                  <div
-                    className={cn(
-                      "text-xs leading-tight font-semibold",
-                      isDark ? "text-white" : "text-gray-900"
-                    )}
-                  >
+                  <div className="text-xs leading-tight font-semibold">
                     {weather.apparentTemperature}°C
                   </div>
                 </div>
                 <div className="flex flex-col">
-                  <div
-                    className={cn(
-                      "text-[8px] leading-tight uppercase",
-                      isDark ? "text-white/60" : "text-gray-500"
-                    )}
-                  >
+                  <div className="text-xs leading-tight text-muted-foreground">
                     Влажность
                   </div>
-                  <div
-                    className={cn(
-                      "text-xs leading-tight font-semibold",
-                      isDark ? "text-white" : "text-gray-900"
-                    )}
-                  >
+                  <div className="text-xs leading-tight font-semibold">
                     {weather.humidity}%
                   </div>
                 </div>
                 <div className="flex flex-col">
-                  <div
-                    className={cn(
-                      "text-[8px] leading-tight uppercase",
-                      isDark ? "text-white/60" : "text-gray-500"
-                    )}
-                  >
+                  <div className="text-xs leading-tight text-muted-foreground">
                     Ветер
                   </div>
-                  <div
-                    className={cn(
-                      "text-xs leading-tight font-semibold",
-                      isDark ? "text-white" : "text-gray-900"
-                    )}
-                  >
+                  <div className="text-xs leading-tight font-semibold">
                     {weather.windSpeed} км/ч
                   </div>
                 </div>
                 <div className="flex flex-col">
-                  <div
-                    className={cn(
-                      "text-[8px] leading-tight uppercase",
-                      isDark ? "text-white/60" : "text-gray-500"
-                    )}
-                  >
+                  <div className="text-xs leading-tight text-muted-foreground">
                     Давление
                   </div>
-                  <div
-                    className={cn(
-                      "text-xs leading-tight font-semibold",
-                      isDark ? "text-white" : "text-gray-900"
-                    )}
-                  >
+                  <div className="text-xs leading-tight font-semibold">
                     {weather.pressure} гПа
                   </div>
                 </div>
                 <div className="col-span-2 flex flex-col">
-                  <div
-                    className={cn(
-                      "text-[8px] leading-tight uppercase",
-                      isDark ? "text-white/60" : "text-gray-500"
-                    )}
-                  >
+                  <div className="text-xs leading-tight text-muted-foreground">
                     UV-индекс
                   </div>
-                  <div
-                    className={cn(
-                      "text-xs leading-tight font-semibold",
-                      isDark ? "text-white" : "text-gray-900"
-                    )}
-                  >
+                  <div className="text-xs leading-tight font-semibold">
                     {weather.uvIndex} {getUVDescription(weather.uvIndex)}
                   </div>
                 </div>

@@ -54,8 +54,8 @@ export const DocsSidebar = () => {
                     className={cn(
                       "h-1.5 w-1.5 shrink-0 rounded-full",
                       module.status === "stable"
-                        ? "bg-green-500"
-                        : "bg-yellow-500"
+                        ? "bg-status-succeeded"
+                        : "bg-warning"
                     )}
                   />
                   {module.title}

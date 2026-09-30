@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const content = join(root, "packages/docs/content");
 const sdd = join(root, "sdd");
+const maintenance = join(root, "todo/maintenance.md");
 const web = join(root, "apps/lito-web");
 
 function filesIn(directory, skip = new Set()) {
@@ -58,6 +59,7 @@ assert.ok(
 );
 
 assert.ok(!existsSync(join(content, "sdd")), "SDD не должна находиться в пакете сайта");
+assert.ok(existsSync(maintenance), "План развития должен находиться в todo/maintenance.md");
 const sddDocuments = filesIn(sdd).filter((filename) => filename.endsWith(".md"));
 const siteDocuments = filesIn(content).filter((filename) => filename.endsWith(".md"));
 assert.ok(sddDocuments.length >= 7 && siteDocuments.length >= 20);
@@ -70,6 +72,7 @@ for (const filename of siteDocuments) {
 let checkedLinks = 0;
 for (const filename of [
   ...sddDocuments,
+  maintenance,
   join(root, "AGENTS.md"),
   join(root, "README.md"),
 ]) {
@@ -92,3 +95,5 @@ for (const filename of [
 console.log(
   `Монорепозиторий: один lockfile, один CI, ${sddDocuments.length} SDD-документов, ${siteDocuments.length} документов сайта, ${checkedLinks} ссылок — OK.`
 );
+
+await import("./check-cli-capabilities.mjs");

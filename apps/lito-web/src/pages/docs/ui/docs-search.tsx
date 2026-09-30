@@ -131,8 +131,8 @@ export const DocsSearch = () => {
                     className={cn(
                       "mt-0.5 rounded-lg p-2",
                       result.type === "module"
-                        ? "bg-blue-500/10 text-blue-500"
-                        : "bg-purple-500/10 text-purple-500"
+                        ? "bg-accent text-accent-foreground"
+                        : "bg-secondary text-secondary-foreground"
                     )}
                   >
                     {result.type === "module" ? (
@@ -150,8 +150,8 @@ export const DocsSearch = () => {
                         className={cn(
                           "shrink-0 rounded-full px-2 py-0.5 text-xs",
                           result.type === "module"
-                            ? "border border-blue-500/20 bg-blue-500/10 text-blue-500"
-                            : "border border-purple-500/20 bg-purple-500/10 text-purple-500"
+                            ? "border border-accent-foreground bg-accent text-accent-foreground"
+                            : "border border-secondary-foreground bg-secondary text-secondary-foreground"
                         )}
                       >
                         {result.type === "module" ? "Модуль" : "Возможность"}

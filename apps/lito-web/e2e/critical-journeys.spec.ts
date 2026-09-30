@@ -3,7 +3,9 @@ import type {
   AuthDto,
   CalculationJobDto,
   CalculationKindDto,
+  DatasetDto,
 } from "@litora/contracts";
+import { defaultCoastlineDataset } from "@litora/generated-data";
 
 const user = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -32,8 +34,25 @@ const job = {
 } satisfies CalculationJobDto;
 const kinds = [
   { kind: "dimension", title: "Размерность", description: "Тестовый сценарий" },
+  {
+    kind: "dimension_dataset",
+    title: "Своя береговая линия",
+    description: "GeoJSON LineString",
+  },
   { kind: "erosion", title: "Размыв", description: "Тестовый сценарий" },
 ] satisfies CalculationKindDto[];
+const dataset = {
+  id: "33333333-3333-4333-8333-333333333333",
+  name: "Тестовый контур",
+  source: "Локальная съёмка",
+  license: "Тестовое использование",
+  crs: "EPSG:4326",
+  coordinateUnit: "degrees",
+  pointCount: 3,
+  sizeBytes: 78,
+  sha256: "a".repeat(64),
+  createdAt: "2026-09-29T12:00:00.000Z",
+} satisfies DatasetDto;
 
 type ApiReply = { status?: number; body: unknown };
 
@@ -85,6 +104,7 @@ test("кабинет требует вход; регистрация требу�
     }
     if (path === "/api/calculations/kinds" && method === "GET")
       return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
     if (path === "/api/calculations" && method === "GET") return { body: [] };
   });
 
@@ -139,6 +159,7 @@ test("ошибка входа видна; повторный вход откры
     }
     if (path === "/api/calculations/kinds" && method === "GET")
       return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
     if (path === "/api/calculations" && method === "GET") return { body: [] };
   });
 
@@ -176,6 +197,7 @@ test("кабинет показывает ошибку расчёта и поз�
       return { body: session };
     if (path === "/api/calculations/kinds" && method === "GET")
       return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
     if (path === "/api/calculations" && method === "GET")
       return { body: created ? [job] : [] };
     if (path === "/api/calculations" && method === "POST") {
@@ -212,6 +234,176 @@ test("кабинет показывает ошибку расчёта и поз�
   expect(requests).toEqual([
     { kind: "erosion", input: { steps: 4 } },
     { kind: "erosion", input: { steps: 4 } },
+  ]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("загрузка своего GeoJSON и запуск dimension через UUID набора", async ({
+  page,
+}) => {
+  const uploads: unknown[] = [];
+  const jobs: unknown[] = [];
+  const customJob = {
+    ...job,
+    kind: "dimension_dataset",
+    input: { datasetId: dataset.id },
+  };
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/datasets" && method === "POST") {
+      uploads.push(body);
+      return { status: 201, body: dataset };
+    }
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      jobs.push(body);
+      return { status: 201, body: customJob };
+    }
+    if (path === `/api/calculations/${job.id}` && method === "GET")
+      return { body: customJob };
+  });
+
+  await page.goto("/account");
+  await page.getByLabel("Файл GeoJSON").setInputFiles({
+    name: "coast.geojson",
+    mimeType: "application/geo+json",
+    buffer: Buffer.from(
+      JSON.stringify({
+        type: "LineString",
+        coordinates: [
+          [39.66, 43.64],
+          [39.67, 43.63],
+          [39.68, 43.62],
+        ],
+      })
+    ),
+  });
+  await page.getByLabel("Название").fill(dataset.name);
+  await page.getByLabel("Источник данных").fill(dataset.source);
+  await page
+    .getByLabel("Лицензия или условия использования")
+    .fill(dataset.license);
+  await page.getByRole("button", { name: "Загрузить набор" }).click();
+  await expect(page.getByLabel("Сценарий")).toHaveValue("dimension_dataset");
+  await expect(page.getByLabel("Ваш набор данных")).toHaveValue(dataset.id);
+  await page.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(
+    page.getByRole("region", { name: "Результат расчёта" })
+  ).toContainText(job.id);
+  expect(uploads).toHaveLength(1);
+  expect(uploads[0]).toMatchObject({
+    name: dataset.name,
+    source: dataset.source,
+    license: dataset.license,
+    crs: "EPSG:4326",
+    coordinateUnit: "degrees",
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [39.66, 43.64],
+        [39.67, 43.63],
+        [39.68, 43.62],
+      ],
+    },
+  });
+  expect(jobs).toEqual([
+    { kind: "dimension_dataset", input: { datasetId: dataset.id } },
+  ]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("без файла используется демонстрационный GeoJSON с собственным паспортом", async ({
+  page,
+}) => {
+  const uploads: unknown[] = [];
+  const jobs: unknown[] = [];
+  const example = { ...dataset, name: defaultCoastlineDataset.name };
+  const customJob = {
+    ...job,
+    kind: "dimension_dataset",
+    input: { datasetId: example.id },
+  };
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/datasets" && method === "POST") {
+      uploads.push(body);
+      return { status: 201, body: example };
+    }
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      jobs.push(body);
+      return { status: 201, body: customJob };
+    }
+    if (path === `/api/calculations/${job.id}` && method === "GET")
+      return { body: customJob };
+  });
+
+  await page.goto("/account");
+  await expect(
+    page.getByText("По умолчанию: Пример: участок Сочи", { exact: false })
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Использовать пример GeoJSON" })
+    .click();
+  await expect(page.getByLabel("Ваш набор данных")).toHaveValue(example.id);
+  await page.getByRole("button", { name: "Запустить расчёт" }).click();
+
+  expect(uploads).toEqual([defaultCoastlineDataset]);
+  expect(jobs).toEqual([
+    { kind: "dimension_dataset", input: { datasetId: example.id } },
+  ]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("расчёт своего контура без загруженного файла автоматически берёт GeoJSON Сочи", async ({
+  page,
+}) => {
+  const uploads: unknown[] = [];
+  const jobs: unknown[] = [];
+  const example = { ...dataset, name: defaultCoastlineDataset.name };
+  const customJob = {
+    ...job,
+    kind: "dimension_dataset",
+    input: { datasetId: example.id },
+  };
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/datasets" && method === "POST") {
+      uploads.push(body);
+      return { status: 201, body: example };
+    }
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      jobs.push(body);
+      return { status: 201, body: customJob };
+    }
+    if (path === `/api/calculations/${job.id}` && method === "GET")
+      return { body: customJob };
+  });
+
+  await page.goto("/account");
+  await page.getByLabel("Сценарий").selectOption("dimension_dataset");
+  await expect(page.getByLabel("Ваш набор данных")).toHaveValue("");
+  await page.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page.getByLabel("Ваш набор данных")).toHaveValue(example.id);
+  expect(uploads).toEqual([defaultCoastlineDataset]);
+  expect(jobs).toEqual([
+    { kind: "dimension_dataset", input: { datasetId: example.id } },
   ]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);

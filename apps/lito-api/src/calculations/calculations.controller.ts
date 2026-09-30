@@ -45,7 +45,10 @@ export class CalculationsController {
       required: ["kind"],
       additionalProperties: false,
       properties: {
-        kind: { type: "string", enum: ["dimension", "map", "erosion"] },
+        kind: {
+          type: "string",
+          enum: ["dimension", "dimension_dataset", "map", "erosion"],
+        },
         input: {
           type: "object",
           additionalProperties: false,
@@ -56,6 +59,12 @@ export class CalculationsController {
               maximum: 48,
               description: "Только для erosion",
               default: 3,
+            },
+            datasetId: {
+              type: "string",
+              format: "uuid",
+              description:
+                "Только для dimension_dataset; набор должен принадлежать пользователю",
             },
           },
         },

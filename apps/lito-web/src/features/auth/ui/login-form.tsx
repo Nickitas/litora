@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import { Button } from "@/shared/shadcn/components/ui/button";
+import { fieldControlClass } from "@/shared/ui/field-styles";
 import { useAuth } from "../model";
 
 export function LoginForm() {
@@ -19,7 +21,8 @@ export function LoginForm() {
     setPending(true);
     setError("");
     try {
-      if (registering) await auth.register({ name, email, password, invitationCode });
+      if (registering)
+        await auth.register({ name, email, password, invitationCode });
       else await auth.login({ email, password });
       navigate("/account");
     } catch (error) {
@@ -28,10 +31,9 @@ export function LoginForm() {
       setPending(false);
     }
   }
-  const field = "mt-2 w-full rounded-lg border bg-background p-3";
   return (
-    <section className="w-full max-w-md rounded-2xl border bg-background p-6 shadow-sm">
-      <h1 className="text-2xl font-bold">
+    <section className="w-full max-w-md rounded-2xl border bg-card p-6 text-card-foreground shadow-sm">
+      <h1 className="text-[28px] leading-9 font-semibold sm:text-[32px] sm:leading-10">
         {registering ? "Создать аккаунт" : "Войти в Litora"}
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
@@ -42,7 +44,7 @@ export function LoginForm() {
           <label className="block">
             Имя
             <input
-              className={field}
+              className={fieldControlClass}
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
@@ -54,7 +56,7 @@ export function LoginForm() {
         <label className="block">
           Почта
           <input
-            className={field}
+            className={fieldControlClass}
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -66,7 +68,7 @@ export function LoginForm() {
         <label className="block">
           Пароль
           <input
-            className={field}
+            className={fieldControlClass}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -81,7 +83,7 @@ export function LoginForm() {
           <label className="block">
             Ключ приглашения
             <input
-              className={field}
+              className={fieldControlClass}
               type="password"
               value={invitationCode}
               onChange={(e) => setInvitationCode(e.target.value)}
@@ -91,8 +93,12 @@ export function LoginForm() {
               aria-describedby="invitation-hint"
               required
             />
-            <span id="invitation-hint" className="mt-2 block text-xs text-muted-foreground">
-              Получите одноразовый ключ у оператора Litora. Без него регистрация недоступна.
+            <span
+              id="invitation-hint"
+              className="mt-2 block text-xs text-muted-foreground"
+            >
+              Получите одноразовый ключ у оператора Litora. Без него регистрация
+              недоступна.
             </span>
           </label>
         ) : null}
@@ -101,20 +107,18 @@ export function LoginForm() {
             {error}
           </p>
         )}
-        <button
-          disabled={pending}
-          className="w-full rounded-lg bg-primary px-4 py-3 text-primary-foreground disabled:opacity-50"
-        >
+        <Button disabled={pending} className="w-full">
           {pending
             ? "Подождите…"
             : registering
               ? "Зарегистрироваться"
               : "Войти"}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           disabled={pending}
-          className="w-full text-sm underline"
+          variant="link"
+          className="w-full"
           onClick={() => {
             setRegistering((value) => !value);
             setInvitationCode("");
@@ -124,7 +128,7 @@ export function LoginForm() {
           {registering
             ? "Уже есть аккаунт? Войти"
             : "Нет аккаунта? Зарегистрироваться"}
-        </button>
+        </Button>
       </form>
     </section>
   );

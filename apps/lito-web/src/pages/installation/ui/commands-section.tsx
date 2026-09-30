@@ -22,14 +22,14 @@ export const CommandsSection = () => {
             data/black-sea-lithology.json \ --enable-lithology \ --output
             ./output/erosion-full
           </TypingAnimation>
-          <AnimatedSpan className="text-blue-400">
-            ✔ Loading bathymetry data...
+          <AnimatedSpan className="text-primary">
+            ✔ Загрузка батиметрии…
           </AnimatedSpan>
-          <AnimatedSpan className="text-blue-400">
-            ✔ Initializing erosion model...
+          <AnimatedSpan className="text-primary">
+            ✔ Подготовка модели эрозии…
           </AnimatedSpan>
-          <AnimatedSpan className="text-green-500">
-            ✓ Simulation completed. Results saved to ./output/
+          <AnimatedSpan className="text-status-succeeded">
+            ✓ Расчёт завершён. Результаты сохранены в ./output/
           </AnimatedSpan>
         </Terminal>
       </div>

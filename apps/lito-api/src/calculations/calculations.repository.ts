@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -26,6 +27,8 @@ export interface JobRow {
   finished_at: Date | null;
   updated_at: Date;
   worker_id: string | null;
+  user_id: string | null;
+  dataset_id: string | null;
 }
 
 interface ArtifactRow {
@@ -106,14 +109,25 @@ export class CalculationsRepository {
     userId: string,
     job: CreateCalculationDto,
   ): Promise<CalculationJobDto> {
+    const datasetId =
+      job.kind === "dimension_dataset" ? job.input?.datasetId : null;
+    if (job.kind === "dimension_dataset" && !datasetId)
+      throw new BadRequestException("Укажите UUID своего набора данных");
+    if (datasetId) {
+      const owned = await this.database.query<{ id: string }>(
+        "SELECT id FROM datasets WHERE id=$1 AND owner_id=$2",
+        [datasetId, userId],
+      );
+      if (!owned.rows[0]) throw new NotFoundException("Набор данных не найден");
+    }
     const row = await this.database.transaction(async (client) => {
       await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
         userId,
       ]);
       const result = await client.query<JobRow>(
-        `INSERT INTO calculation_jobs(user_id,kind,input)
-        SELECT $1,$2,$3 WHERE (SELECT count(*) FROM calculation_jobs WHERE user_id=$1 AND status IN ('queued','running')) < 5 RETURNING *`,
-        [userId, job.kind, job.input ?? {}],
+        `INSERT INTO calculation_jobs(user_id,kind,input,dataset_id)
+        SELECT $1,$2,$3,$4 WHERE (SELECT count(*) FROM calculation_jobs WHERE user_id=$1 AND status IN ('queued','running')) < 5 RETURNING *`,
+        [userId, job.kind, job.input ?? {}, datasetId],
       );
       if (!result.rows[0])
         throw new ConflictException(

@@ -4,8 +4,8 @@ export const AuthNotice = () => {
   const { authNotice } = downloadsPageContent;
 
   return (
-    <div className="rounded-lg border bg-amber-50/50 p-4 sm:p-6 dark:bg-amber-950/20">
-      <p className="text-xs text-amber-900 sm:text-sm dark:text-amber-200">
+    <div className="rounded-lg border border-warning/30 bg-warning-background p-4 sm:p-6">
+      <p className="text-sm text-warning">
         <strong>{authNotice.title}:</strong> {authNotice.content}
       </p>
     </div>

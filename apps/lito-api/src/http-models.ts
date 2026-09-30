@@ -3,6 +3,7 @@ import type {
   AuthDto,
   CalculationArtifactDto,
   CalculationJobDto,
+  DatasetDto,
   UserDto,
 } from "@litora/contracts";
 
@@ -32,7 +33,10 @@ export class ArtifactResponse implements CalculationArtifactDto {
 }
 export class CalculationResponse implements CalculationJobDto {
   @ApiProperty({ type: String, format: "uuid" }) id!: string;
-  @ApiProperty({ type: String, enum: ["dimension", "map", "erosion"] })
+  @ApiProperty({
+    type: String,
+    enum: ["dimension", "dimension_dataset", "map", "erosion"],
+  })
   kind!: string;
   @ApiProperty({
     type: String,
@@ -56,4 +60,17 @@ export class CalculationResponse implements CalculationJobDto {
   @ApiProperty({ type: String, format: "date-time" }) updatedAt!: string;
   @ApiProperty({ type: [ArtifactResponse] })
   artifacts!: CalculationArtifactDto[];
+}
+
+export class DatasetResponse implements DatasetDto {
+  @ApiProperty({ type: String, format: "uuid" }) id!: string;
+  @ApiProperty({ type: String }) name!: string;
+  @ApiProperty({ type: String }) source!: string;
+  @ApiProperty({ type: String }) license!: string;
+  @ApiProperty({ type: String, enum: ["EPSG:4326"] }) crs!: "EPSG:4326";
+  @ApiProperty({ type: String, enum: ["degrees"] }) coordinateUnit!: "degrees";
+  @ApiProperty({ type: Number }) pointCount!: number;
+  @ApiProperty({ type: Number }) sizeBytes!: number;
+  @ApiProperty({ type: String }) sha256!: string;
+  @ApiProperty({ type: String, format: "date-time" }) createdAt!: string;
 }

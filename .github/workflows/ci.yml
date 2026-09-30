@@ -53,9 +53,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter litora-web... --filter litora-api...
+      - run: pnpm --filter litora-web exec playwright install --with-deps chromium
       - run: node scripts/setup.mjs
       - run: docker compose --env-file .env.local -f infra/compose.yaml --profile app up -d --build --wait
       - name: Проверка HTTP с одноразовыми тестовыми приглашениями
@@ -63,6 +69,15 @@ jobs:
           TEST_INVITATIONS_JSON="$(docker compose --env-file .env.local -f infra/compose.yaml exec -T api node dist/scripts/invitations.js create --count 3 --expires-hours 1)"
           export TEST_INVITATIONS_JSON
           node scripts/integration-test.mjs
+      - name: Подменённый набор в S3 не исполняется
+        run: |
+          docker compose --env-file .env.local -f infra/compose.yaml exec -T api node dist/scripts/invitations.js create --count 1 --expires-hours 1 |
+            TEST_S3_CORRUPTION=1 TEST_API_URL=http://localhost:3000/api node --env-file=.env.local apps/lito-api/scripts/integration-corrupted-dataset.mjs
+      - name: Реальный кабинет через API, worker и S3
+        run: |
+          LITORA_E2E_INVITATION="$(docker compose --env-file .env.local -f infra/compose.yaml exec -T api node dist/scripts/invitations.js create --count 1 --expires-hours 1 | node -e 'let s=""; process.stdin.on("data", x => s += x); process.stdin.on("end", () => process.stdout.write(JSON.parse(s).invitations[0].code))')"
+          export LITORA_E2E_INVITATION
+          LITORA_E2E_LIVE_URL=http://localhost:5173 pnpm --filter litora-web exec playwright test e2e/live-workflow.spec.ts --grep @live
       - if: failure()
         run: docker compose --env-file .env.local -f infra/compose.yaml --profile app logs --tail=100
       - if: always()

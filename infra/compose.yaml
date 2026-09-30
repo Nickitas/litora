@@ -62,6 +62,7 @@ services:
       S3_AUTO_CREATE_BUCKET: "true"
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
+      API_ORIGIN: ${API_ORIGIN:-http://localhost:3000}
       LITO_CLI_BINARY: /usr/local/bin/lito
       PORT: 3000
     ports: ["127.0.0.1:${API_PORT:-3000}:3000"]

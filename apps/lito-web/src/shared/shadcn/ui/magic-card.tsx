@@ -1,19 +1,10 @@
-/* eslint-disable */
-
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
   motion,
   useMotionTemplate,
   useMotionValue,
   useSpring,
 } from "motion/react";
-import { useTheme } from "next-themes";
 import { cn } from "../lib/utils";
 
 interface MagicCardBaseProps {
@@ -68,28 +59,25 @@ export function MagicCard(props: MagicCardProps) {
     mode = "gradient",
   } = props;
 
-  const glowFrom = isOrbMode(props) ? (props.glowFrom ?? "#ee4f27") : "#ee4f27";
-  const glowTo = isOrbMode(props) ? (props.glowTo ?? "#6b21ef") : "#6b21ef";
+  const glowFrom = isOrbMode(props)
+    ? (props.glowFrom ?? "var(--chart-1)")
+    : "var(--chart-1)";
+  const glowTo = isOrbMode(props)
+    ? (props.glowTo ?? "var(--chart-2)")
+    : "var(--chart-2)";
   const glowAngle = isOrbMode(props) ? (props.glowAngle ?? 90) : 90;
   const glowSize = isOrbMode(props) ? (props.glowSize ?? 420) : 420;
   const glowBlur = isOrbMode(props) ? (props.glowBlur ?? 60) : 60;
   const glowOpacity = isOrbMode(props) ? (props.glowOpacity ?? 0.9) : 0.9;
-  const { theme, systemTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
-
-  const isDarkTheme = useMemo(() => {
-    if (!mounted) return true;
-    const currentTheme = theme === "system" ? systemTheme : theme;
-    return currentTheme === "dark";
-  }, [theme, systemTheme, mounted]);
-
-  // Адаптивные цвета для градиента в зависимости от темы
-  const adaptiveGradientColor = isDarkTheme ? "#262626" : "#e9d5ff";
-  const adaptiveGradientFrom = isDarkTheme ? "#9E7AFF" : "#e9d5ff";
-  const adaptiveGradientTo = isDarkTheme ? "#FE8BBB" : "#fbcfe8";
-  const adaptiveGradientOpacity = isDarkTheme ? gradientOpacity : 0.4;
+  const gradientColor = !isOrbMode(props)
+    ? (props.gradientColor ?? "var(--accent)")
+    : "var(--accent)";
+  const gradientFrom = !isOrbMode(props)
+    ? (props.gradientFrom ?? "var(--primary)")
+    : "var(--primary)";
+  const gradientTo = !isOrbMode(props)
+    ? (props.gradientTo ?? "var(--accent)")
+    : "var(--accent)";
 
   const mouseX = useMotionValue(-gradientSize);
   const mouseY = useMotionValue(-gradientSize);
@@ -177,8 +165,8 @@ export function MagicCard(props: MagicCardProps) {
         background: useMotionTemplate`
           linear-gradient(var(--color-background) 0 0) padding-box,
           radial-gradient(${gradientSize}px circle at ${mouseX}px ${mouseY}px,
-            ${adaptiveGradientFrom},
-            ${adaptiveGradientTo},
+            ${gradientFrom},
+            ${gradientTo},
             var(--color-border) 100%
           ) border-box
         `,
@@ -193,11 +181,11 @@ export function MagicCard(props: MagicCardProps) {
           style={{
             background: useMotionTemplate`
               radial-gradient(${gradientSize}px circle at ${mouseX}px ${mouseY}px,
-                ${adaptiveGradientColor},
+                ${gradientColor},
                 transparent 100%
               )
             `,
-            opacity: adaptiveGradientOpacity,
+            opacity: gradientOpacity,
           }}
         />
       )}
