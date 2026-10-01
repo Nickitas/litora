@@ -113,6 +113,8 @@ export function commandArguments(
     case "erosion":
       return [
         "erosion",
+        "--black-sea-sochi",
+        "--offline",
         "--steps",
         String(validated.input!.steps),
         "--output",

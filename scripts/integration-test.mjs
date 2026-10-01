@@ -160,6 +160,8 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
     assert.ok(inputFiles.some((file) => file.path === "data/examples/sochi-local-segment.geojson"));
   if (kind === "erosion")
     assert.match(result.resultSummary.provenance.declaredSources.waves, /Open-Meteo/);
+  if (kind === "erosion")
+    assert.match(result.commandLine, /--black-sea-sochi --offline/);
   if (kind === "dimension_dataset") {
     assert.equal(result.resultSummary.provenance.datasetId, uploaded.id);
     assert.equal(result.resultSummary.provenance.sha256, uploaded.sha256);

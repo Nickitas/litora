@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
-import { bundledInputProvenance } from "./input-provenance.js";
+import {
+  assertPinnedSochiInputs,
+  bundledInputProvenance,
+} from "./input-provenance.js";
 
 const dataDirectory = resolve(process.cwd(), "../lito-cli/data");
 
@@ -37,6 +40,26 @@ test("паспорта встроенных сценариев содержат 
     erosion.files.some((file) => file.path.endsWith("bathymetry-emodnet.json")),
   );
   assert.match(erosion.declaredSources!.waves, /Open-Meteo/);
+  await assertPinnedSochiInputs(dataDirectory);
+});
+
+test("изменённый демо-набор не попадает в Go worker", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "litora-pinned-demo-"));
+  try {
+    await cp(dataDirectory, directory, { recursive: true });
+    await writeFile(join(directory, "black-sea/sochi/waves-open-meteo.json"), "[]");
+    await assert.rejects(
+      assertPinnedSochiInputs(directory),
+      /повреждён или изменён.*waves-open-meteo/,
+    );
+    await rm(join(directory, "black-sea/sochi/waves-open-meteo.json"));
+    await assert.rejects(
+      assertPinnedSochiInputs(directory),
+      /Не удалось прочитать входной файл.*waves-open-meteo/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("неизвестный сценарий и неполный/ложный паспорт отвергаются", async () => {
@@ -49,7 +72,10 @@ test("неизвестный сценарий и неполный/ложный �
       bundledInputProvenance("erosion", directory),
       /generated_at/,
     );
-    await assert.rejects(bundledInputProvenance("dimension", directory), /ENOENT/);
+    await assert.rejects(
+      bundledInputProvenance("dimension", directory),
+      /Не удалось прочитать входной файл/,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -35,6 +35,14 @@ type blackSeaSochiDataPaths struct {
 // обычный запуск не зависел от сети. Параметр refresh запрашивает свежие
 // волны, глубины и инвентарь сооружений и заменяет кэш только после проверки.
 func prepareBlackSeaSochiData(refresh bool) (blackSeaSochiDataPaths, error) {
+	return prepareBlackSeaSochiDataWithPolicy(refresh, false)
+}
+
+// prepareBlackSeaSochiDataWithPolicy запрещает сетевой fallback для закреплённого web-демо.
+func prepareBlackSeaSochiDataWithPolicy(refresh, offline bool) (blackSeaSochiDataPaths, error) {
+	if refresh && offline {
+		return blackSeaSochiDataPaths{}, fmt.Errorf("--refresh нельзя сочетать с --offline")
+	}
 	if _, err := os.Stat(blackSeaSochiCoastlinePath); err != nil {
 		return blackSeaSochiDataPaths{}, fmt.Errorf("демонстрационный сегмент Сочи отсутствует: %w", err)
 	}
@@ -45,6 +53,9 @@ func prepareBlackSeaSochiData(refresh bool) (blackSeaSochiDataPaths, error) {
 		if cached, ok := loadCachedBlackSeaSochiData(); ok {
 			return cached, nil
 		}
+	}
+	if offline {
+		return blackSeaSochiDataPaths{}, fmt.Errorf("офлайн-режим: демонстрационный набор Сочи отсутствует или повреждён")
 	}
 
 	client := &http.Client{Timeout: 45 * time.Second}

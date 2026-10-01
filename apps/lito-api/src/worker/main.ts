@@ -25,7 +25,10 @@ import {
   commandArguments,
   validateCalculation,
 } from "../calculations/commands.js";
-import { bundledInputProvenance } from "../calculations/input-provenance.js";
+import {
+  assertPinnedSochiInputs,
+  bundledInputProvenance,
+} from "../calculations/input-provenance.js";
 import { DatasetsRepository } from "../datasets/datasets.repository.js";
 import { maxDatasetBytes } from "../datasets/validation.js";
 import {
@@ -112,6 +115,8 @@ async function run(job: JobRow) {
       join(directory, "data"),
       { recursive: true, force: false, errorOnExist: true },
     );
+    if (job.kind === "erosion")
+      await assertPinnedSochiInputs(join(directory, "data"));
     let datasetPath: string | undefined;
     let provenance: Record<string, unknown> | undefined;
     if (job.kind === "dimension_dataset") {
@@ -204,6 +209,8 @@ async function run(job: JobRow) {
       provenance = {
         ...(await bundledInputProvenance(job.kind, join(directory, "data"))),
       };
+    if (job.kind === "erosion")
+      await assertPinnedSochiInputs(join(directory, "data"));
     const metrics: Record<string, unknown> = {};
     let totalBytes = 0;
     for (const path of outputs) {

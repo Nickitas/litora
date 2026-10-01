@@ -17,6 +17,8 @@ test("пользователь не может передать shell, пути 
 test("допустимый запрос преобразуется в фиксированные аргументы", () => {
   assert.deepEqual(commandArguments({ kind: "erosion" }, "/tmp/job"), [
     "erosion",
+    "--black-sea-sochi",
+    "--offline",
     "--steps",
     "3",
     "--output",
