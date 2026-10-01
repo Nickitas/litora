@@ -62,6 +62,18 @@ export class CalculationResponse implements CalculationJobDto {
   })
   resultSchemaVersion!: number | null;
   @ApiProperty({ type: String, nullable: true }) coreVersion!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Идентификатор метода из Go-манифеста; null для старых результатов",
+  })
+  methodId!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Ревизия реализации метода из Go-манифеста; не научная аттестация",
+  })
+  methodRevision!: string | null;
   @ApiProperty({ type: String, nullable: true }) commandLine!: string | null;
   @ApiProperty({ type: String, nullable: true }) errorMessage!: string | null;
   @ApiProperty({ type: String, format: "date-time" }) createdAt!: string;

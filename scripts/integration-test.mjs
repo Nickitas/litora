@@ -126,6 +126,12 @@ await second.request("/calculations", "POST", {
   kind: "dimension_dataset", input: { datasetId: uploaded.id },
 }, 404);
 for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
+  const expectedMethod = {
+    dimension: "box-counting",
+    dimension_dataset: "box-counting",
+    map: "black-sea-overview",
+    erosion: "cerc-one-line",
+  }[kind];
   const job = await first.request(
     "/calculations",
     "POST",
@@ -149,6 +155,12 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
   assert.equal(result.status, "succeeded", JSON.stringify(result));
   assert.equal(result.inputSchemaVersion, 1);
   assert.equal(result.resultSchemaVersion, 1);
+  assert.equal(result.methodId, expectedMethod);
+  assert.equal(result.methodRevision, "baseline-1");
+  assert.deepEqual(result.resultSummary.method, {
+    id: expectedMethod,
+    revision: "baseline-1",
+  });
   const inputFiles = result.resultSummary.provenance.files;
   assert.ok(Array.isArray(inputFiles) && inputFiles.length > 0);
   for (const file of inputFiles) {
@@ -179,7 +191,13 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
     createHash("sha256").update(data).digest("hex"),
     artifact.sha256,
   );
-  assert.ok(JSON.parse(data).artifacts.length > 0);
+  const manifest = JSON.parse(data);
+  assert.equal(manifest.schemaVersion, 2);
+  assert.deepEqual(manifest.method, {
+    id: expectedMethod,
+    revision: "baseline-1",
+  });
+  assert.ok(manifest.artifacts.length > 0);
   const unsigned = new URL(artifact.downloadUrl);
   unsigned.search = "";
   assert.equal(

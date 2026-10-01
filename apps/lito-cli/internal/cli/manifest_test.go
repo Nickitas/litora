@@ -29,8 +29,27 @@ func TestResultManifest(t *testing.T) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Fatal(err)
 	}
+	if result.SchemaVersion != 2 || result.Method == nil || result.Method.ID != "box-counting" || result.Method.Revision != "baseline-1" {
+		t.Fatalf("неверная ревизия метода в манифесте: %+v", result)
+	}
 	if len(result.Artifacts) != 1 || result.Artifacts[0].Path != "result.json" || result.Artifacts[0].SizeBytes != 2 || len(result.Artifacts[0].SHA256) != 64 {
 		t.Fatalf("некорректный манифест: %+v", result)
+	}
+}
+
+func TestMethodForCommand(t *testing.T) {
+	for command, expected := range map[string]string{
+		"lito dimension": "box-counting",
+		"lito map":       "black-sea-overview",
+		"lito erosion":   "cerc-one-line",
+	} {
+		method := methodForCommand(command)
+		if method == nil || method.ID != expected || method.Revision == "" {
+			t.Fatalf("%s: неверная ревизия метода: %+v", command, method)
+		}
+	}
+	if methodForCommand("lito seabed build") != nil {
+		t.Fatal("неаттестованная команда не должна получать ревизию метода")
 	}
 }
 

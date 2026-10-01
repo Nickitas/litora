@@ -29,6 +29,7 @@ import {
   assertPinnedSochiInputs,
   bundledInputProvenance,
 } from "../calculations/input-provenance.js";
+import { resultMethodFromManifest } from "../calculations/result-method.js";
 import { DatasetsRepository } from "../datasets/datasets.repository.js";
 import { maxDatasetBytes } from "../datasets/validation.js";
 import {
@@ -151,9 +152,10 @@ async function run(job: JobRow) {
     }
     if (interrupted || stopping)
       throw new Error("Выполнение прервано до запуска CLI");
+    const validated = validateCalculation({ kind: job.kind, input: job.input });
     const args = [
       ...commandArguments(
-        validateCalculation({ kind: job.kind, input: job.input }),
+        validated,
         output,
         datasetPath,
       ),
@@ -205,6 +207,10 @@ async function run(job: JobRow) {
       outputSizes.reduce((sum, size) => sum + size, 0) > maxOutputBytes
     )
       throw new Error("Превышен лимит размера результата");
+    const method = resultMethodFromManifest(
+      await readFile(join(output, "manifest.json")),
+      validated.kind,
+    );
     if (job.kind !== "dimension_dataset")
       provenance = {
         ...(await bundledInputProvenance(job.kind, join(directory, "data"))),
@@ -250,13 +256,14 @@ async function run(job: JobRow) {
             ? "user-data"
             : "bundled-data",
       ...(provenance ? { provenance } : {}),
+      method,
       metrics,
     };
     await db.query(
-      `WITH finished AS (UPDATE calculation_jobs SET status='succeeded',result_summary=$3,result_schema_version=$4,finished_at=now(),updated_at=now()
+      `WITH finished AS (UPDATE calculation_jobs SET status='succeeded',result_summary=$3,result_schema_version=$4,method_id=$5,method_revision=$6,finished_at=now(),updated_at=now()
       WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
       INSERT INTO calculation_events(job_id,event_type) SELECT id,'succeeded' FROM finished`,
-      [job.id, workerId, summary, calculationResultSchemaVersion],
+      [job.id, workerId, summary, calculationResultSchemaVersion, method.id, method.revision],
     );
     console.log(`Расчёт ${job.id}: готово, файлов ${outputs.length}`);
   } catch (error) {

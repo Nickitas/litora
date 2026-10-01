@@ -23,6 +23,8 @@ export interface JobRow {
   result_summary: Record<string, unknown> | null;
   result_schema_version: number | null;
   core_version: string | null;
+  method_id: string | null;
+  method_revision: string | null;
   command_line: string | null;
   error_message: string | null;
   created_at: Date;
@@ -203,6 +205,8 @@ export class CalculationsRepository {
       resultSummary: includeArtifacts ? row.result_summary : null,
       resultSchemaVersion: row.result_schema_version,
       coreVersion: row.core_version,
+      methodId: row.method_id,
+      methodRevision: row.method_revision,
       commandLine: row.command_line,
       errorMessage: row.error_message,
       createdAt: row.created_at.toISOString(),

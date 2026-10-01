@@ -88,6 +88,8 @@ test(
       assert.equal(job.kind, "dimension_dataset");
       assert.equal(job.inputSchemaVersion, 1);
       assert.equal(job.resultSchemaVersion, null);
+      assert.equal(job.methodId, null);
+      assert.equal(job.methodRevision, null);
       assert.deepEqual(job.input, { datasetId: saved.id });
       const linked = await db.query<{ dataset_id: string }>(
         "SELECT dataset_id FROM calculation_jobs WHERE id=$1",

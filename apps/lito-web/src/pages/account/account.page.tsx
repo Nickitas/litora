@@ -363,6 +363,12 @@ function Workspace({ name }: { name: string }) {
                   размыва или калиброванным научным отчётом.
                 </p>
               )}
+              {selectedDetail.methodId && selectedDetail.methodRevision && (
+                <p className="text-sm text-muted-foreground">
+                  Метод расчёта: <code>{selectedDetail.methodId}</code>, ревизия{" "}
+                  <code>{selectedDetail.methodRevision}</code>
+                </p>
+              )}
               <div className="grid gap-4 md:grid-cols-2">
                 {selectedDetail.artifacts
                   .filter((file) => file.contentType.startsWith("image/"))
@@ -410,6 +416,8 @@ function Workspace({ name }: { name: string }) {
                       input: selectedDetail.input,
                       result: selectedDetail.resultSummary,
                       coreVersion: selectedDetail.coreVersion,
+                      methodId: selectedDetail.methodId,
+                      methodRevision: selectedDetail.methodRevision,
                     },
                     null,
                     2

@@ -45,6 +45,8 @@ export interface CalculationJobDto {
   resultSummary: Record<string, unknown> | null;
   resultSchemaVersion: number | null;
   coreVersion: string | null;
+  methodId: string | null;
+  methodRevision: string | null;
   commandLine: string | null;
   errorMessage: string | null;
   createdAt: string;

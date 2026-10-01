@@ -26,6 +26,8 @@ const job = {
   resultSummary: null,
   resultSchemaVersion: null,
   coreVersion: null,
+  methodId: null,
+  methodRevision: null,
   commandLine: null,
   errorMessage: null,
   createdAt: "2026-09-29T12:00:00.000Z",
