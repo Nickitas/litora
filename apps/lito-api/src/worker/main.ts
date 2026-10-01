@@ -36,14 +36,13 @@ import {
   assertSupportedInputSchemaVersion,
   calculationResultSchemaVersion,
 } from "../schema-versions.js";
+import { assertOutputBudget, maxOutputBytes, maxOutputFiles } from "./output-budget.js";
 
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
 const repository = new CalculationsRepository(db, storage);
 const datasets = new DatasetsRepository(db, storage);
 const workerId = randomUUID();
-const maxOutputFiles = 256;
-const maxOutputBytes = 100 * 1024 * 1024;
 let stopping = false;
 let active: ChildProcess | undefined;
 function stopProcess() {
@@ -84,6 +83,9 @@ async function run(job: JobRow) {
     checking = false,
     finished = false,
     log = "";
+  let outputFailure: Error | undefined;
+  let outputCheck: Promise<void> | undefined;
+  let outputMonitor: ReturnType<typeof setInterval> | undefined;
   const heartbeat = setInterval(async () => {
     if (checking) return;
     checking = true;
@@ -172,6 +174,17 @@ async function run(job: JobRow) {
       "INSERT INTO calculation_events(job_id,event_type) VALUES($1,'started')",
       [job.id],
     );
+    outputMonitor = setInterval(() => {
+      if (outputCheck || outputFailure) return;
+      outputCheck = assertOutputBudget(output)
+        .catch((error: unknown) => {
+          outputFailure = error instanceof Error ? error : new Error(String(error));
+          stopProcess();
+        })
+        .finally(() => {
+          outputCheck = undefined;
+        });
+    }, 1000);
     const exitCode = await new Promise<number | null>((resolve, reject) => {
       active = spawn(environment.cliBinary, args, {
         cwd: directory,
@@ -188,8 +201,13 @@ async function run(job: JobRow) {
       active.once("error", reject);
       active.once("close", resolve);
     });
+    clearInterval(outputMonitor);
+    outputMonitor = undefined;
     active = undefined;
+    await outputCheck;
+    if (outputFailure) throw outputFailure;
     await writeFile(join(output, "execution.log"), log);
+    await assertOutputBudget(output);
     const outputs = await filesIn(output);
     if (exitCode !== 0 || interrupted || stopping)
       throw new Error(
@@ -297,6 +315,8 @@ async function run(job: JobRow) {
     console.error(`Расчёт ${job.id}: ${message}`);
   } finally {
     finished = true;
+    if (outputMonitor) clearInterval(outputMonitor);
+    await outputCheck;
     clearInterval(heartbeat);
     clearTimeout(deadline);
     stopProcess();
