@@ -62,6 +62,11 @@ export class DatasetsController {
           maxLength: 200,
           description: "Заявленный источник данных",
         },
+        sourceRevision: {
+          type: "string",
+          maxLength: 120,
+          description: "Необязательная заявленная версия, дата снимка или ID выгрузки источника; API не подтверждает её независимо",
+        },
         license: {
           type: "string",
           maxLength: 100,

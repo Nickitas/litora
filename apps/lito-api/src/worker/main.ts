@@ -144,6 +144,7 @@ async function run(job: JobRow) {
           { path: "input.geojson", sizeBytes: inputSize, sha256: inputHash },
         ],
         source: dataset.source,
+        sourceRevision: dataset.source_revision,
         license: dataset.license,
         crs: dataset.crs,
         coordinateUnit: dataset.coordinate_unit,

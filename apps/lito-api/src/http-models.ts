@@ -91,6 +91,12 @@ export class DatasetResponse implements DatasetDto {
   @ApiProperty({ type: Number, example: 1 }) schemaVersion!: number;
   @ApiProperty({ type: String }) name!: string;
   @ApiProperty({ type: String }) source!: string;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Заявленная версия источника; null, если не предоставлена",
+  })
+  sourceRevision!: string | null;
   @ApiProperty({ type: String }) license!: string;
   @ApiProperty({ type: String, enum: ["EPSG:4326"] }) crs!: "EPSG:4326";
   @ApiProperty({ type: String, enum: ["degrees"] }) coordinateUnit!: "degrees";

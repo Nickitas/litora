@@ -13,6 +13,7 @@ export function DatasetUpload({
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
   const [source, setSource] = useState("");
+  const [sourceRevision, setSourceRevision] = useState("");
   const [license, setLicense] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -40,6 +41,9 @@ export function DatasetUpload({
         input = {
           name,
           source,
+          ...(sourceRevision.trim()
+            ? { sourceRevision: sourceRevision.trim() }
+            : {}),
           license,
           crs: "EPSG:4326",
           coordinateUnit: "degrees",
@@ -51,6 +55,7 @@ export function DatasetUpload({
       setFile(null);
       setName("");
       setSource("");
+      setSourceRevision("");
       setLicense("");
       form.reset();
     } catch (error) {
@@ -89,6 +94,7 @@ export function DatasetUpload({
               const selected = event.target.files?.[0] ?? null;
               setFile(selected);
               setSource("");
+              setSourceRevision("");
               setLicense("");
               if (selected)
                 setName(selected.name.replace(/\.geojson$/i, "").slice(0, 100));
@@ -115,6 +121,15 @@ export function DatasetUpload({
                 onChange={(event) => setSource(event.target.value)}
                 required
                 maxLength={200}
+                className={fieldControlClass}
+              />
+            </label>
+            <label className="text-sm">
+              Версия источника или дата снимка (необязательно)
+              <input
+                value={sourceRevision}
+                onChange={(event) => setSourceRevision(event.target.value)}
+                maxLength={120}
                 className={fieldControlClass}
               />
             </label>

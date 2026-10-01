@@ -168,6 +168,7 @@ function Workspace({ name }: { name: string }) {
     }
   }
   const scenario = kinds.find((item) => item.kind === kind);
+  const selectedDataset = datasets.find((dataset) => dataset.id === datasetId);
   return (
     <div className="mx-auto max-w-[1440px] space-y-8">
       <header>
@@ -259,8 +260,10 @@ function Workspace({ name }: { name: string }) {
                 ))}
               </select>
               <span className="mt-2 block text-xs text-muted-foreground">
-                {datasets.find((dataset) => dataset.id === datasetId)?.source ??
+                {selectedDataset?.source ??
                   "При первом запуске пример сохранится в вашем аккаунте; для своей линии загрузите файл выше."}
+                {selectedDataset?.sourceRevision &&
+                  ` · версия: ${selectedDataset.sourceRevision}`}
               </span>
             </label>
           )}

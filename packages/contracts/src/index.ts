@@ -94,6 +94,7 @@ export interface GeoJsonLineStringDto {
 export interface CreateDatasetDto {
   name: string;
   source: string;
+  sourceRevision?: string;
   license: string;
   crs: "EPSG:4326";
   coordinateUnit: "degrees";
@@ -105,6 +106,7 @@ export interface DatasetDto {
   schemaVersion: number;
   name: string;
   source: string;
+  sourceRevision: string | null;
   license: string;
   crs: "EPSG:4326";
   coordinateUnit: "degrees";

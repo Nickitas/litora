@@ -27,6 +27,7 @@ export function validateDataset(body: unknown): {
         ![
           "name",
           "source",
+          "sourceRevision",
           "license",
           "crs",
           "coordinateUnit",
@@ -37,6 +38,10 @@ export function validateDataset(body: unknown): {
     throw new BadRequestException("Неизвестное поле набора данных");
   const name = text(data.name, "Название", 100);
   const source = text(data.source, "Источник", 200);
+  const sourceRevision =
+    data.sourceRevision === undefined
+      ? undefined
+      : text(data.sourceRevision, "Версия источника", 120);
   const license = text(data.license, "Лицензия", 100);
   if (data.crs !== "EPSG:4326" || data.coordinateUnit !== "degrees")
     throw new BadRequestException("Поддерживаются только EPSG:4326 и градусы");
@@ -69,6 +74,18 @@ export function validateDataset(body: unknown): {
     type: "LineString" as const,
     coordinates: coordinates as [number, number][],
   };
+  if (
+    line.coordinates.some(
+      ([longitude, latitude]) =>
+        longitude < -180 ||
+        longitude > 180 ||
+        latitude < -90 ||
+        latitude > 90,
+    )
+  )
+    throw new BadRequestException(
+      "Координаты WGS84 должны быть в пределах долготы ±180° и широты ±90°",
+    );
   const bytes = Buffer.from(JSON.stringify(line), "utf8");
   if (bytes.length > maxDatasetBytes)
     throw new PayloadTooLargeException(
@@ -78,6 +95,7 @@ export function validateDataset(body: unknown): {
     dataset: {
       name,
       source,
+      ...(sourceRevision === undefined ? {} : { sourceRevision }),
       license,
       crs: "EPSG:4326",
       coordinateUnit: "degrees",

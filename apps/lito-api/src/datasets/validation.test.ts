@@ -20,14 +20,22 @@ const valid = {
 test("набор фиксирует метаданные и ограниченные байты GeoJSON", () => {
   const { dataset, bytes } = validateDataset(valid);
   assert.equal(dataset.name, "Участок Сочи");
+  assert.equal(dataset.sourceRevision, undefined);
   assert.deepEqual(JSON.parse(bytes.toString("utf8")), valid.geometry);
   assert.ok(bytes.length <= 65_536);
+  assert.equal(
+    validateDataset({ ...valid, sourceRevision: "  снимок-2026-08-17  " })
+      .dataset.sourceRevision,
+    "снимок-2026-08-17",
+  );
 });
 
 test("набор не принимает иной CRS, единицы, формат, URL/путь или неверные точки", () => {
   for (const body of [
     { ...valid, crs: "EPSG:3857" },
     { ...valid, coordinateUnit: "meters" },
+    { ...valid, sourceRevision: " " },
+    { ...valid, sourceRevision: "a".repeat(121) },
     { ...valid, geometry: { type: "Polygon", coordinates: [] } },
     {
       ...valid,
@@ -51,6 +59,20 @@ test("набор не принимает иной CRS, единицы, форм�
           [39.67, 43.64],
           [NaN, 43.63],
         ],
+      },
+    },
+    {
+      ...valid,
+      geometry: {
+        type: "LineString",
+        coordinates: [[181, 43.64], [39.68, 43.63]],
+      },
+    },
+    {
+      ...valid,
+      geometry: {
+        type: "LineString",
+        coordinates: [[39.67, -91], [39.68, 43.63]],
       },
     },
     {

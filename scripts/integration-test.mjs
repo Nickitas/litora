@@ -110,17 +110,25 @@ const inputGeometry = { type: "LineString", coordinates: [
 ] };
 const uploaded = await first.request("/datasets", "POST", {
   name: "Тестовый участок Сочи", source: "Тестовая линия интеграции",
+  sourceRevision: "test-snapshot-1",
   license: "Только для интеграционного теста", crs: "EPSG:4326",
   coordinateUnit: "degrees", geometry: inputGeometry,
 }, 201);
 assert.equal(uploaded.pointCount, inputGeometry.coordinates.length);
 assert.equal(uploaded.schemaVersion, 1);
+assert.equal(uploaded.sourceRevision, "test-snapshot-1");
 assert.match(uploaded.sha256, /^[a-f0-9]{64}$/);
 assert.equal((await first.request("/datasets"))[0].id, uploaded.id);
 assert.deepEqual(await second.request("/datasets"), []);
 await first.request("/datasets", "POST", {
   name: "Неверный CRS", source: "Тест", license: "Тест", crs: "EPSG:3857",
   coordinateUnit: "meters", geometry: inputGeometry,
+}, 400);
+await first.request("/datasets", "POST", {
+  name: "Неверная долгота", source: "Тест", license: "Тест", crs: "EPSG:4326",
+  coordinateUnit: "degrees", geometry: {
+    type: "LineString", coordinates: [[181, 43.64], [39.68, 43.63]],
+  },
 }, 400);
 await second.request("/calculations", "POST", {
   kind: "dimension_dataset", input: { datasetId: uploaded.id },
@@ -176,6 +184,7 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
     assert.match(result.commandLine, /--black-sea-sochi --offline/);
   if (kind === "dimension_dataset") {
     assert.equal(result.resultSummary.provenance.datasetId, uploaded.id);
+    assert.equal(result.resultSummary.provenance.sourceRevision, "test-snapshot-1");
     assert.equal(result.resultSummary.provenance.sha256, uploaded.sha256);
     assert.equal(result.resultSummary.scenario, "user-data");
   }
@@ -220,6 +229,7 @@ const rejectedDataset = await first.request("/datasets", "POST", {
     coordinates: [[0, 0], [1, 1], [2, 2]],
   },
 }, 201);
+assert.equal(rejectedDataset.sourceRevision, null);
 const rejectedJob = await first.request("/calculations", "POST", {
   kind: "dimension_dataset",
   input: { datasetId: rejectedDataset.id },

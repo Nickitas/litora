@@ -49,6 +49,7 @@ test(
       const { dataset, bytes } = validateDataset({
         name: "Тестовая линия",
         source: "Тестовая съёмка",
+        sourceRevision: "съёмка-v2",
         license: "Тестовая лицензия",
         crs: "EPSG:4326",
         coordinateUnit: "degrees",
@@ -62,6 +63,7 @@ test(
       });
       const saved = await datasets.create(users[0], dataset, bytes);
       assert.equal(saved.schemaVersion, 1);
+      assert.equal(saved.sourceRevision, "съёмка-v2");
       assert.equal(saved.sizeBytes, bytes.length);
       assert.match(saved.sha256, /^[a-f0-9]{64}$/);
       assert.equal(objects.size, 1);

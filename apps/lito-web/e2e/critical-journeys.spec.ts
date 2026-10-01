@@ -50,6 +50,7 @@ const dataset = {
   schemaVersion: 1,
   name: "Тестовый контур",
   source: "Локальная съёмка",
+  sourceRevision: null,
   license: "Тестовое использование",
   crs: "EPSG:4326",
   coordinateUnit: "degrees",

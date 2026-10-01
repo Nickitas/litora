@@ -11,6 +11,7 @@ export interface DatasetRow {
   owner_id: string;
   name: string;
   source: string;
+  source_revision: string | null;
   license: string;
   crs: "EPSG:4326";
   coordinate_unit: "degrees";
@@ -27,6 +28,7 @@ function dto(row: DatasetRow): DatasetDto {
     schemaVersion: row.schema_version,
     name: row.name,
     source: row.source,
+    sourceRevision: row.source_revision,
     license: row.license,
     crs: row.crs,
     coordinateUnit: row.coordinate_unit,
@@ -56,13 +58,14 @@ export class DatasetsRepository {
     await this.storage.uploadBytes(objectKey, bytes, "application/geo+json");
     try {
       const result = await this.db.query<DatasetRow>(
-        `INSERT INTO datasets(id,owner_id,name,source,license,crs,coordinate_unit,point_count,size_bytes,sha256,object_key,schema_version)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        `INSERT INTO datasets(id,owner_id,name,source,source_revision,license,crs,coordinate_unit,point_count,size_bytes,sha256,object_key,schema_version)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
         [
           id,
           userId,
           dataset.name,
           dataset.source,
+          dataset.sourceRevision ?? null,
           dataset.license,
           dataset.crs,
           dataset.coordinateUnit,
