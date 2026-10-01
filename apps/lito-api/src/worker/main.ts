@@ -2,12 +2,12 @@ import "reflect-metadata";
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import {
+  cp,
   mkdir,
   readdir,
   readFile,
   rm,
   stat,
-  symlink,
   writeFile,
 } from "node:fs/promises";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -25,6 +25,7 @@ import {
   commandArguments,
   validateCalculation,
 } from "../calculations/commands.js";
+import { bundledInputProvenance } from "../calculations/input-provenance.js";
 import { DatasetsRepository } from "../datasets/datasets.repository.js";
 import { maxDatasetBytes } from "../datasets/validation.js";
 import {
@@ -106,10 +107,10 @@ async function run(job: JobRow) {
   try {
     assertSupportedInputSchemaVersion(job.input_schema_version);
     await mkdir(output, { recursive: true });
-    await symlink(
+    await cp(
       join(environment.cliDirectory, "data"),
       join(directory, "data"),
-      "dir",
+      { recursive: true, force: false, errorOnExist: true },
     );
     let datasetPath: string | undefined;
     let provenance: Record<string, unknown> | undefined;
@@ -133,6 +134,9 @@ async function run(job: JobRow) {
         datasetId: dataset.id,
         datasetSchemaVersion: dataset.schema_version,
         sha256: dataset.sha256,
+        files: [
+          { path: "input.geojson", sizeBytes: inputSize, sha256: inputHash },
+        ],
         source: dataset.source,
         license: dataset.license,
         crs: dataset.crs,
@@ -196,6 +200,10 @@ async function run(job: JobRow) {
       outputSizes.reduce((sum, size) => sum + size, 0) > maxOutputBytes
     )
       throw new Error("Превышен лимит размера результата");
+    if (job.kind !== "dimension_dataset")
+      provenance = {
+        ...(await bundledInputProvenance(job.kind, join(directory, "data"))),
+      };
     const metrics: Record<string, unknown> = {};
     let totalBytes = 0;
     for (const path of outputs) {

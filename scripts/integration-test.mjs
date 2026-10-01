@@ -114,6 +114,7 @@ const uploaded = await first.request("/datasets", "POST", {
   coordinateUnit: "degrees", geometry: inputGeometry,
 }, 201);
 assert.equal(uploaded.pointCount, inputGeometry.coordinates.length);
+assert.equal(uploaded.schemaVersion, 1);
 assert.match(uploaded.sha256, /^[a-f0-9]{64}$/);
 assert.equal((await first.request("/datasets"))[0].id, uploaded.id);
 assert.deepEqual(await second.request("/datasets"), []);
@@ -146,6 +147,19 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
     await delay(1000);
   }
   assert.equal(result.status, "succeeded", JSON.stringify(result));
+  assert.equal(result.inputSchemaVersion, 1);
+  assert.equal(result.resultSchemaVersion, 1);
+  const inputFiles = result.resultSummary.provenance.files;
+  assert.ok(Array.isArray(inputFiles) && inputFiles.length > 0);
+  for (const file of inputFiles) {
+    assert.match(file.path, /^(data\/[a-z0-9./-]+|input\.geojson)$/);
+    assert.match(file.sha256, /^[a-f0-9]{64}$/);
+    assert.ok(file.sizeBytes > 0);
+  }
+  if (kind === "map")
+    assert.ok(inputFiles.some((file) => file.path === "data/examples/sochi-local-segment.geojson"));
+  if (kind === "erosion")
+    assert.match(result.resultSummary.provenance.declaredSources.waves, /Open-Meteo/);
   if (kind === "dimension_dataset") {
     assert.equal(result.resultSummary.provenance.datasetId, uploaded.id);
     assert.equal(result.resultSummary.provenance.sha256, uploaded.sha256);
