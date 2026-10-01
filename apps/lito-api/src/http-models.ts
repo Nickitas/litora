@@ -47,8 +47,20 @@ export class CalculationResponse implements CalculationJobDto {
     string,
     unknown
   >;
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description: "Версия схемы входа; null для неизвестного legacy-формата",
+  })
+  inputSchemaVersion!: number | null;
   @ApiProperty({ type: "object", additionalProperties: true, nullable: true })
   resultSummary!: Record<string, unknown> | null;
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description: "Версия схемы результата; null до успеха или для legacy-формата",
+  })
+  resultSchemaVersion!: number | null;
   @ApiProperty({ type: String, nullable: true }) coreVersion!: string | null;
   @ApiProperty({ type: String, nullable: true }) commandLine!: string | null;
   @ApiProperty({ type: String, nullable: true }) errorMessage!: string | null;
@@ -64,6 +76,7 @@ export class CalculationResponse implements CalculationJobDto {
 
 export class DatasetResponse implements DatasetDto {
   @ApiProperty({ type: String, format: "uuid" }) id!: string;
+  @ApiProperty({ type: Number, example: 1 }) schemaVersion!: number;
   @ApiProperty({ type: String }) name!: string;
   @ApiProperty({ type: String }) source!: string;
   @ApiProperty({ type: String }) license!: string;

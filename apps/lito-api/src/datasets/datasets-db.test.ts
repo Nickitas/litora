@@ -61,6 +61,7 @@ test(
         },
       });
       const saved = await datasets.create(users[0], dataset, bytes);
+      assert.equal(saved.schemaVersion, 1);
       assert.equal(saved.sizeBytes, bytes.length);
       assert.match(saved.sha256, /^[a-f0-9]{64}$/);
       assert.equal(objects.size, 1);
@@ -85,6 +86,8 @@ test(
         input: { datasetId: saved.id },
       });
       assert.equal(job.kind, "dimension_dataset");
+      assert.equal(job.inputSchemaVersion, 1);
+      assert.equal(job.resultSchemaVersion, null);
       assert.deepEqual(job.input, { datasetId: saved.id });
       const linked = await db.query<{ dataset_id: string }>(
         "SELECT dataset_id FROM calculation_jobs WHERE id=$1",

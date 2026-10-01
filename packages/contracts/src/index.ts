@@ -41,7 +41,9 @@ export interface CalculationJobDto {
   kind: string;
   status: CalculationStatus;
   input: Record<string, unknown>;
+  inputSchemaVersion: number | null;
   resultSummary: Record<string, unknown> | null;
+  resultSchemaVersion: number | null;
   coreVersion: string | null;
   commandLine: string | null;
   errorMessage: string | null;
@@ -98,6 +100,7 @@ export interface CreateDatasetDto {
 
 export interface DatasetDto {
   id: string;
+  schemaVersion: number;
   name: string;
   source: string;
   license: string;

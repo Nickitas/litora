@@ -12,13 +12,16 @@ import type {
 } from "@litora/contracts";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
+import { calculationInputSchemaVersion } from "../schema-versions.js";
 
 export interface JobRow {
   id: string;
   kind: string;
   status: CalculationJobDto["status"];
   input: Record<string, unknown>;
+  input_schema_version: number | null;
   result_summary: Record<string, unknown> | null;
+  result_schema_version: number | null;
   core_version: string | null;
   command_line: string | null;
   error_message: string | null;
@@ -125,9 +128,9 @@ export class CalculationsRepository {
         userId,
       ]);
       const result = await client.query<JobRow>(
-        `INSERT INTO calculation_jobs(user_id,kind,input,dataset_id)
-        SELECT $1,$2,$3,$4 WHERE (SELECT count(*) FROM calculation_jobs WHERE user_id=$1 AND status IN ('queued','running')) < 5 RETURNING *`,
-        [userId, job.kind, job.input ?? {}, datasetId],
+        `INSERT INTO calculation_jobs(user_id,kind,input,dataset_id,input_schema_version)
+        SELECT $1,$2,$3,$4,$5 WHERE (SELECT count(*) FROM calculation_jobs WHERE user_id=$1 AND status IN ('queued','running')) < 5 RETURNING *`,
+        [userId, job.kind, job.input ?? {}, datasetId, calculationInputSchemaVersion],
       );
       if (!result.rows[0])
         throw new ConflictException(
@@ -196,7 +199,9 @@ export class CalculationsRepository {
       kind: row.kind,
       status: row.status,
       input: row.input,
+      inputSchemaVersion: row.input_schema_version,
       resultSummary: includeArtifacts ? row.result_summary : null,
+      resultSchemaVersion: row.result_schema_version,
       coreVersion: row.core_version,
       commandLine: row.command_line,
       errorMessage: row.error_message,

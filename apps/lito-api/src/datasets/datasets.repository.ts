@@ -3,9 +3,11 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { CreateDatasetDto, DatasetDto } from "@litora/contracts";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
+import { datasetSchemaVersion } from "../schema-versions.js";
 
 export interface DatasetRow {
   id: string;
+  schema_version: number;
   owner_id: string;
   name: string;
   source: string;
@@ -22,6 +24,7 @@ export interface DatasetRow {
 function dto(row: DatasetRow): DatasetDto {
   return {
     id: row.id,
+    schemaVersion: row.schema_version,
     name: row.name,
     source: row.source,
     license: row.license,
@@ -53,8 +56,8 @@ export class DatasetsRepository {
     await this.storage.uploadBytes(objectKey, bytes, "application/geo+json");
     try {
       const result = await this.db.query<DatasetRow>(
-        `INSERT INTO datasets(id,owner_id,name,source,license,crs,coordinate_unit,point_count,size_bytes,sha256,object_key)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        `INSERT INTO datasets(id,owner_id,name,source,license,crs,coordinate_unit,point_count,size_bytes,sha256,object_key,schema_version)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
         [
           id,
           userId,
@@ -67,6 +70,7 @@ export class DatasetsRepository {
           bytes.length,
           digest,
           objectKey,
+          datasetSchemaVersion,
         ],
       );
       return dto(result.rows[0]);

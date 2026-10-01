@@ -27,6 +27,10 @@ import {
 } from "../calculations/commands.js";
 import { DatasetsRepository } from "../datasets/datasets.repository.js";
 import { maxDatasetBytes } from "../datasets/validation.js";
+import {
+  assertSupportedInputSchemaVersion,
+  calculationResultSchemaVersion,
+} from "../schema-versions.js";
 
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
@@ -100,6 +104,7 @@ async function run(job: JobRow) {
     stopProcess();
   }, environment.jobTimeoutMs);
   try {
+    assertSupportedInputSchemaVersion(job.input_schema_version);
     await mkdir(output, { recursive: true });
     await symlink(
       join(environment.cliDirectory, "data"),
@@ -126,6 +131,7 @@ async function run(job: JobRow) {
         );
       provenance = {
         datasetId: dataset.id,
+        datasetSchemaVersion: dataset.schema_version,
         sha256: dataset.sha256,
         source: dataset.source,
         license: dataset.license,
@@ -232,10 +238,10 @@ async function run(job: JobRow) {
       metrics,
     };
     await db.query(
-      `WITH finished AS (UPDATE calculation_jobs SET status='succeeded',result_summary=$3,finished_at=now(),updated_at=now()
+      `WITH finished AS (UPDATE calculation_jobs SET status='succeeded',result_summary=$3,result_schema_version=$4,finished_at=now(),updated_at=now()
       WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
       INSERT INTO calculation_events(job_id,event_type) SELECT id,'succeeded' FROM finished`,
-      [job.id, workerId, summary],
+      [job.id, workerId, summary, calculationResultSchemaVersion],
     );
     console.log(`Расчёт ${job.id}: готово, файлов ${outputs.length}`);
   } catch (error) {
