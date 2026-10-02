@@ -20,6 +20,7 @@ import { DatasetsRepository } from "./datasets.repository.js";
 import {
   maxDatasetBytes,
   maxDatasetPoints,
+  maxDatasetsPerUser,
   validateDataset,
 } from "./validation.js";
 
@@ -94,7 +95,7 @@ export class DatasetsController {
           },
         },
       },
-      description: `Только EPSG:4326, долгота/широта в градусах. GeoJSON не больше ${maxDatasetBytes} байт. Научная проверка выполняется Go при расчёте.`,
+      description: `Только EPSG:4326, долгота/широта в градусах. GeoJSON не больше ${maxDatasetBytes} байт. До ${maxDatasetsPerUser} наборов на пользователя. Научная проверка выполняется Go при расчёте.`,
     },
   })
   @ApiResponse({ status: 201, type: DatasetResponse })
@@ -105,6 +106,10 @@ export class DatasetsController {
   @ApiResponse({
     status: 413,
     description: "Превышен размер набора или HTTP body",
+  })
+  @ApiResponse({
+    status: 409,
+    description: "Достигнут лимит сохранённых наборов данных",
   })
   create(@Req() req: AuthRequest, @Body() body: unknown) {
     const { dataset, bytes } = validateDataset(body);

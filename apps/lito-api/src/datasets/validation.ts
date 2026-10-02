@@ -3,6 +3,7 @@ import type { CreateDatasetDto } from "@litora/contracts";
 
 export const maxDatasetBytes = 65_536;
 export const maxDatasetPoints = 500;
+export const maxDatasetsPerUser = 100;
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))

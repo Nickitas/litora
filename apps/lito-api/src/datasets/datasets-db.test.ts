@@ -6,7 +6,7 @@ import { DatabaseService } from "../infrastructure/database.service.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
 import { CalculationsRepository } from "../calculations/calculations.repository.js";
 import { DatasetsRepository } from "./datasets.repository.js";
-import { validateDataset } from "./validation.js";
+import { maxDatasetsPerUser, validateDataset } from "./validation.js";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -22,10 +22,18 @@ test(
     const db = Object.create(DatabaseService.prototype) as DatabaseService;
     Object.defineProperty(db, "pool", { value: pool });
     const objects = new Map<string, Buffer>();
+    let uploadGate: Promise<void> | undefined;
+    let releaseUploads: (() => void) | undefined;
+    let concurrentUploads = 0;
     const storage = {
       bucket: "test-private",
       async uploadBytes(key: string, bytes: Buffer) {
         objects.set(key, bytes);
+        if (uploadGate) {
+          concurrentUploads++;
+          if (concurrentUploads === 2) releaseUploads?.();
+          await uploadGate;
+        }
       },
       async deleteObject(key: string) {
         objects.delete(key);
@@ -98,6 +106,30 @@ test(
         [job.id],
       );
       assert.equal(linked.rows[0].dataset_id, saved.id);
+      await db.query(
+        `INSERT INTO datasets(owner_id,name,source,license,crs,coordinate_unit,point_count,size_bytes,sha256,object_key)
+         SELECT $1::uuid, 'Квота', 'Тест', 'Тест', 'EPSG:4326', 'degrees', 2, 1,
+                repeat('a', 64), 'quota-test/' || ($1::uuid)::text || '/' || n::text
+           FROM generate_series(1, $2::integer) AS n`,
+        [users[0], maxDatasetsPerUser - 2],
+      );
+      uploadGate = new Promise<void>((resolve) => { releaseUploads = resolve; });
+      const concurrent = await Promise.allSettled([
+        datasets.create(users[0], dataset, bytes),
+        datasets.create(users[0], dataset, bytes),
+      ]);
+      assert.equal(concurrent.filter((result) => result.status === "fulfilled").length, 1);
+      assert.equal(concurrent.filter((result) => result.status === "rejected").length, 1);
+      const rejected = concurrent.find((result) => result.status === "rejected");
+      assert.equal(rejected?.reason.status, 409);
+      const count = await db.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM datasets WHERE owner_id=$1",
+        [users[0]],
+      );
+      assert.equal(Number(count.rows[0].count), maxDatasetsPerUser);
+      assert.equal(objects.size, 2, "Отвергнутый конкурентный upload удалён из S3");
+      await assert.rejects(datasets.create(users[0], dataset, bytes), { status: 409 });
+      assert.equal(objects.size, 2, "Запрос после достижения лимита не пишет в S3");
     } finally {
       if (users.length) {
         await db.query(
