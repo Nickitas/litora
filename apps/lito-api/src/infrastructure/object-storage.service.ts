@@ -6,6 +6,8 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -137,6 +139,51 @@ export class ObjectStorageService implements OnModuleInit {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: objectKey }),
     );
+  }
+
+  async *listObjects(prefix: string): AsyncGenerator<{
+    key: string;
+    lastModified: Date | undefined;
+    etag: string | undefined;
+  }> {
+    let continuation: string | undefined;
+    do {
+      const response = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuation,
+        }),
+      );
+      for (const item of response.Contents ?? []) {
+        if (item.Key)
+          yield {
+            key: item.Key,
+            lastModified: item.LastModified,
+            etag: item.ETag,
+          };
+      }
+      if (!response.IsTruncated) break;
+      continuation = response.NextContinuationToken;
+      if (!continuation)
+        throw new Error("S3 не вернул токен следующей страницы списка объектов");
+    } while (continuation);
+  }
+
+  async headObject(objectKey: string): Promise<{
+    lastModified: Date | undefined;
+    etag: string | undefined;
+  } | undefined> {
+    try {
+      const result = await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      );
+      return { lastModified: result.LastModified, etag: result.ETag };
+    } catch (error) {
+      if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404)
+        return undefined;
+      throw error;
+    }
   }
 
   downloadUrl(objectKey: string, expiresIn = 900): Promise<string> {
