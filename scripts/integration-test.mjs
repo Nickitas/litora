@@ -251,6 +251,7 @@ assert.equal(
   false,
   "Неуспешный расчёт не должен иметь manifest успешного результата",
 );
+assert.deepEqual(failed.artifacts.map((artifact) => artifact.filename), ["failure.log"]);
 console.log("Невалидная для Go геометрия завершилась failed с журналом");
 const cancelled = await first.request(
   "/calculations",
@@ -268,6 +269,11 @@ await delay(3000);
 assert.equal(
   (await first.request(`/calculations/${cancelled.id}`)).status,
   "cancelled",
+);
+assert.deepEqual(
+  (await first.request(`/calculations/${cancelled.id}`)).artifacts,
+  [],
+  "Отменённый расчёт не должен публиковать частичные результаты",
 );
 assert.equal((await second.request("/calculations")).length, 0);
 const swagger = await (await fetch(`${base}/docs-json`)).json();

@@ -37,6 +37,7 @@ import {
   calculationResultSchemaVersion,
 } from "../schema-versions.js";
 import { assertOutputBudget, maxOutputBytes, maxOutputFiles } from "./output-budget.js";
+import { cleanupPartialArtifacts } from "./partial-artifacts.js";
 
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
@@ -86,6 +87,7 @@ async function run(job: JobRow) {
   let outputFailure: Error | undefined;
   let outputCheck: Promise<void> | undefined;
   let outputMonitor: ReturnType<typeof setInterval> | undefined;
+  const uploadedKeys = new Set<string>();
   const heartbeat = setInterval(async () => {
     if (checking) return;
     checking = true;
@@ -246,6 +248,7 @@ async function run(job: JobRow) {
       const contentType = mime.lookup(path) || "application/octet-stream";
       const digest = await sha256(path);
       await storage.uploadFile(objectKey, path, contentType);
+      uploadedKeys.add(objectKey);
       await repository.addArtifact({
         jobId: job.id,
         category: filename.endsWith(".log") ? "log" : "output",
@@ -278,40 +281,59 @@ async function run(job: JobRow) {
       method,
       metrics,
     };
-    await db.query(
+    const completed = await db.query(
       `WITH finished AS (UPDATE calculation_jobs SET status='succeeded',result_summary=$3,result_schema_version=$4,method_id=$5,method_revision=$6,finished_at=now(),updated_at=now()
       WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
       INSERT INTO calculation_events(job_id,event_type) SELECT id,'succeeded' FROM finished`,
       [job.id, workerId, summary, calculationResultSchemaVersion, method.id, method.revision],
     );
+    if (completed.rowCount !== 1)
+      throw new Error("Расчёт уже отменён или потерял владельца worker");
     console.log(`Расчёт ${job.id}: готово, файлов ${outputs.length}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const leftovers = await cleanupPartialArtifacts(
+      job.id,
+      uploadedKeys,
+      (key) => storage.deleteObject(key),
+      (id, key) => repository.removeArtifact(id, key),
+    );
+    if (leftovers.length)
+      console.error(`Не удалось очистить ${leftovers.length} артефактов расчёта ${job.id}`);
+    const failed = await db.query(
+      `WITH failed AS (UPDATE calculation_jobs SET status='failed',error_message=$3,finished_at=now(),updated_at=now()
+      WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
+      INSERT INTO calculation_events(job_id,event_type,payload) SELECT id,'failed',jsonb_build_object('message',$3::text) FROM failed`,
+      [job.id, workerId, message.slice(0, 4000)],
+    );
+    if (!failed.rowCount) {
+      console.error(`Расчёт ${job.id}: ${message}`);
+      return;
+    }
     try {
       const path = join(output, "failure.log");
       await mkdir(output, { recursive: true });
       await writeFile(path, `${message}\n${log}`);
       const objectKey = `users/${job.id}/failure.log`;
       await storage.uploadFile(objectKey, path, "text/plain");
-      await repository.addArtifact({
-        jobId: job.id,
-        category: "log",
-        filename: "failure.log",
-        bucket: storage.bucket,
-        objectKey,
-        contentType: "text/plain",
-        sizeBytes: (await stat(path)).size,
-        sha256: await sha256(path),
-      });
+      try {
+        await repository.addArtifact({
+          jobId: job.id,
+          category: "log",
+          filename: "failure.log",
+          bucket: storage.bucket,
+          objectKey,
+          contentType: "text/plain",
+          sizeBytes: (await stat(path)).size,
+          sha256: await sha256(path),
+        });
+      } catch (metadataError) {
+        await storage.deleteObject(objectKey);
+        throw metadataError;
+      }
     } catch (uploadError) {
       console.error(`Не удалось сохранить журнал ${job.id}`, uploadError);
     }
-    await db.query(
-      `WITH failed AS (UPDATE calculation_jobs SET status='failed',error_message=$3,finished_at=now(),updated_at=now()
-      WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
-      INSERT INTO calculation_events(job_id,event_type,payload) SELECT id,'failed',jsonb_build_object('message',$3::text) FROM failed`,
-      [job.id, workerId, message.slice(0, 4000)],
-    );
     console.error(`Расчёт ${job.id}: ${message}`);
   } finally {
     finished = true;

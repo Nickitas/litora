@@ -91,6 +91,13 @@ export class CalculationsRepository {
     );
   }
 
+  async removeArtifact(jobId: string, objectKey: string): Promise<void> {
+    await this.database.query(
+      "DELETE FROM calculation_artifacts WHERE job_id=$1 AND object_key=$2",
+      [jobId, objectKey],
+    );
+  }
+
   async complete(
     jobId: string,
     summary: Record<string, unknown>,
