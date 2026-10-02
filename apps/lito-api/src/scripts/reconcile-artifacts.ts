@@ -5,11 +5,15 @@ import {
   applyCleanupCandidate,
   cleanupCandidate,
   jobIdFromArtifactKey,
+  possiblyMissingObject,
   type ListedArtifact,
+  type ReferencedArtifact,
   type ReconciliationJob,
 } from "../worker/artifact-reconciliation.js";
 
 const maxScannedObjects = 10_000;
+const maxScannedMetadata = 10_000;
+const maxMissingHeadsPerRun = 100;
 const maxDeletesPerRun = 100;
 const { values } = parseArgs({
   args: process.argv.slice(2).filter((value) => value !== "--"),
@@ -50,14 +54,29 @@ async function main(): Promise<void> {
       );
       for (const row of rows.rows) jobs.set(row.id, row);
     }
-    const keys = objects.map((object) => object.key);
+    const listedKeys = new Set(objects.map((object) => object.key));
+    const artifactRows = await db.query<ReferencedArtifact>(
+      `SELECT a.object_key, a.job_id::text AS job_id, a.created_at,
+              j.status, j.finished_at
+         FROM calculation_artifacts a
+         JOIN calculation_jobs j ON j.id = a.job_id
+        WHERE a.bucket = $1 AND a.object_key LIKE 'users/%'
+        ORDER BY a.object_key
+        LIMIT $2`,
+      [storage.bucket, maxScannedMetadata + 1],
+    );
+    if (artifactRows.rows.length > maxScannedMetadata)
+      throw new Error(`Сверка остановлена: более ${maxScannedMetadata} записей артефактов`);
     const metadata = new Map<string, string>();
-    if (keys.length) {
-      const rows = await db.query<{ object_key: string; job_id: string }>(
-        "SELECT object_key,job_id::text AS job_id FROM calculation_artifacts WHERE bucket=$1 AND object_key=ANY($2::text[])",
-        [storage.bucket, keys],
-      );
-      for (const row of rows.rows) metadata.set(row.object_key, row.job_id);
+    for (const row of artifactRows.rows)
+      metadata.set(row.object_key, row.job_id);
+    const possiblyMissing = artifactRows.rows.filter((row) =>
+      possiblyMissingObject(row, listedKeys, cutoff),
+    );
+    const missingS3: string[] = [];
+    for (const row of possiblyMissing.slice(0, maxMissingHeadsPerRun)) {
+      if (!(await storage.headObject(row.object_key)))
+        missingS3.push(row.object_key);
     }
     const candidates = objects
       .map((object) => {
@@ -78,10 +97,14 @@ async function main(): Promise<void> {
         mode: values.apply ? "apply" : "dry-run",
         scanned: objects.length,
         candidates: candidates.length,
+        metadataScanned: artifactRows.rows.length,
+        missingS3: missingS3.length,
+        missingS3Unchecked: Math.max(0, possiblyMissing.length - maxMissingHeadsPerRun),
         cutoff: cutoff.toISOString(),
         sample: candidates
           .slice(0, 20)
           .map(({ key, hasMetadata }) => ({ key, hasMetadata })),
+        missingS3Sample: missingS3.slice(0, 20),
       }),
     );
     if (!values.apply) return;

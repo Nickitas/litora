@@ -4,7 +4,9 @@ import {
   applyCleanupCandidate,
   cleanupCandidate,
   jobIdFromArtifactKey,
+  possiblyMissingObject,
   type ListedArtifact,
+  type ReferencedArtifact,
   type ReconciliationJob,
 } from "./artifact-reconciliation.js";
 
@@ -43,6 +45,28 @@ test("активные и успешные jobs, свежие файлы и жу
   assert.equal(cleanupCandidate({ ...object, key: `users/${id}/datasets/input.geojson` }, job, false, cutoff), null);
   assert.equal(cleanupCandidate({ ...object, key: "users/other/report.json" }, job, false, cutoff), null);
   assert.ok(cleanupCandidate(object, { ...job, status: "cancelled" }, false, cutoff));
+});
+
+test("пропавший объект отмечается только для старой записи завершённого job", () => {
+  const artifact: ReferencedArtifact = {
+    object_key: object.key,
+    job_id: id,
+    created_at: old,
+    status: "succeeded",
+    finished_at: old,
+  };
+  assert.equal(possiblyMissingObject(artifact, new Set(), cutoff), true);
+  assert.equal(possiblyMissingObject(artifact, new Set([object.key]), cutoff), false);
+  for (const status of ["queued", "running"])
+    assert.equal(possiblyMissingObject({ ...artifact, status }, new Set(), cutoff), false);
+  assert.equal(possiblyMissingObject({ ...artifact, finished_at: null }, new Set(), cutoff), false);
+  assert.equal(possiblyMissingObject({ ...artifact, created_at: new Date("2026-10-02") }, new Set(), cutoff), false);
+  assert.equal(possiblyMissingObject({ ...artifact, finished_at: new Date("2026-10-02") }, new Set(), cutoff), false);
+  assert.equal(possiblyMissingObject({ ...artifact, job_id: "22222222-2222-4222-8222-222222222222" }, new Set(), cutoff), false);
+  assert.equal(possiblyMissingObject({ ...artifact, object_key: `users/${id}/datasets/input.geojson` }, new Set(), cutoff), false);
+  assert.equal(possiblyMissingObject({ ...artifact, object_key: `calculations/${id}/report.json` }, new Set(), cutoff), false);
+  assert.equal(possiblyMissingObject({ ...artifact, status: "failed" }, new Set(), cutoff), true);
+  assert.equal(possiblyMissingObject({ ...artifact, status: "cancelled" }, new Set(), cutoff), true);
 });
 
 test("apply перепроверяет статус, владельца metadata и версию S3 до удаления", async () => {

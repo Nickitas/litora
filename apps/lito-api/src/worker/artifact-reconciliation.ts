@@ -15,6 +15,14 @@ export interface CleanupCandidate extends ListedArtifact {
   hasMetadata: boolean;
 }
 
+export interface ReferencedArtifact {
+  object_key: string;
+  job_id: string;
+  created_at: Date;
+  status: string;
+  finished_at: Date | null;
+}
+
 const jobKey = /^users\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/(.+)$/;
 
 /** Возвращает UUID только для ключа результата job, не для входного dataset. */
@@ -50,6 +58,22 @@ export function cleanupCandidate(
   )
     return null;
   return { ...object, jobId, hasMetadata };
+}
+
+/** Сверяет только старые записи завершённых jobs; отсутствие подтверждается HEAD отдельно. */
+export function possiblyMissingObject(
+  artifact: ReferencedArtifact,
+  listedKeys: ReadonlySet<string>,
+  cutoff: Date,
+): boolean {
+  return (
+    jobIdFromArtifactKey(artifact.object_key) === artifact.job_id &&
+    !listedKeys.has(artifact.object_key) &&
+    ["succeeded", "failed", "cancelled"].includes(artifact.status) &&
+    artifact.finished_at !== null &&
+    artifact.finished_at <= cutoff &&
+    artifact.created_at <= cutoff
+  );
 }
 
 export async function applyCleanupCandidate(
