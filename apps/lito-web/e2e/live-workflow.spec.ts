@@ -8,7 +8,7 @@ test("реальный кабинет: регистрация, GeoJSON по ум
 }) => {
   test.skip(
     !process.env.LITORA_E2E_LIVE_URL || !process.env.LITORA_E2E_INVITATION,
-    "Нужны изолированный стенд и одноразовое тестовое приглашение",
+    "Нужны изолированный стенд и одноразовое тестовое приглашение"
   );
   test.setTimeout(90_000);
   const pageErrors: string[] = [];
@@ -32,14 +32,19 @@ test("реальный кабинет: регистрация, GeoJSON по ум
     .fill(process.env.LITORA_E2E_INVITATION!);
   await page.getByRole("button", { name: "Зарегистрироваться" }).click();
   await expect(page).toHaveURL(/\/account$/);
-  await expect(page.getByLabel("Сценарий")).toBeEnabled();
+  await page.getByRole("button", { name: "Новый расчёт" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Новый расчёт" })
+  ).toBeVisible();
+  await expect(page.getByLabel("Что рассчитать")).toBeEnabled();
 
-  await page.getByLabel("Сценарий").selectOption("dimension_dataset");
-  await expect(page.getByLabel("Ваш набор данных")).toHaveValue("");
-  await page.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page.getByLabel("Ваш набор данных")).toHaveValue(
-    /^[0-9a-f-]{36}$/,
+  await page.getByRole("combobox", { name: "Что рассчитать" }).click();
+  await page.getByRole("option", { name: "Своя береговая линия" }).click();
+  await expect(page.getByLabel("Набор данных")).toContainText(
+    "Встроенный пример Сочи"
   );
+  await page.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(/\/account\/calculations\/[0-9a-f-]{36}$/);
   const result = page.getByRole("region", { name: "Результат расчёта" });
   await expect(result.getByText("Завершён", { exact: true })).toBeVisible({
     timeout: 60_000,
@@ -56,9 +61,11 @@ test("реальный кабинет: регистрация, GeoJSON по ум
   expect(manifest.artifacts.length).toBeGreaterThan(0);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Мои исследования" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "История расчётов" }))
-    .toContainText("Размерность своей береговой линии");
+  await expect(page.getByRole("heading", { name: "Расчёт" })).toBeVisible();
+  await page.getByRole("link", { name: "Расчёты", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "История расчётов" })
+  ).toContainText("Размерность своей береговой линии");
   expect(serverErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

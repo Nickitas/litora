@@ -56,6 +56,22 @@ export interface CalculationJobDto {
   artifacts: CalculationArtifactDto[];
 }
 
+export interface CalculationPageQueryDto {
+  status?: CalculationStatus;
+  kind?: CalculationKind;
+  from?: string;
+  to?: string;
+  jobId?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface CalculationPageDto {
+  items: CalculationJobDto[];
+  nextCursor: string | null;
+  totalCount: number;
+}
+
 export interface UserDto {
   id: string;
   email: string;

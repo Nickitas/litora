@@ -6,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -13,13 +14,18 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
 import { CalculationsRepository } from "./calculations.repository.js";
 import { calculationKinds, validateCalculation } from "./commands.js";
 import { AuthGuard, type AuthRequest } from "../auth/auth.guard.js";
-import { CalculationResponse } from "../http-models.js";
+import {
+  CalculationPageResponse,
+  CalculationResponse,
+} from "../http-models.js";
+import { parseHistoryPageQuery } from "./history-page.js";
 
 @Controller("calculations")
 @ApiTags("Расчёты")
@@ -90,6 +96,58 @@ export class CalculationsController {
   })
   list(@Req() req: AuthRequest) {
     return this.calculations.list(req.user.id);
+  }
+
+  @Get("page")
+  @ApiOperation({ summary: "Постраничная история своих расчётов" })
+  @ApiQuery({
+    name: "status",
+    required: false,
+    enum: ["queued", "running", "succeeded", "failed", "cancelled"],
+  })
+  @ApiQuery({
+    name: "kind",
+    required: false,
+    enum: ["dimension", "dimension_dataset", "map", "erosion"],
+  })
+  @ApiQuery({
+    name: "from",
+    required: false,
+    type: String,
+    description: "Дата UTC YYYY-MM-DD включительно",
+  })
+  @ApiQuery({
+    name: "to",
+    required: false,
+    type: String,
+    description: "Дата UTC YYYY-MM-DD включительно",
+  })
+  @ApiQuery({
+    name: "jobId",
+    required: false,
+    type: String,
+    format: "uuid",
+    description: "Поиск по точному UUID",
+  })
+  @ApiQuery({
+    name: "limit",
+    required: false,
+    type: Number,
+    description: "1–50, по умолчанию 20",
+  })
+  @ApiQuery({
+    name: "cursor",
+    required: false,
+    type: String,
+    description: "Курсор из предыдущей страницы",
+  })
+  @ApiResponse({ status: 200, type: CalculationPageResponse })
+  @ApiResponse({ status: 400, description: "Некорректный параметр или курсор" })
+  listPage(@Req() req: AuthRequest, @Query() query: unknown) {
+    return this.calculations.listPage(
+      req.user.id,
+      parseHistoryPageQuery(query, req.user.id),
+    );
   }
 
   @Get(":id")

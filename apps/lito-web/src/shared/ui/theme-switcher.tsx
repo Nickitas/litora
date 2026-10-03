@@ -1,20 +1,27 @@
 import { useTheme } from "@/shared/shadcn/components/theme-provider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/shadcn/components/ui/select";
 
 export function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();
   return (
-    <label className="flex items-center">
-      <span className="sr-only">Тема оформления</span>
-      <select
-        aria-label="Тема оформления"
+    <Select
         value={theme}
-        onChange={(event) => setTheme(event.target.value as typeof theme)}
-        className="min-h-11 rounded-lg border border-input bg-card px-2 text-sm text-card-foreground focus-visible:border-ring"
+        onValueChange={(value) => setTheme(value as typeof theme)}
       >
-        <option value="system">Система</option>
-        <option value="light">Светлая</option>
-        <option value="dark">Тёмная</option>
-      </select>
-    </label>
+      <SelectTrigger aria-label="Тема оформления" className="w-30">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="system">Система</SelectItem>
+        <SelectItem value="light">Светлая</SelectItem>
+        <SelectItem value="dark">Тёмная</SelectItem>
+      </SelectContent>
+    </Select>
   );
 }

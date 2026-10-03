@@ -29,11 +29,14 @@ test("обе темы: контраст токенов, сохранение в�
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await page.goto("/login");
   const theme = page.getByRole("combobox", { name: "Тема оформления" });
-  await expect(theme).toHaveValue("system");
+  await expect(theme).toContainText("Система");
   await expect(page.locator("html")).toHaveClass(/dark/);
 
   for (const mode of ["light", "dark"] as const) {
-    await theme.selectOption(mode);
+    await theme.click();
+    await page
+      .getByRole("option", { name: mode === "light" ? "Светлая" : "Тёмная" })
+      .click();
     await expect(page.locator("html")).toHaveClass(new RegExp(mode));
     const colors = await page.evaluate(() => {
       const style = getComputedStyle(document.documentElement);
@@ -79,19 +82,39 @@ test("обе темы: контраст токенов, сохранение в�
   }
 
   await page.reload();
-  await expect(theme).toHaveValue("dark");
+  await expect(theme).toContainText("Тёмная");
   await page.getByLabel("Почта").focus();
   await expect(page.getByLabel("Почта")).toBeFocused();
-  const outline = await page
+  const focusStyle = await page
     .getByLabel("Почта")
-    .evaluate((element) => getComputedStyle(element).outlineStyle);
-  expect(outline).not.toBe("none");
+    .evaluate((element) => ({
+      outline: getComputedStyle(element).outlineStyle,
+      shadow: getComputedStyle(element).boxShadow,
+    }));
+  expect(focusStyle.outline !== "none" || focusStyle.shadow !== "none").toBe(
+    true
+  );
 });
 
 test("кабинет на 360 px показывает все статусы без горизонтальной прокрутки", async ({
   page,
 }) => {
   const statuses = ["queued", "running", "succeeded", "failed", "cancelled"];
+  const jobs = statuses.map((status, index) => ({
+    id: `22222222-2222-4222-8222-${String(index).padStart(12, "0")}`,
+    kind: "dimension",
+    status,
+    input: {},
+    resultSummary: null,
+    coreVersion: null,
+    commandLine: null,
+    errorMessage: null,
+    createdAt: "2026-09-29T12:00:00.000Z",
+    updatedAt: "2026-09-29T12:00:00.000Z",
+    startedAt: null,
+    finishedAt: null,
+    artifacts: [],
+  }));
   await page.setViewportSize({ width: 360, height: 780 });
   await page.route(
     (url) => url.pathname.startsWith("/api/"),
@@ -118,23 +141,11 @@ test("кабинет на 360 px показывает все статусы бе
               ]
             : path === "/api/datasets"
               ? []
-              : path === "/api/calculations"
-                ? statuses.map((status, index) => ({
-                    id: `22222222-2222-4222-8222-${String(index).padStart(12, "0")}`,
-                    kind: "dimension",
-                    status,
-                    input: {},
-                    resultSummary: null,
-                    coreVersion: null,
-                    commandLine: null,
-                    errorMessage: null,
-                    createdAt: "2026-09-29T12:00:00.000Z",
-                    updatedAt: "2026-09-29T12:00:00.000Z",
-                    startedAt: null,
-                    finishedAt: null,
-                    artifacts: [],
-                  }))
-                : null;
+              : path === "/api/calculations/page"
+                ? { items: jobs, nextCursor: null, totalCount: jobs.length }
+                : path === "/api/calculations"
+                  ? jobs
+                  : null;
       return route.fulfill({
         status: body === null ? 404 : 200,
         contentType: "application/json",
@@ -142,7 +153,7 @@ test("кабинет на 360 px показывает все статусы бе
       });
     }
   );
-  await page.goto("/account");
+  await page.goto("/account/calculations");
   const history = page.getByRole("region", { name: "История расчётов" });
   for (const label of [
     "В очереди",
@@ -184,9 +195,10 @@ test("справочник и релизы открываются в обеих 
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     for (const mode of ["light", "dark"] as const) {
+      await page.getByRole("combobox", { name: "Тема оформления" }).click();
       await page
-        .getByRole("combobox", { name: "Тема оформления" })
-        .selectOption(mode);
+        .getByRole("option", { name: mode === "light" ? "Светлая" : "Тёмная" })
+        .click();
       await expect(page.locator("html")).toHaveClass(new RegExp(mode));
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth)

@@ -44,6 +44,7 @@ const kinds = [
     description: "GeoJSON LineString",
   },
   { kind: "erosion", title: "Размыв", description: "Тестовый сценарий" },
+  { kind: "map", title: "Карта", description: "Тестовый сценарий" },
 ] satisfies CalculationKindDto[];
 const dataset = {
   id: "33333333-3333-4333-8333-333333333333",
@@ -64,7 +65,12 @@ type ApiReply = { status?: number; body: unknown };
 
 async function mockApi(
   page: Page,
-  reply: (path: string, method: string, body: unknown) => ApiReply | undefined
+  reply: (
+    path: string,
+    method: string,
+    body: unknown,
+    params: URLSearchParams
+  ) => ApiReply | undefined
 ) {
   const unexpected: string[] = [];
   const pageErrors: string[] = [];
@@ -73,7 +79,8 @@ async function mockApi(
     (url) => url.pathname.startsWith("/api/"),
     async (route) => {
       const request = route.request();
-      const path = new URL(request.url()).pathname;
+      const url = new URL(request.url());
+      const path = url.pathname;
       const method = request.method();
       let body: unknown;
       try {
@@ -81,7 +88,23 @@ async function mockApi(
       } catch {
         body = undefined;
       }
-      const result = reply(path, method, body);
+      let result = reply(path, method, body, url.searchParams);
+      if (!result && path === "/api/calculations/page" && method === "GET") {
+        const legacy = reply(
+          "/api/calculations",
+          "GET",
+          undefined,
+          url.searchParams
+        );
+        if (legacy && Array.isArray(legacy.body))
+          result = {
+            body: {
+              items: legacy.body,
+              nextCursor: null,
+              totalCount: legacy.body.length,
+            },
+          };
+      }
       if (!result) {
         unexpected.push(`${method} ${path}`);
         await route.abort("blockedbyclient");
@@ -96,6 +119,349 @@ async function mockApi(
   );
   return { unexpected, pageErrors };
 }
+
+async function openNewCalculation(page: Page) {
+  await page.goto("/account");
+  await page.getByRole("button", { name: "Новый расчёт", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Новый расчёт" })
+  ).toBeVisible();
+}
+
+async function chooseOption(page: Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
+
+test("устаревшая ссылка на создание возвращает к обзору", async ({ page }) => {
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+  });
+
+  await page.goto("/account/calculations/new");
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(
+    page.getByRole("heading", { name: "Обзор исследований" })
+  ).toBeVisible();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("модальный запуск сохраняет фокус и не переполняет узкий экран", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+  });
+
+  await page.goto("/account");
+  await page.evaluate(() => {
+    document.body.style.minHeight = "300vh";
+  });
+  const trigger = page.getByRole("button", {
+    name: "Новый расчёт",
+    exact: true,
+  });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("aria-modal", "true");
+  await expect(dialog.getByLabel("Что рассчитать")).toBeEnabled();
+  await expect(
+    dialog.getByRole("button", { name: "Загрузить GeoJSON" })
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
+  const bounds = await dialog.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(Math.abs(bounds!.x + bounds!.width / 2 - 180)).toBeLessThanOrEqual(2);
+  expect(Math.abs(bounds!.y + bounds!.height / 2 - 390)).toBeLessThanOrEqual(2);
+
+  const scrollPosition = await page.evaluate(() => window.scrollY);
+  await page.mouse.move(2, 2);
+  await page.mouse.wheel(0, 500);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollPosition);
+
+  for (let index = 0; index < 12; index++) {
+    await page.keyboard.press("Tab");
+    expect(
+      await page.evaluate(() =>
+        Boolean(document.activeElement?.closest('[role="dialog"]'))
+      )
+    ).toBe(true);
+  }
+  await page.keyboard.press("Shift+Tab");
+  expect(
+    await page.evaluate(() =>
+      Boolean(document.activeElement?.closest('[role="dialog"]'))
+    )
+  ).toBe(true);
+
+  await chooseOption(page, "Что рассчитать", "Своя береговая линия");
+  await dialog.getByRole("button", { name: "Загрузить GeoJSON" }).click();
+  const dialogBody = dialog.locator('[data-slot="calculation-dialog-body"]');
+  const bodySize = await dialogBody.evaluate((element) => ({
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+  }));
+  expect(bodySize.scrollHeight).toBeGreaterThan(bodySize.clientHeight);
+  await dialogBody.hover();
+  await page.mouse.wheel(0, 500);
+  expect(
+    await dialogBody.evaluate((element) => element.scrollTop)
+  ).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollPosition);
+  await expect(
+    dialog.getByRole("heading", { name: "Новый расчёт" })
+  ).toBeInViewport();
+  await expect(
+    dialog.getByRole("button", { name: "Запустить расчёт" })
+  ).toBeInViewport();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  await expect(dialog).toBeVisible();
+  await page.mouse.click(2, 2);
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await page.getByRole("link", { name: "Расчёты", exact: true }).click();
+  const historyTrigger = page.getByRole("button", {
+    name: "Новый расчёт",
+    exact: true,
+  });
+  await historyTrigger.click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(historyTrigger).toBeFocused();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("перед запуском объясняются входы, ограничения и справка каждого сценария", async ({
+  page,
+}) => {
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+  });
+
+  await openNewCalculation(page);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  for (const item of [
+    {
+      kind: "dimension",
+      source: "Поставляемая обзорная линия Чёрного моря",
+      limitation: "Оценка зависит от детализации линии",
+      reference: "fractal-analysis-scope.md",
+    },
+    {
+      kind: "dimension_dataset",
+      source: "Ваш GeoJSON LineString",
+      limitation: "Загрузка не подтверждает научную пригодность линии",
+      reference: "coastline-source-selection.md",
+    },
+    {
+      kind: "map",
+      source: "Поставляемая обзорная схема Чёрного моря",
+      limitation: "Карта нужна для ориентира",
+      reference: "black-sea-map.md",
+    },
+    {
+      kind: "erosion",
+      source: "Закреплённые волновые и батиметрические данные",
+      limitation: "Демонстрация CERC, а не прогноз годового размыва",
+      reference: "cerc-one-line-model.md",
+    },
+  ]) {
+    await chooseOption(
+      page,
+      "Что рассчитать",
+      kinds.find((kind) => kind.kind === item.kind)?.title ?? item.kind
+    );
+    await expect(dialog.getByText(item.source, { exact: false })).toBeVisible();
+    await expect(
+      dialog.getByText(item.limitation, { exact: false })
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("link", { name: /откроется в новой вкладке/ })
+    ).toHaveAttribute("href", `/docs/reference/${item.reference}`);
+  }
+  await expect(dialog.getByText("Демонстрационный сценарий")).toBeVisible();
+  await expect(dialog.locator("footer").getByText("Демо")).toBeVisible();
+  await expect(dialog.getByText("до 5 незавершённых расчётов")).toBeVisible();
+  const referencePage = page.waitForEvent("popup");
+  await dialog
+    .getByRole("link", { name: /О модели CERC и её ограничениях/ })
+    .click();
+  const referenceTab = await referencePage;
+  await expect(referenceTab).toHaveURL(
+    /\/docs\/reference\/cerc-one-line-model\.md$/
+  );
+  await expect(
+    referenceTab.getByRole("heading", {
+      level: 1,
+      name: "Инженерная одномерная модель CERC",
+    })
+  ).toBeVisible();
+  await referenceTab.close();
+  await expect(dialog).toBeVisible();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("форма запускает только сценарий, предложенный API", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: [kinds.find((item) => item.kind === "map")] };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      submissions.push(body);
+      return { body: { ...job, kind: "map" } };
+    }
+    if (path === `/api/calculations/${job.id}` && method === "GET")
+      return { body: { ...job, kind: "map" } };
+  });
+
+  await openNewCalculation(page);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await expect(dialog.getByLabel("Что рассчитать")).toContainText("Карта");
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${job.id}$`));
+  expect(submissions).toEqual([{ kind: "map", input: {} }]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("пустой каталог сценариев не позволяет создать расчёт", async ({
+  page,
+}) => {
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: [] };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+  });
+
+  await openNewCalculation(page);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await expect(
+    dialog.getByText("Сейчас нет доступных сценариев для запуска.")
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Запустить расчёт" })
+  ).toBeDisabled();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("история листается сервером и сохраняет безопасные фильтры в URL", async ({
+  page,
+}) => {
+  const older = {
+    ...job,
+    id: "44444444-4444-4444-8444-444444444444",
+    kind: "map",
+    status: "succeeded",
+  } satisfies CalculationJobDto;
+  const newest = {
+    ...job,
+    id: "55555555-5555-4555-8555-555555555555",
+    kind: "dimension",
+    status: "succeeded",
+  } satisfies CalculationJobDto;
+  const observed = await mockApi(page, (path, method, _body, params) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/calculations/page" && method === "GET") {
+      if (params.get("status") === "succeeded")
+        return {
+          body: { items: [newest, older], nextCursor: null, totalCount: 2 },
+        };
+      if (params.get("cursor") === "older-page")
+        return { body: { items: [older], nextCursor: null, totalCount: 3 } };
+      return {
+        body: { items: [newest, job], nextCursor: "older-page", totalCount: 3 },
+      };
+    }
+  });
+
+  await page.goto("/account/calculations");
+  await expect(page.getByText("Найдено расчётов: 3")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "История расчётов" }).locator("li")
+  ).toHaveCount(2);
+  await page.getByRole("button", { name: "Следующая страница" }).click();
+  await expect(page).toHaveURL(/cursor=older-page/);
+  await expect(
+    page.getByRole("region", { name: "История расчётов" }).locator("li")
+  ).toHaveCount(1);
+  await chooseOption(page, "Статус", "Завершён");
+  await expect(page).toHaveURL(/status=succeeded/);
+  await expect(page).not.toHaveURL(/cursor=/);
+  await expect(page.getByText("Найдено расчётов: 2")).toBeVisible();
+  await chooseOption(page, "На странице", "10");
+  await expect(page).toHaveURL(/limit=10/);
+  await page.getByRole("button", { name: "Сбросить фильтры" }).click();
+  await expect(page).toHaveURL(/\/account\/calculations$/);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("форма отдельно повторяет загрузку сценариев и наборов", async ({
+  page,
+}) => {
+  let datasetRequests = 0;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") {
+      datasetRequests++;
+      return datasetRequests <= 2
+        ? { status: 503, body: { message: "Наборы временно недоступны" } }
+        : { body: [] };
+    }
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+  });
+
+  await openNewCalculation(page);
+  await expect(page.getByRole("alert")).toContainText(
+    "Наборы временно недоступны"
+  );
+  await page.getByRole("button", { name: "Повторить загрузку" }).click();
+  await expect(page.getByLabel("Что рассчитать")).toBeEnabled();
+  expect(datasetRequests).toBeGreaterThanOrEqual(3);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
 
 test("кабинет требует вход; регистрация требует одноразовый ключ", async ({
   page,
@@ -186,7 +552,7 @@ test("ошибка входа видна; повторный вход откры
     .click();
   await expect(page).toHaveURL(/\/account$/);
   await expect(
-    page.getByRole("heading", { name: "Мои исследования" })
+    page.getByRole("heading", { name: "Обзор исследований" })
   ).toBeVisible();
   expect(attempts).toBe(2);
   expect(observed.unexpected).toEqual([]);
@@ -220,23 +586,19 @@ test("кабинет показывает ошибку расчёта и поз�
       return { body: job };
   });
 
-  await page.goto("/account");
-  await expect(
-    page.getByRole("heading", { name: "Мои исследования" })
-  ).toBeVisible();
-  await page.getByLabel("Сценарий").selectOption("erosion");
+  await openNewCalculation(page);
+  await chooseOption(page, "Что рассчитать", "Размыв");
   await page.getByLabel("Шаги волнового ряда (1–48)").fill("4");
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page.getByRole("alert")).toContainText(
     "Вычислитель временно недоступен"
   );
+  await expect(page.getByRole("alert")).toContainText("Параметры сохранены");
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${job.id}$`));
   await expect(
     page.getByRole("region", { name: "Результат расчёта" })
   ).toContainText(job.id);
-  await expect(
-    page.getByRole("region", { name: "История расчётов" })
-  ).toContainText("Размыв");
   expect(requests).toEqual([
     { kind: "erosion", input: { steps: 4 } },
     { kind: "erosion", input: { steps: 4 } },
@@ -274,7 +636,9 @@ test("загрузка своего GeoJSON и запуск dimension через
       return { body: customJob };
   });
 
-  await page.goto("/account");
+  await openNewCalculation(page);
+  await chooseOption(page, "Что рассчитать", "Своя береговая линия");
+  await page.getByRole("button", { name: "Загрузить GeoJSON" }).click();
   await page.getByLabel("Файл GeoJSON").setInputFiles({
     name: "coast.geojson",
     mimeType: "application/geo+json",
@@ -294,9 +658,11 @@ test("загрузка своего GeoJSON и запуск dimension через
   await page
     .getByLabel("Лицензия или условия использования")
     .fill(dataset.license);
-  await page.getByRole("button", { name: "Загрузить набор" }).click();
-  await expect(page.getByLabel("Сценарий")).toHaveValue("dimension_dataset");
-  await expect(page.getByLabel("Ваш набор данных")).toHaveValue(dataset.id);
+  await page.getByRole("button", { name: "Сохранить набор" }).click();
+  await expect(page.getByLabel("Что рассчитать")).toContainText(
+    "Своя береговая линия"
+  );
+  await expect(page.getByLabel("Набор данных")).toContainText(dataset.name);
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(
     page.getByRole("region", { name: "Результат расчёта" })
@@ -324,9 +690,7 @@ test("загрузка своего GeoJSON и запуск dimension через
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("без файла используется демонстрационный GeoJSON с собственным паспортом", async ({
-  page,
-}) => {
+test("встроенный пример GeoJSON сохраняется при запуске", async ({ page }) => {
   const uploads: unknown[] = [];
   const jobs: unknown[] = [];
   const example = { ...dataset, name: defaultCoastlineDataset.name };
@@ -354,15 +718,13 @@ test("без файла используется демонстрационны�
       return { body: customJob };
   });
 
-  await page.goto("/account");
+  await openNewCalculation(page);
+  await chooseOption(page, "Что рассчитать", "Своя береговая линия");
   await expect(
-    page.getByText("По умолчанию: Пример: участок Сочи", { exact: false })
+    page.getByText("Пример Сочи (OpenStreetMap, ODbL)", { exact: false })
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Использовать пример GeoJSON" })
-    .click();
-  await expect(page.getByLabel("Ваш набор данных")).toHaveValue(example.id);
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${job.id}$`));
 
   expect(uploads).toEqual([defaultCoastlineDataset]);
   expect(jobs).toEqual([
@@ -402,15 +764,238 @@ test("расчёт своего контура без загруженного �
       return { body: customJob };
   });
 
-  await page.goto("/account");
-  await page.getByLabel("Сценарий").selectOption("dimension_dataset");
-  await expect(page.getByLabel("Ваш набор данных")).toHaveValue("");
+  await openNewCalculation(page);
+  await chooseOption(page, "Что рассчитать", "Своя береговая линия");
+  await expect(page.getByLabel("Набор данных")).toContainText(
+    "Встроенный пример Сочи"
+  );
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page.getByLabel("Ваш набор данных")).toHaveValue(example.id);
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${job.id}$`));
+  await expect(
+    page.getByRole("region", { name: "Результат расчёта" })
+  ).toContainText(job.id);
   expect(uploads).toEqual([defaultCoastlineDataset]);
   expect(jobs).toEqual([
     { kind: "dimension_dataset", input: { datasetId: example.id } },
   ]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("отмена расчёта требует подтверждения и сохраняет историю", async ({
+  page,
+}) => {
+  let cancelled = false;
+  let cancelRequests = 0;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/calculations" && method === "GET")
+      return { body: [{ ...job, status: cancelled ? "cancelled" : "queued" }] };
+    if (path === `/api/calculations/${job.id}/cancel` && method === "POST") {
+      cancelRequests++;
+      cancelled = true;
+      return { status: 201, body: { ...job, status: "cancelled" } };
+    }
+  });
+
+  await page.goto("/account/calculations");
+  await page.getByRole("button", { name: "Отменить", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Отменить расчёт?" });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  expect(cancelRequests).toBe(0);
+
+  await page.getByRole("button", { name: "Отменить", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Отменить расчёт", exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.getByRole("region", { name: "История расчётов" }).getByText("Отменён")
+  ).toBeVisible();
+  expect(cancelRequests).toBe(1);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("реестр открывает краткий просмотр и сопоставляет два совместимых отчёта", async ({
+  page,
+}) => {
+  const firstReport = {
+    ...job,
+    status: "succeeded" as const,
+    resultSummary: { area: 12.5 },
+    resultSchemaVersion: 1,
+  };
+  const secondReport = {
+    ...firstReport,
+    id: "44444444-4444-4444-8444-444444444444",
+    resultSummary: { area: 14.75 },
+  };
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/calculations" && method === "GET")
+      return { body: [firstReport, secondReport] };
+    if (path === `/api/calculations/${firstReport.id}` && method === "GET")
+      return { body: firstReport };
+    if (path === `/api/calculations/${secondReport.id}` && method === "GET")
+      return { body: secondReport };
+  });
+
+  await page.goto("/account/calculations");
+  await page
+    .getByRole("button", { name: "Кратко", exact: true })
+    .first()
+    .click();
+  const quickView = page.getByRole("dialog", { name: "Размыв" });
+  await expect(quickView).toContainText("Опубликовано файлов: 0.");
+  await quickView.getByRole("button", { name: "Закрыть" }).click();
+  await expect(quickView).toBeHidden();
+
+  const compareControls = page.getByLabel("Сравнить", { exact: true });
+  await compareControls.nth(0).check();
+  await compareControls.nth(1).check();
+  await page
+    .getByRole("button", { name: "Сравнить отчёты", exact: true })
+    .click();
+  const comparison = page.getByRole("dialog", { name: "Сравнение отчётов" });
+  await expect(comparison).toContainText("Отчёт A");
+  await expect(comparison).toContainText("Отчёт B");
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("полный паспорт показывает происхождение и не смешивает расчёты при переходе", async ({
+  page,
+}) => {
+  const first = {
+    ...job,
+    kind: "dimension_dataset",
+    status: "succeeded" as const,
+    input: { datasetId: dataset.id },
+    resultSummary: {
+      fileCount: 1,
+      totalBytes: 256,
+      metrics: { "dimension.json": { dimension: 1.25 } },
+      provenance: {
+        datasetId: dataset.id,
+        datasetSchemaVersion: 1,
+        source: "Локальная съёмка",
+        sourceRevision: "2026-09",
+        license: "Тестовое использование",
+        crs: "EPSG:4326",
+        coordinateUnit: "degrees",
+        pointCount: 3,
+        sha256: "a".repeat(64),
+        files: [
+          { path: "input.geojson", sizeBytes: 78, sha256: "a".repeat(64) },
+        ],
+      },
+    },
+    resultSchemaVersion: 1,
+    coreVersion: `sha256:${"b".repeat(64)}`,
+    methodId: "box-counting",
+    methodRevision: "baseline-1",
+    finishedAt: "2026-09-29T12:03:00.000Z",
+    artifacts: [
+      {
+        id: "55555555-5555-4555-8555-555555555555",
+        category: "output",
+        filename: "dimension.json",
+        contentType: "application/json",
+        sizeBytes: 256,
+        sha256: "c".repeat(64),
+        downloadUrl: "https://example.test/signed-output",
+      },
+    ],
+  } satisfies CalculationJobDto;
+  const second = {
+    ...job,
+    id: "66666666-6666-4666-8666-666666666666",
+  } satisfies CalculationJobDto;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === `/api/calculations/${first.id}` && method === "GET")
+      return { body: first };
+    if (path === `/api/calculations/${second.id}` && method === "GET")
+      return { body: second };
+  });
+  await page.route(`**/api/calculations/${second.id}`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(second),
+    });
+  });
+
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto(`/account/calculations/${first.id}`);
+  const detail = page.getByRole("region", { name: "Результат расчёта" });
+  await expect(detail).toContainText("Локальная съёмка");
+  await expect(detail).toContainText("box-counting");
+  await expect(detail).toContainText("baseline-1");
+  await expect(detail).toContainText("input.geojson");
+  await expect(detail).toContainText("c".repeat(64));
+  await expect(detail).not.toContainText("signed-output");
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
+
+  await page.evaluate((id) => {
+    window.history.pushState({}, "", `/account/calculations/${id}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, second.id);
+  await expect(detail).toContainText("Загружаем расчёт…");
+  await expect(detail).not.toContainText("Локальная съёмка");
+  await expect(detail).toContainText(second.id);
+  await expect(detail).toContainText("Демонстрационный сценарий");
+  await expect(detail).toContainText(
+    "Происхождение входных файлов не записано"
+  );
+
+  let releaseFirst = () => {};
+  const heldFirst = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let markFirstSettled = () => {};
+  const firstSettled = new Promise<void>((resolve) => {
+    markFirstSettled = resolve;
+  });
+  await page.route(`**/api/calculations/${first.id}`, async (route) => {
+    await heldFirst;
+    try {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(first),
+      });
+    } finally {
+      markFirstSettled();
+    }
+  });
+  const oldRequest = page.waitForRequest(`**/api/calculations/${first.id}`);
+  await page.evaluate((id) => {
+    window.history.pushState({}, "", `/account/calculations/${id}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, first.id);
+  await oldRequest;
+  await page.evaluate((id) => {
+    window.history.pushState({}, "", `/account/calculations/${id}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, second.id);
+  await expect(detail).toContainText(second.id);
+  releaseFirst();
+  await firstSettled;
+  await expect(detail).not.toContainText("Локальная съёмка");
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
