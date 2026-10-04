@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +9,21 @@ const content = join(root, "packages/docs/content");
 const sdd = join(root, "sdd");
 const maintenance = join(root, "todo/maintenance.md");
 const web = join(root, "apps/lito-web");
+
+// Linux checkout ограничивает каждый компонент пути 255 байтами, не символами.
+const trackedPaths = execFileSync(
+  "git",
+  ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+  { cwd: root },
+).toString("utf8");
+for (const filename of trackedPaths.split("\0").filter(Boolean)) {
+  for (const component of filename.split("/")) {
+    assert.ok(
+      Buffer.byteLength(component, "utf8") <= 255,
+      `${filename}: компонент пути длиннее 255 байт для Linux checkout`,
+    );
+  }
+}
 
 function filesIn(directory, skip = new Set()) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

@@ -34,6 +34,31 @@ API, worker и nginx доступны лишь внутри Docker-сети, п�
 Не объединять эти файлы с dev Compose: там жёстко задан внутренний MinIO endpoint,
 другие init/ports/env_file. Пример не изменяет работу `pnpm up` и `.env.local`.
 
+### Возможный гибрид с Vercel (оценка, не настроен)
+
+Текущий Vite/React web можно в перспективе публиковать как статический сайт на
+[Vercel](https://vercel.com/docs/frameworks/frontend/vite), но это не замена
+постоянно работающим NestJS API и Node worker. Worker опрашивает PostgreSQL,
+запускает Go CLI и использует временный диск; [Vercel Functions](https://vercel.com/docs/functions)
+запускаются по запросам и могут масштабироваться до нуля. Даже доступный
+[Go runtime](https://vercel.com/docs/functions/runtimes/go) рассчитан на HTTP
+handler, а не на этот долгоживущий worker. Для полной системы всё равно нужны
+отдельные API/worker, PostgreSQL и приватный AWS S3. Это может быть VPS,
+управляемый контейнерный сервис или другая пригодная платформа — покупка
+выделенного физического сервера сейчас не обязательна.
+
+До Vercel-пилота нужно настроить сборку monorepo с доступом к `packages/*`
+([инструкция Vercel](https://vercel.com/docs/monorepos)), SPA fallback для
+глубоких маршрутов ([Vite SPA](https://vercel.com/docs/frameworks/frontend/vite))
+и `/api` к внешнему backend через проверенный HTTPS-proxy или согласованное
+изменение клиента. Сейчас web-клиент жёстко обращается к `/api`, Vite proxy
+работает только локально; auth использует `SameSite=Strict` cookie. Проверить
+Origin, `Secure`, CORS, forwarded IP, signed URL и cache/no-store сквозным
+тестом. Отдельно оценить 184-МБ SVG в `public/gallery/`: это крупный статический
+актив для каждого релиза; [ограничения загрузки Vercel](https://vercel.com/docs/limits)
+зависят от способа развёртывания и тарифа. До этого раздел не является
+готовой инструкцией по публикации web.
+
 ### Почему S3 снаружи
 
 Один диск для БД и всех результатов увеличивает риск потери всего исследования при
