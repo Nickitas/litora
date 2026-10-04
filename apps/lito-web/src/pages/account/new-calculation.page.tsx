@@ -30,14 +30,17 @@ import { DatasetUpload } from "./ui/dataset-upload";
 
 export function NewCalculationDialog({
   onOpenChange,
+  onRestoreFocus,
 }: {
   onOpenChange: (open: boolean) => void;
+  onRestoreFocus: () => void;
 }) {
   const navigate = useNavigate();
   const [kinds, setKinds] = useState<CalculationKindDto[]>([]);
   const [datasets, setDatasets] = useState<DatasetDto[]>([]);
   const [kind, setKind] = useState<CalculationKind>("dimension");
   const [datasetId, setDatasetId] = useState("");
+  const [datasetSelectOpen, setDatasetSelectOpen] = useState(false);
   const [steps, setSteps] = useState(3);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -117,6 +120,10 @@ export function NewCalculationDialog({
     <DialogContent
       aria-modal="true"
       className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-3xl flex-col overflow-hidden p-0"
+      onCloseAutoFocus={(event) => {
+        event.preventDefault();
+        onRestoreFocus();
+      }}
       onEscapeKeyDown={(event) => {
         if (busy) event.preventDefault();
       }}
@@ -227,7 +234,10 @@ export function NewCalculationDialog({
                       setDatasetUploadOpen(false);
                     }}
                   >
-                    <SelectTrigger id="calculation-kind" aria-label="Что рассчитать">
+                    <SelectTrigger
+                      id="calculation-kind"
+                      aria-label="Что рассчитать"
+                    >
                       <SelectValue placeholder="Выберите сценарий" />
                     </SelectTrigger>
                     <SelectContent>
@@ -306,7 +316,9 @@ export function NewCalculationDialog({
                     2. Параметры
                   </h3>
                   <div className="mt-4 space-y-2">
-                    <Label htmlFor="erosion-steps">Шаги волнового ряда (1–48)</Label>
+                    <Label htmlFor="erosion-steps">
+                      Шаги волнового ряда (1–48)
+                    </Label>
                     <Input
                       id="erosion-steps"
                       type="number"
@@ -334,12 +346,18 @@ export function NewCalculationDialog({
                   <div className="mt-4 space-y-2">
                     <Label htmlFor="calculation-dataset">Набор данных</Label>
                     <Select
+                      open={datasetSelectOpen}
+                      onOpenChange={setDatasetSelectOpen}
                       value={datasetId || "__example__"}
-                      onValueChange={(value) =>
-                        setDatasetId(value === "__example__" ? "" : value)
-                      }
+                      onValueChange={(value) => {
+                        if (datasetSelectOpen)
+                          setDatasetId(value === "__example__" ? "" : value);
+                      }}
                     >
-                      <SelectTrigger id="calculation-dataset" aria-label="Набор данных">
+                      <SelectTrigger
+                        id="calculation-dataset"
+                        aria-label="Набор данных"
+                      >
                         <SelectValue>
                           {selectedDataset
                             ? `${selectedDataset.name} · ${selectedDataset.pointCount} точек`

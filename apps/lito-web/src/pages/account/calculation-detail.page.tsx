@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import type {
   CalculationArtifactDto,
@@ -18,6 +18,9 @@ import {
   useCalculationKinds,
 } from "./model/use-calculations";
 import { CancelCalculationDialog } from "./ui/cancel-calculation-dialog";
+import { CalculationImagePreview } from "./ui/calculation-image-preview";
+import { isPreviewableImage } from "./ui/calculation-image-preview.utils";
+import { CalculationMetadataDownload } from "./ui/calculation-metadata-download";
 import { CalculationTitle } from "./ui/calculation-title";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -226,6 +229,7 @@ function CalculationDetail({ jobId }: { jobId: string }) {
   const { job, loading, error, reload } = useCalculation(jobId);
   const { kinds } = useCalculationKinds();
   const [cancelOpen, setCancelOpen] = useState(false);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   async function cancel(selectedJob: CalculationJobDto) {
     await api.cancelCalculation(selectedJob.id);
@@ -233,9 +237,7 @@ function CalculationDetail({ jobId }: { jobId: string }) {
   }
 
   const summary = job?.resultSummary;
-  const images = job?.artifacts.filter((file) =>
-    file.contentType.startsWith("image/")
-  );
+  const images = job?.artifacts.filter(isPreviewableImage);
 
   return (
     <section className="min-w-0 space-y-6" aria-label="Результат расчёта">
@@ -259,7 +261,11 @@ function CalculationDetail({ jobId }: { jobId: string }) {
           </p>
         </div>
         {job && isActiveCalculation(job) && (
-          <Button variant="destructive" onClick={() => setCancelOpen(true)}>
+          <Button
+            ref={cancelButtonRef}
+            variant="destructive"
+            onClick={() => setCancelOpen(true)}
+          >
             Отменить расчёт
           </Button>
         )}
@@ -372,20 +378,12 @@ function CalculationDetail({ jobId }: { jobId: string }) {
               </h2>
               <div className="grid gap-4 md:grid-cols-2">
                 {images.map((file) => (
-                  <figure
-                    className="overflow-hidden rounded-xl border bg-card"
+                  <CalculationImagePreview
                     key={file.id}
-                  >
-                    <img
-                      src={file.downloadUrl}
-                      alt={`Отчёт: ${file.filename}`}
-                      loading="lazy"
-                      className="max-h-96 w-full bg-white object-contain"
-                    />
-                    <figcaption className="p-3 text-sm break-all">
-                      {file.filename}
-                    </figcaption>
-                  </figure>
+                    file={file}
+                    alt={`Отчёт: ${file.filename}`}
+                    onRefreshLinks={reload}
+                  />
                 ))}
               </div>
             </section>
@@ -438,12 +436,15 @@ function CalculationDetail({ jobId }: { jobId: string }) {
             className="space-y-4 rounded-2xl border bg-card p-5 text-card-foreground"
             aria-labelledby="calculation-versions-heading"
           >
-            <h2
-              id="calculation-versions-heading"
-              className="text-xl font-semibold"
-            >
-              Метод и версии
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2
+                id="calculation-versions-heading"
+                className="text-xl font-semibold"
+              >
+                Метод и версии
+              </h2>
+              <CalculationMetadataDownload job={job} />
+            </div>
             <dl className="grid gap-4 text-sm sm:grid-cols-2">
               <DetailField label="Метод">
                 <code className="break-all">{textOrMissing(job.methodId)}</code>
@@ -481,6 +482,10 @@ function CalculationDetail({ jobId }: { jobId: string }) {
               </DetailField>
             </dl>
             <p className="text-xs text-muted-foreground">
+              Паспорт JSON содержит метаданные и контрольные суммы без самих
+              файлов и временных ссылок на них.
+            </p>
+            <p className="text-xs text-muted-foreground">
               Ревизия реализации не означает научную аттестацию. Точный повтор
               исторической версии ядра пока недоступен.
             </p>
@@ -488,7 +493,10 @@ function CalculationDetail({ jobId }: { jobId: string }) {
 
           <Collapsible className="rounded-2xl border bg-card p-5 text-card-foreground">
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start px-0 font-medium">
+              <Button
+                variant="ghost"
+                className="w-full justify-start px-0 font-medium"
+              >
                 Исходные поля результата JSON
               </Button>
             </CollapsibleTrigger>
@@ -506,6 +514,7 @@ function CalculationDetail({ jobId }: { jobId: string }) {
         onOpenChange={setCancelOpen}
         onConfirm={cancel}
         title="Отменить расчёт"
+        onRestoreFocus={() => cancelButtonRef.current?.focus()}
       />
     </section>
   );

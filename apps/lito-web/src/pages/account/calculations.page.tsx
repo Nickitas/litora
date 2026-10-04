@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type FormEvent } from "react";
+import { lazy, Suspense, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { CalculationJobDto, CalculationKindDto } from "@litora/contracts";
 import { CalculationStatus } from "@/entities/calculation/ui/calculation-status";
@@ -22,6 +22,7 @@ import {
 } from "./model/use-calculations";
 import { CancelCalculationDialog } from "./ui/cancel-calculation-dialog";
 import { CalculationTitle } from "./ui/calculation-title";
+import { HistoryDateFilter } from "./ui/history-date-filter";
 
 const CalculationQuickViewDialog = lazy(() =>
   import("./ui/calculation-quick-view-dialog").then((m) => ({
@@ -46,8 +47,8 @@ function CalculationCard({
   kinds: CalculationKindDto[];
   comparisonIds: string[];
   onCompareChange: (jobId: string) => void;
-  onQuickView: (jobId: string) => void;
-  onCancel: (job: CalculationJobDto) => void;
+  onQuickView: (jobId: string, trigger: HTMLButtonElement) => void;
+  onCancel: (job: CalculationJobDto, trigger: HTMLButtonElement) => void;
 }) {
   const comparisonSelected = comparisonIds.includes(job.id);
   const comparisonUnavailable =
@@ -90,7 +91,7 @@ function CalculationCard({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => onQuickView(job.id)}
+            onClick={(event) => onQuickView(job.id, event.currentTarget)}
           >
             Кратко
           </Button>
@@ -102,7 +103,7 @@ function CalculationCard({
               type="button"
               variant="link"
               size="sm"
-              onClick={() => onCancel(job)}
+              onClick={(event) => onCancel(job, event.currentTarget)}
             >
               Отменить
             </Button>
@@ -136,6 +137,7 @@ export function CalculationsPage() {
   const [quickViewJobId, setQuickViewJobId] = useState<string>();
   const [comparisonIds, setComparisonIds] = useState<string[]>([]);
   const [comparisonOpen, setComparisonOpen] = useState(false);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   function changeFilter(name: string, value: string) {
     setComparisonIds([]);
@@ -208,7 +210,11 @@ export function CalculationsPage() {
               value={searchParams.get("limit") ?? "20"}
               onValueChange={(value) => changeFilter("limit", value)}
             >
-              <SelectTrigger id="history-limit" aria-label="На странице" className="w-24">
+              <SelectTrigger
+                id="history-limit"
+                aria-label="На странице"
+                className="w-24"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -270,20 +276,20 @@ export function CalculationsPage() {
           </div>
           <div className="min-w-0 space-y-2">
             <Label htmlFor="history-from">С даты, UTC</Label>
-            <Input
+            <HistoryDateFilter
               id="history-from"
-              type="date"
+              label="С даты, UTC"
               value={searchParams.get("from") ?? ""}
-              onChange={(event) => changeFilter("from", event.target.value)}
+              onChange={(value) => changeFilter("from", value)}
             />
           </div>
           <div className="min-w-0 space-y-2">
             <Label htmlFor="history-to">По дату, UTC</Label>
-            <Input
+            <HistoryDateFilter
               id="history-to"
-              type="date"
+              label="По дату, UTC"
               value={searchParams.get("to") ?? ""}
-              onChange={(event) => changeFilter("to", event.target.value)}
+              onChange={(value) => changeFilter("to", value)}
             />
           </div>
         </div>
@@ -353,7 +359,10 @@ export function CalculationsPage() {
               type="button"
               size="sm"
               disabled={comparisonIds.length !== 2}
-              onClick={() => setComparisonOpen(true)}
+              onClick={(event) => {
+                returnFocusRef.current = event.currentTarget;
+                setComparisonOpen(true);
+              }}
             >
               {comparisonIds.length === 2
                 ? "Сравнить отчёты"
@@ -395,8 +404,14 @@ export function CalculationsPage() {
                 kinds={kinds}
                 comparisonIds={comparisonIds}
                 onCompareChange={toggleComparison}
-                onQuickView={setQuickViewJobId}
-                onCancel={setJobForCancellation}
+                onQuickView={(jobId, trigger) => {
+                  returnFocusRef.current = trigger;
+                  setQuickViewJobId(jobId);
+                }}
+                onCancel={(job, trigger) => {
+                  returnFocusRef.current = trigger;
+                  setJobForCancellation(job);
+                }}
               />
             ))}
           </ul>
@@ -433,6 +448,7 @@ export function CalculationsPage() {
         }}
         onConfirm={cancel}
         title="Отменить расчёт"
+        onRestoreFocus={() => returnFocusRef.current?.focus()}
       />
       {quickViewJobId && (
         <Suspense fallback={null}>
@@ -440,6 +456,7 @@ export function CalculationsPage() {
             jobId={quickViewJobId}
             kinds={kinds}
             onClose={() => setQuickViewJobId(undefined)}
+            onRestoreFocus={() => returnFocusRef.current?.focus()}
           />
         </Suspense>
       )}
@@ -450,6 +467,7 @@ export function CalculationsPage() {
             rightJobId={comparisonIds[1]}
             kinds={kinds}
             onClose={() => setComparisonOpen(false)}
+            onRestoreFocus={() => returnFocusRef.current?.focus()}
           />
         </Suspense>
       )}

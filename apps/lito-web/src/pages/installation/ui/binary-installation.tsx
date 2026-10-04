@@ -7,6 +7,7 @@ import {
 import { Check, AlertCircle, Info, Cpu } from "lucide-react";
 import { motion } from "motion/react";
 import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
+import { Button } from "@/shared/shadcn/components/ui/button";
 
 const osInstructions = {
   linux: {
@@ -140,10 +141,13 @@ export const BinaryInstallation = () => {
       <div className="border-b border-border">
         <div className="-mb-px flex flex-wrap gap-2">
           {osTypes.map((os) => (
-            <button
+            <Button
               key={os}
+              type="button"
+              variant="ghost"
+              aria-pressed={activeOs === os}
               onClick={() => setActiveOs(os)}
-              className={`relative min-h-11 px-4 py-2 font-medium transition-colors ${
+              className={`relative rounded-none px-4 font-medium transition-colors ${
                 activeOs === os
                   ? "border-b-2 border-primary text-foreground"
                   : "text-muted-foreground hover:border-b-2 hover:border-border hover:text-foreground"
@@ -153,7 +157,7 @@ export const BinaryInstallation = () => {
                 <Cpu className="size-4" />
                 <span>{osInstructions[os].title}</span>
               </div>
-            </button>
+            </Button>
           ))}
         </div>
       </div>

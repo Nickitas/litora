@@ -1,4 +1,5 @@
 import { useRouteError } from "react-router-dom";
+import { Button } from "@/shared/shadcn/components/ui/button";
 
 export function RouteError() {
   const error = useRouteError();
@@ -20,19 +21,12 @@ export function RouteError() {
           : "Произошла неожиданная ошибка. Попробуйте обновить страницу."}
       </p>
       <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        >
+        <Button type="button" onClick={() => window.location.reload()}>
           Обновить страницу
-        </button>
-        <a
-          href="/"
-          className="rounded-lg border border-border px-4 py-2 font-medium text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        >
-          На главную
-        </a>
+        </Button>
+        <Button asChild variant="outline">
+          <a href="/">На главную</a>
+        </Button>
       </div>
       {moduleUnavailable && (
         <p className="text-sm text-muted-foreground">

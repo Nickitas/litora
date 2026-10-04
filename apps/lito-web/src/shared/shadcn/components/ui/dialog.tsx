@@ -27,12 +27,13 @@ function DialogContent({
     <DialogPrimitive.Portal data-slot="dialog-portal">
       <DialogPrimitive.Overlay
         data-slot="dialog-overlay"
-        className="fixed inset-0 z-50 bg-foreground/40"
+        className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-[3px] duration-200 data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:data-[state=open]:animate-none dark:bg-background/70"
       />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        aria-modal="true"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-background text-foreground shadow-xl outline-none",
+          "fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-background text-foreground shadow-xl duration-200 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 motion-reduce:data-[state=open]:animate-none",
           className
         )}
         {...props}

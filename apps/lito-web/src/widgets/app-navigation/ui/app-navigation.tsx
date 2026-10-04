@@ -5,8 +5,14 @@ import { ROUTES } from "@/shared/config/routes";
 import { DesktopNavigation } from "./components/desktop-navigation";
 import { Brand } from "./components/brand";
 import { DesktopActions } from "./components/desktop-actions";
-import { ThemeSwitcher } from "@/shared/ui/theme-switcher";
+import { Button } from "@/shared/shadcn/components/ui/button";
 import { ScrollProgress } from "@/shared/shadcn/ui/scroll-progress";
+
+const ThemeSwitcher = lazy(() =>
+  import("@/shared/ui/theme-switcher").then((module) => ({
+    default: module.ThemeSwitcher,
+  }))
+);
 
 const MobileMenu = lazy(() =>
   import("./components/mobile-menu").then((module) => ({
@@ -49,15 +55,27 @@ export function Navbar() {
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2 sm:gap-4">
-            <ThemeSwitcher />
+            <Suspense
+              fallback={
+                <div
+                  role="status"
+                  aria-label="Загрузка выбора темы"
+                  className="size-11 animate-pulse rounded-full bg-muted"
+                />
+              }
+            >
+              <ThemeSwitcher />
+            </Suspense>
             <DesktopActions />
           </div>
 
           {/* Animated Mobile Menu Button */}
-          <button
+          <Button
             ref={mobileMenuButtonRef}
             type="button"
-            className="group relative flex size-11 items-center justify-center rounded-lg border border-input bg-background transition-all hover:border-ring hover:bg-muted md:hidden"
+            variant="outline"
+            size="icon"
+            className="relative size-11 md:hidden"
             onClick={() => {
               setMobileMenuRequested(true);
               setMobileMenuOpen(!mobileMenuOpen);
@@ -82,7 +100,7 @@ export function Navbar() {
                 }`}
               />
             </div>
-          </button>
+          </Button>
         </div>
       </div>
 

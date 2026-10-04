@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Navigate, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "@/features/auth";
 import { Dialog } from "@/shared/shadcn/components/ui/dialog";
@@ -12,20 +12,28 @@ const navigation = [
 export function AccountPage() {
   const auth = useAuth();
   const [newCalculationOpen, setNewCalculationOpen] = useState(false);
+  const newCalculationTriggerRef = useRef<HTMLElement | null>(null);
+
+  function changeNewCalculationOpen(open: boolean) {
+    if (open && document.activeElement instanceof HTMLElement) {
+      newCalculationTriggerRef.current = document.activeElement;
+    }
+    setNewCalculationOpen(open);
+  }
 
   if (auth.loading) return <p role="status">Проверяем сессию…</p>;
   if (!auth.isAuthenticated || !auth.user)
     return <Navigate to="/login" replace />;
 
   return (
-    <Dialog open={newCalculationOpen} onOpenChange={setNewCalculationOpen}>
+    <Dialog open={newCalculationOpen} onOpenChange={changeNewCalculationOpen}>
       <div className="mx-auto max-w-[1440px] space-y-6">
         <header>
           <p className="text-sm text-muted-foreground">
             Личный кабинет · {auth.user.name}
           </p>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Рабочее место для запуска, контроля и изучения собственных расчётов.
+            Рабочее место для запуска, контроля и изучения.
           </p>
         </header>
         <div className="grid items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -39,10 +47,9 @@ export function AccountPage() {
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) =>
-                  `inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:flex ${
-                    isActive
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  `inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:flex ${isActive
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`
                 }
               >
@@ -53,7 +60,10 @@ export function AccountPage() {
           <Outlet />
         </div>
         {newCalculationOpen && (
-          <NewCalculationDialog onOpenChange={setNewCalculationOpen} />
+          <NewCalculationDialog
+            onOpenChange={changeNewCalculationOpen}
+            onRestoreFocus={() => newCalculationTriggerRef.current?.focus()}
+          />
         )}
       </div>
     </Dialog>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { X } from "lucide-react";
 import type { CalculationJobDto, CalculationKindDto } from "@litora/contracts";
 import { CalculationStatus } from "@/entities/calculation/ui/calculation-status";
 import { api } from "@/shared/api/client";
@@ -11,10 +12,13 @@ import {
 } from "@/shared/shadcn/components/ui/collapsible";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogTitle,
 } from "@/shared/shadcn/components/ui/dialog";
+import { CalculationImagePreview } from "./calculation-image-preview";
+import { isPreviewableImage } from "./calculation-image-preview.utils";
 import { CalculationTitle } from "./calculation-title";
 
 function reportsAreComparable(
@@ -41,9 +45,7 @@ function ReportColumn({
   kinds: CalculationKindDto[];
   onClose: () => void;
 }) {
-  const image = job.artifacts.find((file) =>
-    file.contentType.startsWith("image/")
-  );
+  const image = job.artifacts.find(isPreviewableImage);
 
   return (
     <article className="min-w-0 space-y-4 rounded-xl border bg-card p-4 text-card-foreground">
@@ -60,17 +62,11 @@ function ReportColumn({
         </p>
       </div>
       {image ? (
-        <figure className="overflow-hidden rounded-lg border">
-          <img
-            src={image.downloadUrl}
-            alt={`Отчёт ${label.toLowerCase()}: ${image.filename}`}
-            className="max-h-72 w-full bg-white object-contain"
-            loading="lazy"
-          />
-          <figcaption className="p-2 text-xs text-muted-foreground">
-            {image.filename}
-          </figcaption>
-        </figure>
+        <CalculationImagePreview
+          file={image}
+          alt={`Отчёт ${label.toLowerCase()}: ${image.filename}`}
+          compact
+        />
       ) : (
         <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
           Визуальный отчёт не опубликован.
@@ -91,18 +87,21 @@ function ReportColumn({
       </dl>
       <Collapsible>
         <CollapsibleTrigger asChild>
-          <Button variant="ghost" className="w-full justify-start px-0 font-medium">
+          <Button
+            variant="ghost"
+            className="w-full justify-start px-0 font-medium"
+          >
             Вход и метрики JSON
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-        <pre className="mt-2 max-h-56 overflow-auto rounded-lg bg-muted p-3 text-xs">
-          {JSON.stringify(
-            { input: job.input, result: job.resultSummary },
-            null,
-            2
-          )}
-        </pre>
+          <pre className="mt-2 max-h-56 overflow-auto rounded-lg bg-muted p-3 text-xs">
+            {JSON.stringify(
+              { input: job.input, result: job.resultSummary },
+              null,
+              2
+            )}
+          </pre>
         </CollapsibleContent>
       </Collapsible>
       <Link
@@ -121,11 +120,13 @@ export function CalculationComparisonDialog({
   rightJobId,
   kinds,
   onClose,
+  onRestoreFocus,
 }: {
   leftJobId: string;
   rightJobId: string;
   kinds: CalculationKindDto[];
   onClose: () => void;
+  onRestoreFocus?: () => void;
 }) {
   const [jobs, setJobs] = useState<[CalculationJobDto, CalculationJobDto]>();
   const [error, setError] = useState("");
@@ -155,69 +156,91 @@ export function CalculationComparisonDialog({
     jobs?.[0].methodRevision !== jobs?.[1].methodRevision;
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-6xl overflow-y-auto p-0">
-      <div className="space-y-5 p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <DialogTitle className="text-2xl font-semibold">
-              Сравнение отчётов
-            </DialogTitle>
-            <DialogDescription className="mt-2 max-w-3xl text-sm text-muted-foreground">
-              Отчёты показаны рядом без вычисления новых научных показателей.
-              Полное сравнение метрик требует серверной проверки совместимости.
-            </DialogDescription>
-          </div>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Закрыть
-          </Button>
-        </div>
-
-        {error ? (
-          <p
-            role="alert"
-            className="rounded-xl bg-status-failed-background p-4 text-sm text-status-failed"
-          >
-            {error}
-          </p>
-        ) : !jobs ? (
-          <p role="status" className="text-muted-foreground">
-            Загружаем выбранные отчёты…
-          </p>
-        ) : !comparable ? (
-          <div
-            role="alert"
-            className="rounded-xl border border-warning bg-warning-background p-4 text-sm text-warning"
-          >
-            Эти отчёты нельзя сопоставить: нужны два завершённых запуска одного
-            типа и одной версии схемы результата. Откройте их полные страницы
-            для отдельного просмотра.
-          </div>
-        ) : (
-          <>
-            {methodsDiffer && (
-              <p className="rounded-xl border border-warning bg-warning-background p-4 text-sm text-warning">
-                Метод или его ревизия различаются. Сопоставляйте значения только
-                с учётом этого отличия.
-              </p>
-            )}
-            <div className="grid gap-4 lg:grid-cols-2">
-              <ReportColumn
-                job={jobs[0]}
-                label="Отчёт A"
-                kinds={kinds}
-                onClose={onClose}
-              />
-              <ReportColumn
-                job={jobs[1]}
-                label="Отчёт B"
-                kinds={kinds}
-                onClose={onClose}
-              />
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] max-w-6xl overflow-y-auto p-0"
+        onCloseAutoFocus={(event) => {
+          if (onRestoreFocus) {
+            event.preventDefault();
+            onRestoreFocus();
+          }
+        }}
+      >
+        <div className="space-y-5 p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <DialogTitle className="text-2xl font-semibold">
+                Сравнение отчётов
+              </DialogTitle>
+              <DialogDescription className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                Сопоставьте два отчёта без вычисления новых научных показателей.
+                Полное сравнение метрик требует серверной проверки
+                совместимости.
+              </DialogDescription>
             </div>
-          </>
-        )}
-      </div>
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Закрыть сравнение отчётов"
+                className="size-11"
+              >
+                <X aria-hidden="true" />
+              </Button>
+            </DialogClose>
+          </div>
+
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-xl bg-status-failed-background p-4 text-sm text-status-failed"
+            >
+              {error}
+            </p>
+          ) : !jobs ? (
+            <p role="status" className="text-muted-foreground">
+              Загружаем выбранные отчёты…
+            </p>
+          ) : !comparable ? (
+            <div
+              role="alert"
+              className="rounded-xl border border-warning bg-warning-background p-4 text-sm text-warning"
+            >
+              Эти отчёты нельзя сопоставить: нужны два завершённых запуска
+              одного типа и одной версии схемы результата. Откройте их полные
+              страницы для отдельного просмотра.
+            </div>
+          ) : (
+            <>
+              {methodsDiffer && (
+                <p className="rounded-xl border border-warning bg-warning-background p-4 text-sm text-warning">
+                  Метод или его ревизия различаются. Сопоставляйте значения
+                  только с учётом этого отличия.
+                </p>
+              )}
+              <div className="grid gap-4 lg:grid-cols-2">
+                <ReportColumn
+                  job={jobs[0]}
+                  label="Отчёт A"
+                  kinds={kinds}
+                  onClose={onClose}
+                />
+                <ReportColumn
+                  job={jobs[1]}
+                  label="Отчёт B"
+                  kinds={kinds}
+                  onClose={onClose}
+                />
+              </div>
+            </>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

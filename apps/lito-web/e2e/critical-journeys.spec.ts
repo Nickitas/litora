@@ -1,8 +1,10 @@
+import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 import type {
   AuthDto,
   CalculationJobDto,
   CalculationKindDto,
+  CalculationMetadataExportV1,
   DatasetDto,
 } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
@@ -133,6 +135,15 @@ async function chooseOption(page: Page, label: string, option: string) {
   await page.getByRole("option", { name: option, exact: true }).click();
 }
 
+async function chooseTheme(page: Page, mode: "light" | "dark" | "system") {
+  const button = page.getByRole("button", { name: /^Тема оформления:/ });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if ((await button.getAttribute("data-theme")) === mode) return;
+    await button.click();
+  }
+  await expect(button).toHaveAttribute("data-theme", mode);
+}
+
 test("устаревшая ссылка на создание возвращает к обзору", async ({ page }) => {
   const observed = await mockApi(page, (path, method) => {
     if (path === "/api/auth/refresh" && method === "POST")
@@ -155,6 +166,7 @@ test("модальный запуск сохраняет фокус и не пе
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 780 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   const observed = await mockApi(page, (path, method) => {
     if (path === "/api/auth/refresh" && method === "POST")
       return { body: session };
@@ -176,6 +188,10 @@ test("модальный запуск сохраняет фокус и не пе
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute("aria-modal", "true");
+  const overlay = page.locator('[data-slot="dialog-overlay"]');
+  await expect(overlay).toHaveCSS("backdrop-filter", "blur(3px)");
+  await expect(overlay).not.toHaveCSS("animation-name", "none");
+  await expect(dialog).not.toHaveCSS("animation-name", "none");
   await expect(dialog.getByLabel("Что рассчитать")).toBeEnabled();
   await expect(
     dialog.getByRole("button", { name: "Загрузить GeoJSON" })
@@ -208,7 +224,19 @@ test("модальный запуск сохраняет фокус и не пе
     )
   ).toBe(true);
 
-  await chooseOption(page, "Что рассчитать", "Своя береговая линия");
+  const scenarioSelect = dialog.getByRole("combobox", {
+    name: "Что рассчитать",
+  });
+  await scenarioSelect.focus();
+  await scenarioSelect.press("Enter");
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await expect(page.getByRole("option", { name: "Размерность" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(
+    page.getByRole("option", { name: "Своя береговая линия" })
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(scenarioSelect).toContainText("Своя береговая линия");
   await dialog.getByRole("button", { name: "Загрузить GeoJSON" }).click();
   const dialogBody = dialog.locator('[data-slot="calculation-dialog-body"]');
   const bodySize = await dialogBody.evaluate((element) => ({
@@ -235,11 +263,22 @@ test("модальный запуск сохраняет фокус и не пе
 
   await trigger.click();
   await expect(dialog).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "Закрыть окно нового расчёта" })
+    .click();
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  await expect(dialog).toBeVisible();
   await page.mouse.click(2, 2);
   await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
 
   await page.getByRole("link", { name: "Расчёты", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Расчёты", exact: true })
+  ).toBeVisible();
   const historyTrigger = page.getByRole("button", {
     name: "Новый расчёт",
     exact: true,
@@ -248,6 +287,72 @@ test("модальный запуск сохраняет фокус и не пе
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(historyTrigger).toBeFocused();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("кабинет и запуск доступны в эквиваленте 200% zoom в обеих темах", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 640, height: 400 });
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+  });
+
+  await page.goto("/account");
+  const trigger = page.getByRole("button", {
+    name: "Новый расчёт",
+    exact: true,
+  });
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+
+  for (const mode of ["light", "dark"] as const) {
+    await chooseTheme(page, mode);
+    await expect(page.locator("html")).toHaveClass(new RegExp(mode));
+    await trigger.click();
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: "Запустить расчёт" })
+    ).toBeEnabled();
+    await expect(
+      dialog.getByRole("button", { name: "Запустить расчёт" })
+    ).toHaveCSS("opacity", "1");
+    await expect(
+      dialog.getByRole("heading", { name: "Новый расчёт" })
+    ).toBeInViewport();
+    await expect(
+      dialog.getByRole("button", { name: "Запустить расчёт" })
+    ).toBeInViewport();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth)
+    ).toBeLessThanOrEqual(640);
+    const bounds = await dialog.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(640);
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(400);
+
+    await chooseOption(page, "Что рассчитать", "Своя береговая линия");
+    await dialog.getByRole("button", { name: "Загрузить GeoJSON" }).click();
+    const body = dialog.locator('[data-slot="calculation-dialog-body"]');
+    expect(
+      await body.evaluate((element) => element.scrollHeight)
+    ).toBeGreaterThan(await body.evaluate((element) => element.clientHeight));
+    await body.hover();
+    await page.mouse.wheel(0, 500);
+    expect(await body.evaluate((element) => element.scrollTop)).toBeGreaterThan(
+      0
+    );
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+  }
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -428,6 +533,37 @@ test("история листается сервером и сохраняет �
   await expect(page.getByText("Найдено расчётов: 2")).toBeVisible();
   await chooseOption(page, "На странице", "10");
   await expect(page).toHaveURL(/limit=10/);
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto(
+    "/account/calculations?from=2026-10-01&to=2026-10-31&cursor=older-page"
+  );
+  await chooseTheme(page, "dark");
+  const fromDate = page.getByRole("button", { name: /С даты, UTC: 1 октября/ });
+  await fromDate.click();
+  const datePicker = page.getByRole("dialog", { name: "С даты, UTC" });
+  await expect(datePicker).toBeVisible();
+  const selectedDay = datePicker.getByRole("button", {
+    name: /^четверг, 1 октября 2026/,
+  });
+  await expect(selectedDay).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    datePicker.getByRole("button", { name: /^пятница, 2 октября 2026/ })
+  ).toBeFocused();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
+  await page.keyboard.press("Escape");
+  await expect(datePicker).toBeHidden();
+  await expect(fromDate).toBeFocused();
+  await fromDate.click();
+  await datePicker.getByRole("button", { name: /15 октября 2026/ }).click();
+  await expect(page).toHaveURL(/from=2026-10-15/);
+  await expect(page).not.toHaveURL(/cursor=/);
+  await page.getByRole("button", { name: /По дату, UTC: 31 октября/ }).click();
+  const toDatePicker = page.getByRole("dialog", { name: "По дату, UTC" });
+  await toDatePicker.getByRole("button", { name: "Очистить дату" }).click();
+  await expect(page).not.toHaveURL(/to=/);
   await page.getByRole("button", { name: "Сбросить фильтры" }).click();
   await expect(page).toHaveURL(/\/account\/calculations$/);
   expect(observed.unexpected).toEqual([]);
@@ -615,7 +751,7 @@ test("загрузка своего GeoJSON и запуск dimension через
   const customJob = {
     ...job,
     kind: "dimension_dataset",
-    input: { datasetId: dataset.id },
+    input: { datasetId: dataset.id, downloadUrl: "input-secret" },
   };
   const observed = await mockApi(page, (path, method, body) => {
     if (path === "/api/auth/refresh" && method === "POST")
@@ -661,6 +797,20 @@ test("загрузка своего GeoJSON и запуск dimension через
   await page.getByRole("button", { name: "Сохранить набор" }).click();
   await expect(page.getByLabel("Что рассчитать")).toContainText(
     "Своя береговая линия"
+  );
+  await expect(page.getByLabel("Набор данных")).toContainText(dataset.name);
+  await chooseOption(
+    page,
+    "Набор данных",
+    "Встроенный пример Сочи (по умолчанию)"
+  );
+  await expect(page.getByLabel("Набор данных")).toContainText(
+    "Встроенный пример Сочи"
+  );
+  await chooseOption(
+    page,
+    "Набор данных",
+    `${dataset.name} · ${dataset.pointCount} точек`
   );
   await expect(page.getByLabel("Набор данных")).toContainText(dataset.name);
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
@@ -802,10 +952,22 @@ test("отмена расчёта требует подтверждения и �
   });
 
   await page.goto("/account/calculations");
-  await page.getByRole("button", { name: "Отменить", exact: true }).click();
+  const cancelTrigger = page.getByRole("button", {
+    name: "Отменить",
+    exact: true,
+  });
+  await cancelTrigger.click();
   const dialog = page.getByRole("dialog", { name: "Отменить расчёт?" });
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(cancelTrigger).toBeFocused();
+  expect(cancelRequests).toBe(0);
+
+  await page.getByRole("button", { name: "Отменить", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Закрыть окно отмены расчёта" })
+    .click();
   await expect(dialog).toBeHidden();
   expect(cancelRequests).toBe(0);
 
@@ -830,11 +992,23 @@ test("реестр открывает краткий просмотр и соп�
     status: "succeeded" as const,
     resultSummary: { area: 12.5 },
     resultSchemaVersion: 1,
+    artifacts: [
+      {
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        category: "output",
+        filename: "comparison.svg",
+        contentType: "image/svg+xml",
+        sizeBytes: 128,
+        sha256: "a".repeat(64),
+        downloadUrl: "/private/compare-expired.svg",
+      },
+    ],
   };
   const secondReport = {
     ...firstReport,
     id: "44444444-4444-4444-8444-444444444444",
     resultSummary: { area: 14.75 },
+    artifacts: [],
   };
   const observed = await mockApi(page, (path, method) => {
     if (path === "/api/auth/refresh" && method === "POST")
@@ -848,26 +1022,71 @@ test("реестр открывает краткий просмотр и соп�
     if (path === `/api/calculations/${secondReport.id}` && method === "GET")
       return { body: secondReport };
   });
+  await page.route("**/private/compare-expired.svg", (route) =>
+    route.fulfill({ status: 403, body: "Ссылка истекла" })
+  );
 
   await page.goto("/account/calculations");
-  await page
+  const quickTrigger = page
     .getByRole("button", { name: "Кратко", exact: true })
-    .first()
-    .click();
+    .first();
+  await quickTrigger.click();
   const quickView = page.getByRole("dialog", { name: "Размыв" });
-  await expect(quickView).toContainText("Опубликовано файлов: 0.");
-  await quickView.getByRole("button", { name: "Закрыть" }).click();
+  await expect(quickView).toContainText("Опубликовано файлов: 1.");
+  await quickView
+    .getByRole("button", { name: "Закрыть краткий просмотр" })
+    .click();
   await expect(quickView).toBeHidden();
+  await expect(quickTrigger).toBeFocused();
 
   const compareControls = page.getByLabel("Сравнить", { exact: true });
   await compareControls.nth(0).check();
   await compareControls.nth(1).check();
-  await page
-    .getByRole("button", { name: "Сравнить отчёты", exact: true })
-    .click();
+  const comparisonTrigger = page.getByRole("button", {
+    name: "Сравнить отчёты",
+    exact: true,
+  });
+  await comparisonTrigger.click();
   const comparison = page.getByRole("dialog", { name: "Сравнение отчётов" });
   await expect(comparison).toContainText("Отчёт A");
   await expect(comparison).toContainText("Отчёт B");
+  await expect(comparison.getByRole("alert")).toContainText(
+    "Откройте полный отчёт, чтобы обновить ссылки"
+  );
+  await comparison
+    .getByRole("button", { name: "Закрыть сравнение отчётов" })
+    .click();
+  await expect(comparison).toBeHidden();
+  await expect(comparisonTrigger).toBeFocused();
+
+  await page.setViewportSize({ width: 640, height: 400 });
+  await chooseTheme(page, "dark");
+  await comparisonTrigger.click();
+  await expect(comparison).toBeVisible();
+  await expect(
+    comparison.getByRole("heading", { name: "Сравнение отчётов" })
+  ).toBeInViewport();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(640);
+  const comparisonBounds = await comparison.boundingBox();
+  expect(comparisonBounds).not.toBeNull();
+  expect(comparisonBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(comparisonBounds!.x + comparisonBounds!.width).toBeLessThanOrEqual(
+    640
+  );
+  expect(comparisonBounds!.y).toBeGreaterThanOrEqual(0);
+  expect(comparisonBounds!.y + comparisonBounds!.height).toBeLessThanOrEqual(
+    400
+  );
+  await comparison.hover();
+  await page.mouse.wheel(0, 500);
+  await expect
+    .poll(() => comparison.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  await page.keyboard.press("Escape");
+  await expect(comparison).toBeHidden();
+  await expect(comparisonTrigger).toBeFocused();
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -883,7 +1102,9 @@ test("полный паспорт показывает происхождени�
     resultSummary: {
       fileCount: 1,
       totalBytes: 256,
-      metrics: { "dimension.json": { dimension: 1.25 } },
+      metrics: {
+        "dimension.json": { dimension: 1.25, accessToken: "metric-secret" },
+      },
       provenance: {
         datasetId: dataset.id,
         datasetSchemaVersion: 1,
@@ -895,12 +1116,17 @@ test("полный паспорт показывает происхождени�
         pointCount: 3,
         sha256: "a".repeat(64),
         files: [
-          { path: "input.geojson", sizeBytes: 78, sha256: "a".repeat(64) },
+          {
+            path: "/private/worker/input.geojson",
+            sizeBytes: 78,
+            sha256: "a".repeat(64),
+          },
         ],
       },
     },
     resultSchemaVersion: 1,
     coreVersion: `sha256:${"b".repeat(64)}`,
+    commandLine: "/private/worker secret-command",
     methodId: "box-counting",
     methodRevision: "baseline-1",
     finishedAt: "2026-09-29T12:03:00.000Z",
@@ -912,7 +1138,7 @@ test("полный паспорт показывает происхождени�
         contentType: "application/json",
         sizeBytes: 256,
         sha256: "c".repeat(64),
-        downloadUrl: "https://example.test/signed-output",
+        downloadUrl: "https://example.test/signed-output?signature=secret",
       },
     ],
   } satisfies CalculationJobDto;
@@ -940,6 +1166,8 @@ test("полный паспорт показывает происхождени�
 
   await page.setViewportSize({ width: 360, height: 780 });
   await page.goto(`/account/calculations/${first.id}`);
+  await chooseTheme(page, "light");
+  await expect(page.locator("html")).toHaveClass(/light/);
   const detail = page.getByRole("region", { name: "Результат расчёта" });
   await expect(detail).toContainText("Локальная съёмка");
   await expect(detail).toContainText("box-counting");
@@ -951,6 +1179,68 @@ test("полный паспорт показывает происхождени�
     await page.evaluate(() => document.documentElement.scrollWidth)
   ).toBeLessThanOrEqual(360);
 
+  const exportButton = detail.getByRole("button", {
+    name: "Скачать паспорт JSON",
+  });
+  await exportButton.focus();
+  await expect(exportButton).toBeFocused();
+  const downloadPromise = page.waitForEvent("download");
+  await page.keyboard.press("Enter");
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe(
+    `litora-calculation-${first.id}-metadata-v1.json`
+  );
+  const exportedText = await readFile(await download.path(), "utf8");
+  const exported = JSON.parse(exportedText) as CalculationMetadataExportV1;
+  expect(exported).toMatchObject({
+    format: "litora.calculation-metadata",
+    schemaVersion: 1,
+    calculation: {
+      id: first.id,
+      kind: "dimension_dataset",
+      input: { datasetId: dataset.id },
+      inputSchemaVersion: 1,
+      resultSchemaVersion: 1,
+      coreVersion: first.coreVersion,
+      methodId: "box-counting",
+      methodRevision: "baseline-1",
+    },
+    provenance: {
+      dataset: {
+        id: dataset.id,
+        source: "Локальная съёмка",
+        sha256: "a".repeat(64),
+      },
+      inputFiles: [{ sizeBytes: 78, sha256: "a".repeat(64) }],
+    },
+    artifacts: [
+      {
+        id: first.artifacts[0].id,
+        filename: "dimension.json",
+        sizeBytes: 256,
+        sha256: "c".repeat(64),
+      },
+    ],
+  });
+  expect(Object.keys(exported.artifacts[0]).sort()).toEqual([
+    "category",
+    "contentType",
+    "filename",
+    "id",
+    "sha256",
+    "sizeBytes",
+  ]);
+  for (const secret of [
+    "signed-output",
+    "input-secret",
+    "metric-secret",
+    "secret-command",
+    "/private/worker",
+    session.accessToken,
+  ]) {
+    expect(exportedText).not.toContain(secret);
+  }
+
   await page.evaluate((id) => {
     window.history.pushState({}, "", `/account/calculations/${id}`);
     window.dispatchEvent(new PopStateEvent("popstate"));
@@ -961,6 +1251,34 @@ test("полный паспорт показывает происхождени�
   await expect(detail).toContainText("Демонстрационный сценарий");
   await expect(detail).toContainText(
     "Происхождение входных файлов не записано"
+  );
+  await chooseTheme(page, "dark");
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  const secondDownloadPromise = page.waitForEvent("download");
+  await exportButton.click();
+  const secondDownload = await secondDownloadPromise;
+  const secondExport = JSON.parse(
+    await readFile(await secondDownload.path(), "utf8")
+  ) as CalculationMetadataExportV1;
+  expect(secondExport.calculation).toMatchObject({
+    id: second.id,
+    input: { steps: 4 },
+    coreVersion: null,
+    resultSchemaVersion: null,
+  });
+  expect(secondExport.provenance).toBeNull();
+  expect(secondExport.artifacts).toEqual([]);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
+  await page.evaluate(() => {
+    URL.createObjectURL = () => {
+      throw new Error("Тестовая ошибка подготовки файла");
+    };
+  });
+  await exportButton.click();
+  await expect(detail.getByRole("alert")).toContainText(
+    "Не удалось подготовить паспорт"
   );
 
   let releaseFirst = () => {};
@@ -996,6 +1314,161 @@ test("полный паспорт показывает происхождени�
   releaseFirst();
   await firstSettled;
   await expect(detail).not.toContainText("Локальная съёмка");
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("экспорт старого расчёта не подменяет неизвестный вход и не выдаёт пути", async ({
+  page,
+}) => {
+  const legacy = {
+    ...job,
+    id: "abababab-abab-4bab-8bab-abababababab",
+    kind: "legacy",
+    status: "succeeded" as const,
+    input: { unknownParameter: "input-secret" },
+    resultSummary: {
+      provenance: { files: [{ path: "/private/worker/secret-input" }] },
+      metrics: { token: "metric-secret" },
+    },
+    commandLine: "/private/worker/secret-command",
+  } satisfies CalculationJobDto;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === `/api/calculations/${legacy.id}` && method === "GET")
+      return { body: legacy };
+  });
+  await page.goto(`/account/calculations/${legacy.id}`);
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
+  const download = await downloadPromise;
+  const content = await readFile(await download.path(), "utf8");
+  const exported = JSON.parse(content) as CalculationMetadataExportV1;
+  expect(exported.calculation.input).toBeNull();
+  expect(exported.provenance).toBeNull();
+  for (const secret of ["input-secret", "metric-secret", "/private/worker"]) {
+    expect(content).not.toContain(secret);
+  }
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("предпросмотр изображения восстанавливается после обновления временной ссылки", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  const preview = {
+    id: "77777777-7777-4777-8777-777777777777",
+    category: "output",
+    filename: "report.svg",
+    contentType: "image/svg+xml",
+    sizeBytes: 128,
+    sha256: "d".repeat(64),
+    downloadUrl: "/private/report-old.svg",
+  };
+  const initial = {
+    ...job,
+    kind: "dimension",
+    status: "succeeded" as const,
+    artifacts: [
+      preview,
+      {
+        ...preview,
+        id: "88888888-8888-4888-8888-888888888888",
+        category: "log",
+        filename: "journal.svg",
+        downloadUrl: "/private/journal.svg",
+      },
+      {
+        ...preview,
+        id: "99999999-9999-4999-8999-999999999999",
+        filename: "unsafe.html",
+        contentType: "text/html",
+        downloadUrl: "/private/unsafe.html",
+      },
+    ],
+  } satisfies CalculationJobDto;
+  let detailRequests = 0;
+  let returnNewUrl = false;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === `/api/calculations/${initial.id}` && method === "GET") {
+      detailRequests++;
+      return {
+        body: returnNewUrl
+          ? {
+              ...initial,
+              artifacts: initial.artifacts.map((file) =>
+                file.id === preview.id
+                  ? { ...file, downloadUrl: "/private/report-new.svg" }
+                  : file
+              ),
+            }
+          : initial,
+      };
+    }
+  });
+  let oldImageRequests = 0;
+  let newImageRequests = 0;
+  let releaseOldImage = () => {};
+  const heldOldImage = new Promise<void>((resolve) => {
+    releaseOldImage = resolve;
+  });
+  await page.route("**/private/report-old.svg", async (route) => {
+    oldImageRequests++;
+    await heldOldImage;
+    await route.fulfill({ status: 403, body: "Ссылка истекла" });
+  });
+  await page.route("**/private/report-new.svg", (route) => {
+    newImageRequests++;
+    return route.fulfill({
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="teal"/></svg>',
+    });
+  });
+
+  await page.goto(`/account/calculations/${initial.id}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await chooseTheme(page, "dark");
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  const detail = page.getByRole("region", { name: "Результат расчёта" });
+  const visual = page.getByRole("region", { name: "Визуальные отчёты" });
+  await expect(visual.locator("figure")).toHaveCount(1);
+  await visual.scrollIntoViewIfNeeded();
+  await expect(visual.getByRole("status")).toContainText(
+    "Загружаем изображение"
+  );
+  releaseOldImage();
+  await expect(visual.getByRole("alert")).toContainText(
+    "ссылка устарела или файл отсутствует"
+  );
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBeLessThanOrEqual(360);
+  await expect(detail.getByRole("link", { name: "journal.svg" })).toBeVisible();
+  await expect(detail.getByRole("link", { name: "unsafe.html" })).toBeVisible();
+  const requestsBeforeRetry = detailRequests;
+  returnNewUrl = true;
+  const retry = visual.getByRole("button", {
+    name: "Обновить ссылки и повторить",
+  });
+  await retry.focus();
+  await expect(retry).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(
+    visual.getByRole("img", { name: "Отчёт: report.svg" })
+  ).toBeVisible();
+  await expect(visual.getByRole("alert")).toHaveCount(0);
+  expect(detailRequests).toBeGreaterThan(requestsBeforeRetry);
+  expect(oldImageRequests).toBeGreaterThanOrEqual(1);
+  expect(newImageRequests).toBeGreaterThanOrEqual(1);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
