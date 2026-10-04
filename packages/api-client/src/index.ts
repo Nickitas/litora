@@ -2,6 +2,8 @@ import type {
   AuthDto,
   CalculationJobDto,
   CalculationKindDto,
+  CalculationPageDto,
+  CalculationPageQueryDto,
   CreateCalculationDto,
   CreateDatasetDto,
   DatasetDto,
@@ -92,6 +94,14 @@ export function createApiClient(options: ApiClientOptions = {}) {
     createCalculation: (body: CreateCalculationDto) =>
       send<CalculationJobDto>("/calculations", "POST", body),
     calculations: () => send<CalculationJobDto[]>("/calculations"),
+    calculationPage: (query: CalculationPageQueryDto = {}) => {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined && value !== "") params.set(key, String(value));
+      }
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return send<CalculationPageDto>(`/calculations/page${suffix}`);
+    },
     calculation: (id: string) =>
       send<CalculationJobDto>(`/calculations/${encodeURIComponent(id)}`),
     cancelCalculation: (id: string) =>

@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Button } from "@/shared/shadcn/components/ui/button";
-import { fieldControlClass } from "@/shared/ui/field-styles";
+import { Input } from "@/shared/shadcn/components/ui/input";
+import { Label } from "@/shared/shadcn/components/ui/label";
 import { useAuth } from "../model";
 
 export function LoginForm() {
@@ -41,22 +42,22 @@ export function LoginForm() {
       </p>
       <form onSubmit={submit} className="mt-6 space-y-4" aria-busy={pending}>
         {registering && (
-          <label className="block">
-            Имя
-            <input
-              className={fieldControlClass}
+          <div className="space-y-2">
+            <Label htmlFor="auth-name">Имя</Label>
+            <Input
+              id="auth-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
               maxLength={100}
               required
             />
-          </label>
+          </div>
         )}
-        <label className="block">
-          Почта
-          <input
-            className={fieldControlClass}
+        <div className="space-y-2">
+          <Label htmlFor="auth-email">Почта</Label>
+          <Input
+            id="auth-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -64,11 +65,11 @@ export function LoginForm() {
             maxLength={254}
             required
           />
-        </label>
-        <label className="block">
-          Пароль
-          <input
-            className={fieldControlClass}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="auth-password">Пароль</Label>
+          <Input
+            id="auth-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -77,13 +78,13 @@ export function LoginForm() {
             maxLength={128}
             required
           />
-        </label>
+        </div>
         <p className="text-xs text-muted-foreground">От 10 до 128 символов.</p>
         {registering ? (
-          <label className="block">
-            Ключ приглашения
-            <input
-              className={fieldControlClass}
+          <div className="space-y-2">
+            <Label htmlFor="auth-invitation">Ключ приглашения</Label>
+            <Input
+              id="auth-invitation"
               type="password"
               value={invitationCode}
               onChange={(e) => setInvitationCode(e.target.value)}
@@ -100,7 +101,7 @@ export function LoginForm() {
               Получите одноразовый ключ у оператора Litora. Без него регистрация
               недоступна.
             </span>
-          </label>
+          </div>
         ) : null}
         {error && (
           <p role="alert" className="text-sm text-destructive">

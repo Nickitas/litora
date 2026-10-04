@@ -3,6 +3,8 @@ import { Search, X, FileCode, Zap } from "lucide-react";
 import { docsPageContent } from "../constants";
 import { useNavigate } from "react-router";
 import { cn } from "@/shared/shadcn/lib/utils";
+import { Button } from "@/shared/shadcn/components/ui/button";
+import { Input } from "@/shared/shadcn/components/ui/input";
 
 interface SearchResult {
   type: "module" | "capability";
@@ -95,8 +97,9 @@ export const DocsSearch = () => {
     <div className="relative mb-8" ref={searchRef}>
       <div className="group relative">
         <Search className="absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
-        <input
+        <Input
           type="text"
+          aria-label="Поиск по документации"
           placeholder="Поиск по документации..."
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
@@ -108,12 +111,16 @@ export const DocsSearch = () => {
           )}
         />
         {query && (
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Очистить поиск"
             onClick={handleClear}
-            className="absolute top-1/2 right-4 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+            className="absolute top-1/2 right-2 size-11 -translate-y-1/2 text-muted-foreground hover:text-foreground"
           >
             <X className="h-5 w-5" />
-          </button>
+          </Button>
         )}
       </div>
 
@@ -121,13 +128,15 @@ export const DocsSearch = () => {
         <div className="absolute top-full right-0 left-0 z-10 mt-2 max-h-96 overflow-y-auto rounded-xl border-2 border-border/50 bg-background/95 shadow-xl backdrop-blur-sm">
           <div className="space-y-1 p-2">
             {results.map((result) => (
-              <button
+              <Button
                 key={`${result.type}-${result.id}`}
+                type="button"
+                variant="ghost"
                 onClick={() => handleResultClick(result)}
-                className="group w-full rounded-lg p-3 text-left transition-all hover:bg-muted/50"
+                className="group h-auto w-full justify-start p-3 text-left whitespace-normal hover:bg-muted/50"
               >
-                <div className="flex items-start gap-3">
-                  <div
+                <span className="flex items-start gap-3">
+                  <span
                     className={cn(
                       "mt-0.5 rounded-lg p-2",
                       result.type === "module"
@@ -140,9 +149,9 @@ export const DocsSearch = () => {
                     ) : (
                       <Zap className="h-4 w-4" />
                     )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-foreground transition-colors group-hover:text-primary">
                         {result.title}
                       </span>
@@ -156,13 +165,13 @@ export const DocsSearch = () => {
                       >
                         {result.type === "module" ? "Модуль" : "Возможность"}
                       </span>
-                    </div>
-                    <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+                    </span>
+                    <span className="mt-1 line-clamp-1 text-sm text-muted-foreground">
                       {result.description}
-                    </p>
-                  </div>
-                </div>
-              </button>
+                    </span>
+                  </span>
+                </span>
+              </Button>
             ))}
           </div>
         </div>

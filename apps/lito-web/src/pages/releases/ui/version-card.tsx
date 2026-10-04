@@ -31,11 +31,10 @@ export const VersionCard = ({ release, index }: VersionCardProps) => {
       className="relative pl-10 sm:pl-14"
     >
       <div
-        className={`absolute top-8 left-3 z-10 size-3 -translate-x-1/2 rounded-full border-2 sm:left-5 sm:size-4 ${
-          isAvailable
-            ? "border-primary bg-primary"
-            : "border-warning bg-warning-background"
-        }`}
+        className={`absolute top-8 left-3 z-10 size-3 -translate-x-1/2 rounded-full border-2 sm:left-5 sm:size-4 ${isAvailable
+          ? "border-primary bg-primary"
+          : "border-warning bg-warning-background"
+          }`}
       />
 
       <MagicCard gradientSize={180} className="rounded-2xl">
@@ -93,7 +92,7 @@ export const VersionCard = ({ release, index }: VersionCardProps) => {
             )}
 
             {isAvailable ? (
-              <Button asChild variant="outline" className="w-full sm:min-w-52">
+              <Button asChild variant="outline" className="w-fit sm:min-w-52">
                 <a
                   href={releaseUrl}
                   target={release.releaseUrl ? "_blank" : undefined}

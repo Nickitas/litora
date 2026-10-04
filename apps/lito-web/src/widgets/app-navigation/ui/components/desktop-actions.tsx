@@ -2,7 +2,7 @@ import { useAuth } from "@/features/auth";
 import { ROUTES } from "@/shared/config/routes";
 import { Link } from "react-router";
 import { useEffect, useRef, useState } from "react";
-import { LogOut, UserRound } from "lucide-react";
+import { CalculatorIcon, LogOut, UserRound } from "lucide-react";
 import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
 import { Button } from "@/shared/shadcn/components/ui/button";
 
@@ -60,13 +60,23 @@ export const DesktopActions = () => {
                 <UserRound className="size-4" />
                 Личный кабинет
               </Link>
+              <Link
+                to="/account/calculations"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted"
+              >
+                <CalculatorIcon className="size-4" />
+                Расчет
+              </Link>
               <div className="my-1 border-t" />
               {logoutError && (
                 <p role="alert" className="px-3 text-xs text-destructive">
                   {logoutError}
                 </p>
               )}
-              <button
+              <Button
+                type="button"
+                variant="ghost"
                 onClick={() => {
                   void logout()
                     .then(() => setOpen(false))
@@ -76,11 +86,11 @@ export const DesktopActions = () => {
                       )
                     );
                 }}
-                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive hover:bg-status-failed-background"
+                className="w-full justify-start text-destructive hover:bg-status-failed-background hover:text-destructive"
               >
                 <LogOut className="size-4" />
                 Выйти
-              </button>
+              </Button>
             </div>
           )}
         </div>

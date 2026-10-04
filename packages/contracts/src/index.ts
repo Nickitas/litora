@@ -56,6 +56,72 @@ export interface CalculationJobDto {
   artifacts: CalculationArtifactDto[];
 }
 
+export interface CalculationMetadataExportV1 {
+  format: "litora.calculation-metadata";
+  schemaVersion: 1;
+  calculation: {
+    id: string;
+    kind: string;
+    status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+    input: { steps?: number; datasetId?: string } | null;
+    inputSchemaVersion: number | null;
+    resultSchemaVersion: number | null;
+    coreVersion: string | null;
+    methodId: string | null;
+    methodRevision: string | null;
+    createdAt: string;
+    startedAt: string | null;
+    finishedAt: string | null;
+    updatedAt: string;
+  };
+  provenance: {
+    dataset: {
+      id: string;
+      schemaVersion: number | null;
+      source: string | null;
+      sourceRevision: string | null;
+      license: string | null;
+      crs: string | null;
+      coordinateUnit: string | null;
+      pointCount: number | null;
+      sha256: string | null;
+    } | null;
+    declaredSources: {
+      generatedAt: string | null;
+      coastline: string | null;
+      waves: string | null;
+      bathymetry: string | null;
+      structures: string | null;
+      structuresWarning: string | null;
+    } | null;
+    inputFiles: { sizeBytes: number | null; sha256: string | null }[];
+  } | null;
+  artifacts: {
+    id: string;
+    category: string;
+    filename: string;
+    contentType: string;
+    sizeBytes: number;
+    sha256: string;
+  }[];
+}
+
+export interface CalculationPageQueryDto {
+  status?: CalculationStatus;
+  kind?: CalculationKind;
+  from?: string;
+  to?: string;
+  jobId?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface CalculationPageDto {
+  items: CalculationJobDto[];
+  nextCursor: string | null;
+  totalCount: number;
+}
+
 export interface UserDto {
   id: string;
   email: string;

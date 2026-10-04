@@ -8,8 +8,13 @@ import {
 import type {
   CalculationArtifactDto,
   CalculationJobDto,
+  CalculationPageDto,
   CreateCalculationDto,
 } from "@litora/contracts";
+import {
+  encodeHistoryCursor,
+  type HistoryPageOptions,
+} from "./history-page.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
 import { calculationInputSchemaVersion } from "../schema-versions.js";
@@ -139,7 +144,13 @@ export class CalculationsRepository {
       const result = await client.query<JobRow>(
         `INSERT INTO calculation_jobs(user_id,kind,input,dataset_id,input_schema_version)
         SELECT $1,$2,$3,$4,$5 WHERE (SELECT count(*) FROM calculation_jobs WHERE user_id=$1 AND status IN ('queued','running')) < 5 RETURNING *`,
-        [userId, job.kind, job.input ?? {}, datasetId, calculationInputSchemaVersion],
+        [
+          userId,
+          job.kind,
+          job.input ?? {},
+          datasetId,
+          calculationInputSchemaVersion,
+        ],
       );
       if (!result.rows[0])
         throw new ConflictException(
@@ -160,6 +171,63 @@ export class CalculationsRepository {
       [userId],
     );
     return Promise.all(result.rows.map((row) => this.toDto(row, false)));
+  }
+
+  async listPage(
+    userId: string,
+    options: HistoryPageOptions,
+  ): Promise<CalculationPageDto> {
+    const values: unknown[] = [userId];
+    const conditions = ["user_id=$1"];
+    const add = (condition: (position: number) => string, value: unknown) => {
+      values.push(value);
+      conditions.push(condition(values.length));
+    };
+    if (options.status) add((n) => `status=$${n}`, options.status);
+    if (options.kind) add((n) => `kind=$${n}`, options.kind);
+    if (options.from)
+      add(
+        (n) => `created_at >= $${n}::timestamptz`,
+        `${options.from}T00:00:00.000Z`,
+      );
+    if (options.toExclusive)
+      add((n) => `created_at < $${n}::timestamptz`, options.toExclusive);
+    if (options.jobId) add((n) => `id=$${n}::uuid`, options.jobId);
+    const filteredWhere = conditions.join(" AND ");
+    const countValues = [...values];
+    if (options.after) {
+      values.push(options.after.createdAt, options.after.id);
+      conditions.push(
+        `(created_at, id) < ($${values.length - 1}::timestamptz, $${values.length}::uuid)`,
+      );
+    }
+    values.push(options.limit + 1);
+    const [count, result] = await Promise.all([
+      this.database.query<{ total: string }>(
+        `SELECT count(*)::text AS total FROM calculation_jobs WHERE ${filteredWhere}`,
+        countValues,
+      ),
+      this.database.query<JobRow & { cursor_created_at: string }>(
+        `SELECT *, to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_created_at
+         FROM calculation_jobs WHERE ${conditions.join(" AND ")}
+         ORDER BY created_at DESC, id DESC LIMIT $${values.length}`,
+        values,
+      ),
+    ]);
+    const rows = result.rows.slice(0, options.limit);
+    const last = rows.at(-1);
+    return {
+      items: await Promise.all(rows.map((row) => this.toDto(row, false))),
+      nextCursor:
+        result.rows.length > options.limit && last
+          ? encodeHistoryCursor(
+              last.cursor_created_at,
+              last.id,
+              options.fingerprint,
+            )
+          : null,
+      totalCount: Number(count.rows[0]?.total ?? 0),
+    };
   }
 
   async get(id: string, userId: string): Promise<CalculationJobDto> {

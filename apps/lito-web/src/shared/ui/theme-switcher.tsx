@@ -1,20 +1,31 @@
+import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/shared/shadcn/components/theme-provider";
+import { Button } from "@/shared/shadcn/components/ui/button";
+
+const themeOptions = {
+  light: { icon: Sun, label: "светлая", next: "dark" },
+  dark: { icon: Moon, label: "тёмная", next: "system" },
+  system: { icon: Monitor, label: "системная", next: "light" },
+} as const;
 
 export function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();
+  const option = themeOptions[theme];
+  const Icon = option.icon;
+  const label = `Тема оформления: ${option.label}. Следующая: ${themeOptions[option.next].label}.`;
+
   return (
-    <label className="flex items-center">
-      <span className="sr-only">Тема оформления</span>
-      <select
-        aria-label="Тема оформления"
-        value={theme}
-        onChange={(event) => setTheme(event.target.value as typeof theme)}
-        className="min-h-11 rounded-lg border border-input bg-card px-2 text-sm text-card-foreground focus-visible:border-ring"
-      >
-        <option value="system">Система</option>
-        <option value="light">Светлая</option>
-        <option value="dark">Тёмная</option>
-      </select>
-    </label>
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      data-theme={theme}
+      aria-label={label}
+      title={label}
+      onClick={() => setTheme(option.next)}
+      className="size-11 rounded-full border-input bg-card text-primary shadow-xs hover:bg-accent hover:text-accent-foreground"
+    >
+      <Icon aria-hidden="true" className="size-5" />
+    </Button>
   );
 }

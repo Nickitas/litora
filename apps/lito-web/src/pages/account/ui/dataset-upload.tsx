@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
 import type { DatasetDto, GeoJsonLineStringDto } from "@litora/contracts";
-import { defaultCoastlineDataset } from "@litora/generated-data";
+import { FileUp } from "lucide-react";
 import { api } from "@/shared/api/client";
 import { Button } from "@/shared/shadcn/components/ui/button";
-import { fieldControlClass } from "@/shared/ui/field-styles";
+import { Input } from "@/shared/shadcn/components/ui/input";
+import { Label } from "@/shared/shadcn/components/ui/label";
 
 export function DatasetUpload({
   onSaved,
@@ -24,32 +25,30 @@ export function DatasetUpload({
     setPending(true);
     setError("");
     try {
-      let input = defaultCoastlineDataset;
-      if (file) {
-        if (file.size > 65_536)
-          throw new Error("GeoJSON не должен превышать 64 КиБ");
-        const parsed: unknown = JSON.parse(await file.text());
-        if (
-          !parsed ||
-          typeof parsed !== "object" ||
-          Array.isArray(parsed) ||
-          (parsed as { type?: unknown }).type !== "LineString"
-        )
-          throw new Error(
-            "Выберите GeoJSON LineString с координатами [долгота, широта]"
-          );
-        input = {
-          name,
-          source,
-          ...(sourceRevision.trim()
-            ? { sourceRevision: sourceRevision.trim() }
-            : {}),
-          license,
-          crs: "EPSG:4326",
-          coordinateUnit: "degrees",
-          geometry: parsed as GeoJsonLineStringDto,
-        };
-      }
+      if (!file) throw new Error("Выберите файл GeoJSON");
+      if (file.size > 65_536)
+        throw new Error("GeoJSON не должен превышать 64 КиБ");
+      const parsed: unknown = JSON.parse(await file.text());
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed) ||
+        (parsed as { type?: unknown }).type !== "LineString"
+      )
+        throw new Error(
+          "Выберите GeoJSON LineString с координатами [долгота, широта]"
+        );
+      const input = {
+        name,
+        source,
+        ...(sourceRevision.trim()
+          ? { sourceRevision: sourceRevision.trim() }
+          : {}),
+        license,
+        crs: "EPSG:4326" as const,
+        coordinateUnit: "degrees" as const,
+        geometry: parsed as GeoJsonLineStringDto,
+      };
       const dataset = await api.createDataset(input);
       onSaved(dataset);
       setFile(null);
@@ -68,28 +67,33 @@ export function DatasetUpload({
   }
 
   return (
-    <section
-      className="rounded-2xl border bg-card p-5 text-card-foreground"
-      aria-label="Загрузка береговой линии"
-    >
-      <h2 className="text-2xl font-semibold">Своя береговая линия</h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Если файл не выбран, будет использован демонстрационный GeoJSON участка
-        Сочи из OpenStreetMap (ODbL). Для своего файла нужен LineString: WGS84 /
-        EPSG:4326, пары [долгота, широта] в градусах, 2–500 точек, до 64 КиБ.
-        Геометрию проверит Go при расчёте.
-      </p>
+    <section aria-labelledby="dataset-upload-heading" className="border-t pt-6">
+      <div className="flex gap-3">
+        <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <FileUp aria-hidden="true" className="size-4" />
+        </div>
+        <div>
+          <h3 id="dataset-upload-heading" className="font-semibold">
+            Загрузить свой GeoJSON
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Нужен LineString в WGS84 / EPSG:4326: 2–500 точек, до 64 КиБ. На
+            запуске геометрию дополнительно проверит Go.
+          </p>
+        </div>
+      </div>
       <form
         onSubmit={(event) => void submit(event)}
-        className="mt-4 grid gap-4 md:grid-cols-2"
+        className="mt-5 grid gap-4 md:grid-cols-2"
         aria-busy={pending}
       >
-        <label className="text-sm">
-          Файл GeoJSON (необязательно)
-          <input
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="dataset-file">Файл GeoJSON</Label>
+          <Input
+            id="dataset-file"
             type="file"
             accept=".geojson,application/geo+json,application/json"
-            className={fieldControlClass}
+            required
             onChange={(event) => {
               const selected = event.target.files?.[0] ?? null;
               setFile(selected);
@@ -101,68 +105,59 @@ export function DatasetUpload({
               else setName("");
             }}
           />
-        </label>
-        {file ? (
-          <>
-            <label className="text-sm">
-              Название
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-                maxLength={100}
-                className={fieldControlClass}
-              />
-            </label>
-            <label className="text-sm">
-              Источник данных
-              <input
-                value={source}
-                onChange={(event) => setSource(event.target.value)}
-                required
-                maxLength={200}
-                className={fieldControlClass}
-              />
-            </label>
-            <label className="text-sm">
-              Версия источника или дата снимка (необязательно)
-              <input
-                value={sourceRevision}
-                onChange={(event) => setSourceRevision(event.target.value)}
-                maxLength={120}
-                className={fieldControlClass}
-              />
-            </label>
-            <label className="text-sm">
-              Лицензия или условия использования
-              <input
-                value={license}
-                onChange={(event) => setLicense(event.target.value)}
-                required
-                maxLength={100}
-                className={fieldControlClass}
-              />
-            </label>
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground md:col-span-2">
-            По умолчанию: {defaultCoastlineDataset.name} ·{" "}
-            {defaultCoastlineDataset.source}
-            {" · "}
-            {defaultCoastlineDataset.license}. Пример не заменяет съёмку.
-          </p>
-        )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="dataset-name">Название</Label>
+          <Input
+            id="dataset-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+            disabled={!file}
+            maxLength={100}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="dataset-source">Источник данных</Label>
+          <Input
+            id="dataset-source"
+            value={source}
+            onChange={(event) => setSource(event.target.value)}
+            required
+            disabled={!file}
+            maxLength={200}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="dataset-source-revision">
+            Версия источника или дата снимка (необязательно)
+          </Label>
+          <Input
+            id="dataset-source-revision"
+            value={sourceRevision}
+            onChange={(event) => setSourceRevision(event.target.value)}
+            disabled={!file}
+            maxLength={120}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="dataset-license">Лицензия или условия использования</Label>
+          <Input
+            id="dataset-license"
+            value={license}
+            onChange={(event) => setLicense(event.target.value)}
+            required
+            disabled={!file}
+            maxLength={100}
+          />
+        </div>
         {error && (
           <p role="alert" className="text-sm text-destructive md:col-span-2">
             {error}
           </p>
         )}
-        <Button disabled={pending} className="md:col-span-2">
-          {pending
-            ? "Сохраняем набор…"
-            : file
-              ? "Загрузить набор"
-              : "Использовать пример GeoJSON"}
+        <Button disabled={pending || !file} className="md:col-span-2">
+          {pending ? "Сохраняем набор…" : "Сохранить набор"}
         </Button>
       </form>
     </section>
