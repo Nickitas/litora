@@ -65,8 +65,8 @@ export const MobileDocsNav = () => {
                         className={cn(
                           "h-2 w-2 shrink-0 rounded-full",
                           module.status === "stable"
-                            ? "bg-green-500"
-                            : "bg-yellow-500"
+                            ? "bg-status-succeeded"
+                            : "bg-warning"
                         )}
                       />
                       <span>{module.title}</span>

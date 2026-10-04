@@ -12,13 +12,13 @@ export const FOOTER_LINKS = {
     },
     {
       label: "GitHub Issues",
-      href: "https://github.com/Nickitas/litora-cli",
+      href: "https://github.com/Nickitas/litora/issues",
     },
   ],
   legal: [
     {
       label: "Лицензия MIT",
-      href: "https://github.com/Nickitas/litora-cli/blob/main/LICENSE",
+      href: "https://github.com/Nickitas/litora/blob/main/LICENSE",
     },
   ],
 } as const;

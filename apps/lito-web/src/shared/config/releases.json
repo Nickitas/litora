@@ -1,12 +1,12 @@
 {
   "version": "v2.0",
   "releaseDate": "2026-08-30",
-  "releaseUrl": "https://github.com/Nickitas/litora-cli/releases/tag/v2.0",
-  "repository": "https://github.com/Nickitas/litora-cli",
+  "releaseUrl": null,
+  "repository": "https://github.com/Nickitas/litora",
   "files": [
-    { "id": "windows-amd64", "name": "lito-windows-amd64.exe", "os": "windows", "path": "/downloads/windows/lito-windows-amd64.exe", "size": "18.0 MB", "requirements": "Windows 10/11 (x64)", "sha256": "" },
-    { "id": "darwin-amd64", "name": "lito-darwin-amd64", "os": "macos", "path": "/downloads/macos/lito-darwin-amd64", "size": "18.0 MB", "requirements": "macOS 11+ (Intel)", "sha256": "" },
-    { "id": "darwin-arm64", "name": "lito-darwin-arm64", "os": "macos", "path": "/downloads/macos/lito-darwin-arm64", "size": "16.5 MB", "requirements": "macOS 11+ (Apple Silicon)", "sha256": "" },
-    { "id": "linux-amd64", "name": "lito-linux-amd64", "os": "linux", "path": "/downloads/linux/lito-linux-amd64", "size": "17.7 MB", "requirements": "Linux x64", "sha256": "" }
+    { "id": "windows-amd64", "name": "lito-windows-amd64.exe", "os": "windows", "path": "/downloads/windows/lito-windows-amd64.exe", "size": "18.0 MB", "requirements": "Windows 10/11 (x64)", "sha256": "01b357125fc89a369e89efdabad5fc03cc106a288c762ef86610096c203853cc" },
+    { "id": "darwin-amd64", "name": "lito-darwin-amd64", "os": "macos", "path": "/downloads/macos/lito-darwin-amd64", "size": "18.0 MB", "requirements": "macOS 11+ (Intel)", "sha256": "e653087010e94e1f1ce487be400ecfd27ff5b78017e12bc2ceb7510c9aad9fc4" },
+    { "id": "darwin-arm64", "name": "lito-darwin-arm64", "os": "macos", "path": "/downloads/macos/lito-darwin-arm64", "size": "16.5 MB", "requirements": "macOS 11+ (Apple Silicon)", "sha256": "315ef6873ef29084d89b41561d4ba8d10e1f2fd496891510874d6037bcaaf004" },
+    { "id": "linux-amd64", "name": "lito-linux-amd64", "os": "linux", "path": "/downloads/linux/lito-linux-amd64", "size": "17.7 MB", "requirements": "Linux x64", "sha256": "c01cba3e576c2b62f0e5d711ad0cdc852c338f9237b1eca069ddaaf969f365db" }
   ]
 }

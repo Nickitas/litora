@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -7,18 +8,28 @@ import {
 import type {
   CalculationArtifactDto,
   CalculationJobDto,
+  CalculationPageDto,
   CreateCalculationDto,
 } from "@litora/contracts";
+import {
+  encodeHistoryCursor,
+  type HistoryPageOptions,
+} from "./history-page.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
+import { calculationInputSchemaVersion } from "../schema-versions.js";
 
 export interface JobRow {
   id: string;
   kind: string;
   status: CalculationJobDto["status"];
   input: Record<string, unknown>;
+  input_schema_version: number | null;
   result_summary: Record<string, unknown> | null;
+  result_schema_version: number | null;
   core_version: string | null;
+  method_id: string | null;
+  method_revision: string | null;
   command_line: string | null;
   error_message: string | null;
   created_at: Date;
@@ -26,6 +37,8 @@ export interface JobRow {
   finished_at: Date | null;
   updated_at: Date;
   worker_id: string | null;
+  user_id: string | null;
+  dataset_id: string | null;
 }
 
 interface ArtifactRow {
@@ -83,6 +96,13 @@ export class CalculationsRepository {
     );
   }
 
+  async removeArtifact(jobId: string, objectKey: string): Promise<void> {
+    await this.database.query(
+      "DELETE FROM calculation_artifacts WHERE job_id=$1 AND object_key=$2",
+      [jobId, objectKey],
+    );
+  }
+
   async complete(
     jobId: string,
     summary: Record<string, unknown>,
@@ -106,14 +126,31 @@ export class CalculationsRepository {
     userId: string,
     job: CreateCalculationDto,
   ): Promise<CalculationJobDto> {
+    const datasetId =
+      job.kind === "dimension_dataset" ? job.input?.datasetId : null;
+    if (job.kind === "dimension_dataset" && !datasetId)
+      throw new BadRequestException("Укажите UUID своего набора данных");
+    if (datasetId) {
+      const owned = await this.database.query<{ id: string }>(
+        "SELECT id FROM datasets WHERE id=$1 AND owner_id=$2",
+        [datasetId, userId],
+      );
+      if (!owned.rows[0]) throw new NotFoundException("Набор данных не найден");
+    }
     const row = await this.database.transaction(async (client) => {
       await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
         userId,
       ]);
       const result = await client.query<JobRow>(
-        `INSERT INTO calculation_jobs(user_id,kind,input)
-        SELECT $1,$2,$3 WHERE (SELECT count(*) FROM calculation_jobs WHERE user_id=$1 AND status IN ('queued','running')) < 5 RETURNING *`,
-        [userId, job.kind, job.input ?? {}],
+        `INSERT INTO calculation_jobs(user_id,kind,input,dataset_id,input_schema_version)
+        SELECT $1,$2,$3,$4,$5 WHERE (SELECT count(*) FROM calculation_jobs WHERE user_id=$1 AND status IN ('queued','running')) < 5 RETURNING *`,
+        [
+          userId,
+          job.kind,
+          job.input ?? {},
+          datasetId,
+          calculationInputSchemaVersion,
+        ],
       );
       if (!result.rows[0])
         throw new ConflictException(
@@ -134,6 +171,63 @@ export class CalculationsRepository {
       [userId],
     );
     return Promise.all(result.rows.map((row) => this.toDto(row, false)));
+  }
+
+  async listPage(
+    userId: string,
+    options: HistoryPageOptions,
+  ): Promise<CalculationPageDto> {
+    const values: unknown[] = [userId];
+    const conditions = ["user_id=$1"];
+    const add = (condition: (position: number) => string, value: unknown) => {
+      values.push(value);
+      conditions.push(condition(values.length));
+    };
+    if (options.status) add((n) => `status=$${n}`, options.status);
+    if (options.kind) add((n) => `kind=$${n}`, options.kind);
+    if (options.from)
+      add(
+        (n) => `created_at >= $${n}::timestamptz`,
+        `${options.from}T00:00:00.000Z`,
+      );
+    if (options.toExclusive)
+      add((n) => `created_at < $${n}::timestamptz`, options.toExclusive);
+    if (options.jobId) add((n) => `id=$${n}::uuid`, options.jobId);
+    const filteredWhere = conditions.join(" AND ");
+    const countValues = [...values];
+    if (options.after) {
+      values.push(options.after.createdAt, options.after.id);
+      conditions.push(
+        `(created_at, id) < ($${values.length - 1}::timestamptz, $${values.length}::uuid)`,
+      );
+    }
+    values.push(options.limit + 1);
+    const [count, result] = await Promise.all([
+      this.database.query<{ total: string }>(
+        `SELECT count(*)::text AS total FROM calculation_jobs WHERE ${filteredWhere}`,
+        countValues,
+      ),
+      this.database.query<JobRow & { cursor_created_at: string }>(
+        `SELECT *, to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_created_at
+         FROM calculation_jobs WHERE ${conditions.join(" AND ")}
+         ORDER BY created_at DESC, id DESC LIMIT $${values.length}`,
+        values,
+      ),
+    ]);
+    const rows = result.rows.slice(0, options.limit);
+    const last = rows.at(-1);
+    return {
+      items: await Promise.all(rows.map((row) => this.toDto(row, false))),
+      nextCursor:
+        result.rows.length > options.limit && last
+          ? encodeHistoryCursor(
+              last.cursor_created_at,
+              last.id,
+              options.fingerprint,
+            )
+          : null,
+      totalCount: Number(count.rows[0]?.total ?? 0),
+    };
   }
 
   async get(id: string, userId: string): Promise<CalculationJobDto> {
@@ -182,8 +276,12 @@ export class CalculationsRepository {
       kind: row.kind,
       status: row.status,
       input: row.input,
+      inputSchemaVersion: row.input_schema_version,
       resultSummary: includeArtifacts ? row.result_summary : null,
+      resultSchemaVersion: row.result_schema_version,
       coreVersion: row.core_version,
+      methodId: row.method_id,
+      methodRevision: row.method_revision,
       commandLine: row.command_line,
       errorMessage: row.error_message,
       createdAt: row.created_at.toISOString(),

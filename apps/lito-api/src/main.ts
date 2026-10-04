@@ -7,6 +7,8 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
+import { configureTrustedProxies } from "./config/trusted-proxies.js";
 import {
   DocumentBuilder,
   SwaggerModule,
@@ -21,6 +23,8 @@ import { ObjectStorageService } from "./infrastructure/object-storage.service.js
 import { AuthController } from "./auth/auth.controller.js";
 import { AuthService } from "./auth/auth.service.js";
 import { AuthGuard } from "./auth/auth.guard.js";
+import { DatasetsController } from "./datasets/datasets.controller.js";
+import { DatasetsRepository } from "./datasets/datasets.repository.js";
 import { environment } from "./config/environment.js";
 
 @Controller()
@@ -66,11 +70,17 @@ class AppController {
 }
 
 @Module({
-  controllers: [AppController, AuthController, CalculationsController],
+  controllers: [
+    AppController,
+    AuthController,
+    CalculationsController,
+    DatasetsController,
+  ],
   providers: [
     DatabaseService,
     ObjectStorageService,
     CalculationsRepository,
+    DatasetsRepository,
     AuthService,
     AuthGuard,
   ],
@@ -78,7 +88,8 @@ class AppController {
 class AppModule {}
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  configureTrustedProxies(app, environment.trustedProxies);
   app.setGlobalPrefix("api");
   app.enableCors({ origin: environment.webOrigin, credentials: true });
   app.enableShutdownHooks();

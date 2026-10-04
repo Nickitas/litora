@@ -9,6 +9,7 @@ import {
 import { motion } from "motion/react";
 import { MagicCard } from "@/shared/shadcn/ui/magic-card";
 import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
+import { Button } from "@/shared/shadcn/components/ui/button";
 import type { AppRelease } from "../constants";
 import { releasesPageContent } from "../constants";
 
@@ -19,7 +20,7 @@ interface VersionCardProps {
 
 export const VersionCard = ({ release, index }: VersionCardProps) => {
   const { unavailableLabel, availableLabel } = releasesPageContent;
-  const releaseUrl = release.releaseUrl;
+  const releaseUrl = release.releaseUrl ?? release.downloadUrl ?? null;
   const isAvailable = releaseUrl !== null;
 
   return (
@@ -30,20 +31,13 @@ export const VersionCard = ({ release, index }: VersionCardProps) => {
       className="relative pl-10 sm:pl-14"
     >
       <div
-        className={`absolute top-8 left-3 z-10 size-3 -translate-x-1/2 rounded-full border-2 sm:left-5 sm:size-4 ${
-          isAvailable
-            ? "border-primary bg-primary"
-            : "border-amber-500/80 bg-amber-500/60"
-        }`}
+        className={`absolute top-8 left-3 z-10 size-3 -translate-x-1/2 rounded-full border-2 sm:left-5 sm:size-4 ${isAvailable
+          ? "border-primary bg-primary"
+          : "border-warning bg-warning-background"
+          }`}
       />
 
-      <MagicCard
-        gradientSize={180}
-        gradientColor="rgba(139, 92, 246, 0.15)"
-        gradientFrom="rgba(59, 130, 246, 0.2)"
-        gradientTo="rgba(6, 182, 212, 0.2)"
-        className="rounded-2xl"
-      >
+      <MagicCard gradientSize={180} className="rounded-2xl">
         <article className="flex h-full flex-col p-5 sm:p-6">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-2">
@@ -70,8 +64,9 @@ export const VersionCard = ({ release, index }: VersionCardProps) => {
                 </span>
               )}
               {!isAvailable && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                  <Clock className="size-3" />В разработке
+                <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning-background px-2.5 py-1 text-xs font-medium text-warning">
+                  <Clock className="size-3" />
+                  Архив восстанавливается
                 </span>
               )}
             </div>
@@ -97,20 +92,23 @@ export const VersionCard = ({ release, index }: VersionCardProps) => {
             )}
 
             {isAvailable ? (
-              <a
-                href={releaseUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto"
-              >
-                <RippleButton className="group w-full sm:min-w-52">
+              <Button asChild variant="outline" className="w-fit sm:min-w-52">
+                <a
+                  href={releaseUrl}
+                  target={release.releaseUrl ? "_blank" : undefined}
+                  rel={release.releaseUrl ? "noopener noreferrer" : undefined}
+                >
                   <span className="inline-flex items-center justify-center gap-2">
                     <Download className="size-4" />
-                    Скачать на GitHub
-                    <ExternalLink className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                    {release.releaseUrl
+                      ? "Скачать на GitHub"
+                      : "Скачать с сайта"}
+                    {release.releaseUrl && (
+                      <ExternalLink className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                    )}
                   </span>
-                </RippleButton>
-              </a>
+                </a>
+              </Button>
             ) : (
               <RippleButton
                 disabled

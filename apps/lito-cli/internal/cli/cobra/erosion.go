@@ -58,6 +58,7 @@ var (
 	erosionMaxChange              float64
 	erosionMaxBathymetryGap       float64
 	erosionBlackSeaSochi          bool
+	erosionOffline                bool
 )
 
 var erosionCmd = &cobra.Command{
@@ -100,6 +101,7 @@ func init() {
 	erosionCmd.Flags().StringVar(&erosionSedimentSources, "sediment-sources", "", "JSON внешних источников и стоков наносов по ячейкам")
 	erosionCmd.Flags().StringVar(&erosionStructures, "structures", "", "JSON сооружений, изменяющих пропуск потока между ячейками")
 	erosionCmd.Flags().BoolVar(&erosionBlackSeaSochi, "black-sea-sochi", false, "загрузить открытые данные Сочи и выполнить демонстрационный расчёт demo")
+	erosionCmd.Flags().BoolVar(&erosionOffline, "offline", false, "для демо Сочи использовать только локальный проверенный кэш без сети")
 
 	// Export options
 	erosionCmd.Flags().StringVar(&erosionOutputCSV, "output-csv", "", "путь к CSV файлу для экспорта метрик")
@@ -116,8 +118,11 @@ func runErosion(cmd *cobra.Command, args []string) error {
 		erosionBlackSeaSochi = true
 		fmt.Println("✓ Входные файлы не заданы: выбран демонстрационный набор Чёрного моря — Сочи (demo)")
 	}
+	if err := validateErosionOfflineMode(erosionOffline, erosionBlackSeaSochi, erosionSourceURL); err != nil {
+		return err
+	}
 	if erosionBlackSeaSochi {
-		paths, err := prepareBlackSeaSochiData(erosionRefresh)
+		paths, err := prepareBlackSeaSochiDataWithPolicy(erosionRefresh, erosionOffline)
 		if err != nil {
 			return fmt.Errorf("подготовка набора Сочи: %w", err)
 		}
@@ -243,6 +248,19 @@ func runErosion(cmd *cobra.Command, args []string) error {
 	}
 	if err := exportErosionArtifacts(outputMgr, snapshots, nil, erosionOutputCSV, erosionCSVFormat, erosionOutputGIF, erosionGIFFPS, erosionGIFSkip); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateErosionOfflineMode(offline, demo bool, sourceURL string) error {
+	if !offline {
+		return nil
+	}
+	if sourceURL != "" {
+		return fmt.Errorf("--offline нельзя сочетать с --source-url")
+	}
+	if !demo {
+		return fmt.Errorf("--offline поддерживается только для демонстрационного набора Сочи")
 	}
 	return nil
 }

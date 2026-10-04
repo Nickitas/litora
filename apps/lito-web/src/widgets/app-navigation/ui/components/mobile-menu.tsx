@@ -2,10 +2,11 @@ import { Link } from "react-router";
 import { NAV_ITEMS } from "../../config";
 import { useAuth } from "@/features/auth";
 import { ROUTES } from "@/shared/config/routes";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { ChevronRight, LogOut, User, UserRound } from "lucide-react";
 import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
+import { Button } from "@/shared/shadcn/components/ui/button";
 
 type MobileMenuProps = {
   isActive: (path: string) => boolean;
@@ -20,13 +21,14 @@ export const MobileMenu = ({
 }: MobileMenuProps) => {
   const { isAuthenticated, logout, user } = useAuth();
   const [logoutError, setLogoutError] = useState("");
+  const reduceMotion = useReducedMotion();
 
   const menuVariants = {
     closed: {
       opacity: 0,
       height: 0,
       transition: {
-        duration: 0.3,
+        duration: reduceMotion ? 0 : 0.3,
         ease: [0.4, 0, 0.2, 1] as const,
       },
     },
@@ -34,7 +36,7 @@ export const MobileMenu = ({
       opacity: 1,
       height: "auto",
       transition: {
-        duration: 0.3,
+        duration: reduceMotion ? 0 : 0.3,
         ease: [0.4, 0, 0.2, 1] as const,
       },
     },
@@ -43,17 +45,17 @@ export const MobileMenu = ({
   const itemVariants = {
     closed: {
       opacity: 0,
-      x: -20,
+      x: reduceMotion ? 0 : -20,
       transition: {
-        duration: 0.2,
+        duration: reduceMotion ? 0 : 0.2,
       },
     },
     open: (i: number) => ({
       opacity: 1,
       x: 0,
       transition: {
-        duration: 0.25,
-        delay: i * 0.05,
+        duration: reduceMotion ? 0 : 0.25,
+        delay: reduceMotion ? 0 : i * 0.05,
         ease: [0, 0, 0.2, 1] as const,
       },
     }),
@@ -63,8 +65,9 @@ export const MobileMenu = ({
     <AnimatePresence>
       {isOpen && (
         <motion.div
+          id="mobile-navigation"
           className="overflow-hidden border-t border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:hidden"
-          initial="closed"
+          initial={reduceMotion ? false : "closed"}
           animate="open"
           exit="closed"
           variants={menuVariants}
@@ -75,7 +78,7 @@ export const MobileMenu = ({
                 key={item.path}
                 custom={index}
                 variants={itemVariants}
-                initial="closed"
+                initial={reduceMotion ? false : "closed"}
                 animate="open"
               >
                 <Link
@@ -107,7 +110,7 @@ export const MobileMenu = ({
             <motion.div
               custom={NAV_ITEMS.length}
               variants={itemVariants}
-              initial="closed"
+              initial={reduceMotion ? false : "closed"}
               animate="open"
               className="border-t border-border/50 pt-4"
             >
@@ -139,10 +142,20 @@ export const MobileMenu = ({
                   </Link>
 
                   {/* Logout button */}
-                  {logoutError && <p role="alert" className="text-sm text-destructive">{logoutError}</p>}
+                  {logoutError && (
+                    <p role="alert" className="text-sm text-destructive">
+                      {logoutError}
+                    </p>
+                  )}
                   <RippleButton
                     onClick={() => {
-                      void logout().then(() => setMobileMenuOpen(false)).catch(() => setLogoutError("Не удалось завершить сессию. Повторите попытку."));
+                      void logout()
+                        .then(() => setMobileMenuOpen(false))
+                        .catch(() =>
+                          setLogoutError(
+                            "Не удалось завершить сессию. Повторите попытку."
+                          )
+                        );
                     }}
                     className="w-full"
                   >
@@ -153,17 +166,17 @@ export const MobileMenu = ({
                   </RippleButton>
                 </div>
               ) : (
-                <Link
-                  to={ROUTES.login}
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <RippleButton className="w-fit">
+                <Button asChild variant="outline" className="w-fit">
+                  <Link
+                    to={ROUTES.login}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
                     <span className="flex items-center justify-center gap-2">
                       <span>Войти</span>
                       <ChevronRight className="size-4" />
                     </span>
-                  </RippleButton>
-                </Link>
+                  </Link>
+                </Button>
               )}
             </motion.div>
           </div>

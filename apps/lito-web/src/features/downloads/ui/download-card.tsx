@@ -3,8 +3,13 @@ import { Monitor as MonitorIcon, ChevronDown, Check } from "lucide-react";
 import { SiApple, SiLinux } from "@icons-pack/react-simple-icons";
 import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
 import { useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
 import confetti from "canvas-confetti";
+import { Button } from "@/shared/shadcn/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shared/shadcn/components/ui/collapsible";
 
 interface DownloadCardProps {
   file: DownloadFile;
@@ -19,65 +24,43 @@ const Changelog = ({ items }: ChangelogProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="mb-4">
-      <motion.button
-        onClick={() => setIsOpen(!isOpen)}
-        className="group flex w-full items-center justify-between rounded-lg border border-border/50 bg-muted/30 px-4 py-3 transition-colors hover:border-border hover:bg-muted/50"
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.99 }}
-      >
-        <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Check className="size-3" />
-          </span>
-          Что нового в этой версии
-        </span>
-        <motion.div
-          animate={{ rotate: isOpen ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-          className="text-muted-foreground"
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mb-4">
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full justify-between bg-muted/30 px-4 hover:bg-muted/50"
         >
-          <ChevronDown className="size-4" />
-        </motion.div>
-      </motion.button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="overflow-hidden"
-          >
-            <motion.div
-              initial={{ y: -10 }}
-              animate={{ y: 0 }}
-              exit={{ y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="mt-2 rounded-lg border border-border/50 bg-background/50 p-4"
-            >
-              <ul className="space-y-2">
-                {items.map((item, index) => (
-                  <motion.li
-                    key={index}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="flex items-start gap-3 text-sm"
-                  >
-                    <span className="mt-1 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <span className="text-xs">•</span>
-                    </span>
-                    <span className="text-muted-foreground">{item}</span>
-                  </motion.li>
-                ))}
-              </ul>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Check aria-hidden="true" className="size-3" />
+            </span>
+            Что нового в этой версии
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            className={`size-4 text-muted-foreground transition-transform motion-reduce:transition-none ${isOpen ? "rotate-180" : ""}`}
+          />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-2 rounded-lg border border-border/50 bg-background/50 p-4">
+          <ul className="space-y-2">
+            {items.map((item, index) => (
+              <li key={index} className="flex items-start gap-3 text-sm">
+                <span
+                  aria-hidden="true"
+                  className="mt-1 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+                >
+                  •
+                </span>
+                <span className="text-muted-foreground">{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
 
@@ -147,7 +130,7 @@ export function DownloadCard({ file, onDownload }: DownloadCardProps) {
         <div className="flex min-w-0 items-center gap-3">
           {getOsIcon(file.os)}
           <div className="min-w-0">
-            <h3 className="break-all font-semibold">{file.name}</h3>
+            <h3 className="font-semibold break-all">{file.name}</h3>
             <p className="text-sm text-muted-foreground capitalize">
               {file.os}
             </p>

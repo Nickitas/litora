@@ -2,7 +2,11 @@ import type {
   AuthDto,
   CalculationJobDto,
   CalculationKindDto,
+  CalculationPageDto,
+  CalculationPageQueryDto,
   CreateCalculationDto,
+  CreateDatasetDto,
+  DatasetDto,
   HealthDto,
   LoginDto,
   RegisterDto,
@@ -84,9 +88,20 @@ export function createApiClient(options: ApiClientOptions = {}) {
       accessToken = undefined;
     },
     calculationKinds: () => send<CalculationKindDto[]>("/calculations/kinds"),
+    datasets: () => send<DatasetDto[]>("/datasets"),
+    createDataset: (body: CreateDatasetDto) =>
+      send<DatasetDto>("/datasets", "POST", body),
     createCalculation: (body: CreateCalculationDto) =>
       send<CalculationJobDto>("/calculations", "POST", body),
     calculations: () => send<CalculationJobDto[]>("/calculations"),
+    calculationPage: (query: CalculationPageQueryDto = {}) => {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined && value !== "") params.set(key, String(value));
+      }
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return send<CalculationPageDto>(`/calculations/page${suffix}`);
+    },
     calculation: (id: string) =>
       send<CalculationJobDto>(`/calculations/${encodeURIComponent(id)}`),
     cancelCalculation: (id: string) =>

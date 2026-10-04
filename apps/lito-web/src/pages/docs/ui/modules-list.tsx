@@ -7,9 +7,11 @@ const statusLabels = {
 };
 
 const statusStyles = {
-  stable: "bg-green-500/10 text-green-500 border-green-500/20",
-  experimental: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-  planned: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+  stable:
+    "bg-status-succeeded-background text-status-succeeded border-status-succeeded",
+  experimental: "bg-warning-background text-warning border-warning",
+  planned:
+    "bg-status-queued-background text-status-queued border-status-queued",
 };
 
 export const ModulesList = () => {

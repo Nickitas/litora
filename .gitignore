@@ -7,3 +7,5 @@ dist/
 .DS_Store
 .litora/
 apps/lito-cli/bin/
+apps/lito-web/playwright-report/
+apps/lito-web/test-results/

@@ -17,8 +17,8 @@ export const FromSource = () => {
             <h3 className="mb-3 font-medium">{step.title}</h3>
             <Terminal>
               <TypingAnimation>{step.code}</TypingAnimation>
-              <AnimatedSpan className="text-green-500">
-                ✓ Step completed successfully
+              <AnimatedSpan className="text-status-succeeded">
+                ✓ Шаг выполнен успешно
               </AnimatedSpan>
               {step.note && (
                 <AnimatedSpan delay={200} className="text-muted-foreground">

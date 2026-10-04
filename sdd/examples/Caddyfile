@@ -1,0 +1,24 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$LITORA_DOMAIN} {
+	# Прямой доступ к серверу: IP клиента, без доверия произвольному X-Forwarded-For.
+	@outside not remote_ip {$LITORA_ALLOWED_CIDRS}
+	respond @outside "Доступ разрешён только участникам пилота" 403
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		-Server
+	}
+
+	# Один доверенный hop для API; nginx не участвует в цепочке auth-запроса.
+	handle /api/* {
+		reverse_proxy api-edge:3000
+	}
+	handle {
+		reverse_proxy web:80
+	}
+}

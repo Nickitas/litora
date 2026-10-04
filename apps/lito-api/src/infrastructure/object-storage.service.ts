@@ -1,9 +1,13 @@
 import { Injectable, OnModuleInit } from "@nestjs/common";
 import { createReadStream } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -50,6 +54,12 @@ export class ObjectStorageService implements OnModuleInit {
           ?.httpStatusCode !== 404
       )
         throw error;
+      if (!environment.s3.autoCreateBucket) {
+        throw new Error(
+          `S3 bucket "${this.bucket}" не найден. Создайте приватный bucket до запуска API.`,
+          { cause: error },
+        );
+      }
       try {
         await this.client.send(
           new CreateBucketCommand({ Bucket: this.bucket }),
@@ -76,6 +86,104 @@ export class ObjectStorageService implements OnModuleInit {
         ContentType: contentType,
       }),
     );
+  }
+
+  async uploadBytes(
+    objectKey: string,
+    bytes: Buffer,
+    contentType: string,
+  ): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+        Body: bytes,
+        ContentLength: bytes.length,
+        ContentType: contentType,
+      }),
+    );
+  }
+
+  async downloadFile(
+    objectKey: string,
+    path: string,
+    maxBytes: number,
+  ): Promise<void> {
+    const response = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      { abortSignal: AbortSignal.timeout(30_000) },
+    );
+    if (
+      response.ContentLength !== undefined &&
+      response.ContentLength > maxBytes
+    )
+      throw new Error("Размер сохранённого набора превышает лимит");
+    if (!response.Body || !(Symbol.asyncIterator in response.Body))
+      throw new Error("S3 не вернул поток набора данных");
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += bytes.length;
+      if (size > maxBytes)
+        throw new Error("Размер сохранённого набора превышает лимит");
+      chunks.push(bytes);
+    }
+    await writeFile(path, Buffer.concat(chunks, size), {
+      flag: "wx",
+      mode: 0o600,
+    });
+  }
+
+  async deleteObject(objectKey: string): Promise<void> {
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+    );
+  }
+
+  async *listObjects(prefix: string): AsyncGenerator<{
+    key: string;
+    lastModified: Date | undefined;
+    etag: string | undefined;
+  }> {
+    let continuation: string | undefined;
+    do {
+      const response = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuation,
+        }),
+      );
+      for (const item of response.Contents ?? []) {
+        if (item.Key)
+          yield {
+            key: item.Key,
+            lastModified: item.LastModified,
+            etag: item.ETag,
+          };
+      }
+      if (!response.IsTruncated) break;
+      continuation = response.NextContinuationToken;
+      if (!continuation)
+        throw new Error("S3 не вернул токен следующей страницы списка объектов");
+    } while (continuation);
+  }
+
+  async headObject(objectKey: string): Promise<{
+    lastModified: Date | undefined;
+    etag: string | undefined;
+  } | undefined> {
+    try {
+      const result = await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      );
+      return { lastModified: result.LastModified, etag: result.ETag };
+    } catch (error) {
+      if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404)
+        return undefined;
+      throw error;
+    }
   }
 
   downloadUrl(objectKey: string, expiresIn = 900): Promise<string> {

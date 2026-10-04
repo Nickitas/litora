@@ -1,0 +1,128 @@
+import { createHash, randomUUID } from "node:crypto";
+import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import type { CreateDatasetDto, DatasetDto } from "@litora/contracts";
+import { DatabaseService } from "../infrastructure/database.service.js";
+import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
+import { datasetSchemaVersion } from "../schema-versions.js";
+import { maxDatasetsPerUser } from "./validation.js";
+
+export interface DatasetRow {
+  id: string;
+  schema_version: number;
+  owner_id: string;
+  name: string;
+  source: string;
+  source_revision: string | null;
+  license: string;
+  crs: "EPSG:4326";
+  coordinate_unit: "degrees";
+  point_count: number;
+  size_bytes: number;
+  sha256: string;
+  object_key: string;
+  created_at: Date;
+}
+
+function dto(row: DatasetRow): DatasetDto {
+  return {
+    id: row.id,
+    schemaVersion: row.schema_version,
+    name: row.name,
+    source: row.source,
+    sourceRevision: row.source_revision,
+    license: row.license,
+    crs: row.crs,
+    coordinateUnit: row.coordinate_unit,
+    pointCount: row.point_count,
+    sizeBytes: row.size_bytes,
+    sha256: row.sha256,
+    createdAt: row.created_at.toISOString(),
+  };
+}
+
+@Injectable()
+export class DatasetsRepository {
+  constructor(
+    @Inject(DatabaseService) private readonly db: DatabaseService,
+    @Inject(ObjectStorageService)
+    private readonly storage: ObjectStorageService,
+  ) {}
+
+  async create(
+    userId: string,
+    dataset: CreateDatasetDto,
+    bytes: Buffer,
+  ): Promise<DatasetDto> {
+    const id = randomUUID();
+    const objectKey = `users/${userId}/datasets/${id}.geojson`;
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    const current = await this.db.query<{ count: string }>(
+      "SELECT count(*)::text AS count FROM datasets WHERE owner_id=$1",
+      [userId],
+    );
+    if (Number(current.rows[0].count) >= maxDatasetsPerUser)
+      throw new ConflictException("Достигнут лимит сохранённых наборов данных");
+    await this.storage.uploadBytes(objectKey, bytes, "application/geo+json");
+    try {
+      return await this.db.transaction(async (client) => {
+        const owner = await client.query(
+          "SELECT id FROM users WHERE id=$1 FOR UPDATE",
+          [userId],
+        );
+        if (!owner.rowCount) throw new NotFoundException("Пользователь не найден");
+        const count = await client.query<{ count: string }>(
+          "SELECT count(*)::text AS count FROM datasets WHERE owner_id=$1",
+          [userId],
+        );
+        if (Number(count.rows[0].count) >= maxDatasetsPerUser)
+          throw new ConflictException("Достигнут лимит сохранённых наборов данных");
+        const result = await client.query<DatasetRow>(
+          `INSERT INTO datasets(id,owner_id,name,source,source_revision,license,crs,coordinate_unit,point_count,size_bytes,sha256,object_key,schema_version)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+          [
+            id,
+            userId,
+            dataset.name,
+            dataset.source,
+            dataset.sourceRevision ?? null,
+            dataset.license,
+            dataset.crs,
+            dataset.coordinateUnit,
+            dataset.geometry.coordinates.length,
+            bytes.length,
+            digest,
+            objectKey,
+            datasetSchemaVersion,
+          ],
+        );
+        return dto(result.rows[0]);
+      });
+    } catch (error) {
+      try {
+        await this.storage.deleteObject(objectKey);
+      } catch {
+        console.error(
+          `Не удалось убрать объект после ошибки сохранения набора ${id}`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  async list(userId: string): Promise<DatasetDto[]> {
+    const result = await this.db.query<DatasetRow>(
+      "SELECT * FROM datasets WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 100",
+      [userId],
+    );
+    return result.rows.map(dto);
+  }
+
+  async getOwned(id: string, userId: string): Promise<DatasetRow> {
+    const result = await this.db.query<DatasetRow>(
+      "SELECT * FROM datasets WHERE id=$1 AND owner_id=$2",
+      [id, userId],
+    );
+    if (!result.rows[0]) throw new NotFoundException("Набор данных не найден");
+    return result.rows[0];
+  }
+}

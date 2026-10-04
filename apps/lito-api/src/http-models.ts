@@ -3,6 +3,8 @@ import type {
   AuthDto,
   CalculationArtifactDto,
   CalculationJobDto,
+  CalculationPageDto,
+  DatasetDto,
   UserDto,
 } from "@litora/contracts";
 
@@ -32,7 +34,10 @@ export class ArtifactResponse implements CalculationArtifactDto {
 }
 export class CalculationResponse implements CalculationJobDto {
   @ApiProperty({ type: String, format: "uuid" }) id!: string;
-  @ApiProperty({ type: String, enum: ["dimension", "map", "erosion"] })
+  @ApiProperty({
+    type: String,
+    enum: ["dimension", "dimension_dataset", "map", "erosion"],
+  })
   kind!: string;
   @ApiProperty({
     type: String,
@@ -43,9 +48,36 @@ export class CalculationResponse implements CalculationJobDto {
     string,
     unknown
   >;
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description: "Версия схемы входа; null для неизвестного legacy-формата",
+  })
+  inputSchemaVersion!: number | null;
   @ApiProperty({ type: "object", additionalProperties: true, nullable: true })
   resultSummary!: Record<string, unknown> | null;
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      "Версия схемы результата; null до успеха или для legacy-формата",
+  })
+  resultSchemaVersion!: number | null;
   @ApiProperty({ type: String, nullable: true }) coreVersion!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      "Идентификатор метода из Go-манифеста; null для старых результатов",
+  })
+  methodId!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      "Ревизия реализации метода из Go-манифеста; не научная аттестация",
+  })
+  methodRevision!: string | null;
   @ApiProperty({ type: String, nullable: true }) commandLine!: string | null;
   @ApiProperty({ type: String, nullable: true }) errorMessage!: string | null;
   @ApiProperty({ type: String, format: "date-time" }) createdAt!: string;
@@ -56,4 +88,30 @@ export class CalculationResponse implements CalculationJobDto {
   @ApiProperty({ type: String, format: "date-time" }) updatedAt!: string;
   @ApiProperty({ type: [ArtifactResponse] })
   artifacts!: CalculationArtifactDto[];
+}
+
+export class CalculationPageResponse implements CalculationPageDto {
+  @ApiProperty({ type: [CalculationResponse] }) items!: CalculationJobDto[];
+  @ApiProperty({ type: String, nullable: true }) nextCursor!: string | null;
+  @ApiProperty({ type: Number }) totalCount!: number;
+}
+
+export class DatasetResponse implements DatasetDto {
+  @ApiProperty({ type: String, format: "uuid" }) id!: string;
+  @ApiProperty({ type: Number, example: 1 }) schemaVersion!: number;
+  @ApiProperty({ type: String }) name!: string;
+  @ApiProperty({ type: String }) source!: string;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Заявленная версия источника; null, если не предоставлена",
+  })
+  sourceRevision!: string | null;
+  @ApiProperty({ type: String }) license!: string;
+  @ApiProperty({ type: String, enum: ["EPSG:4326"] }) crs!: "EPSG:4326";
+  @ApiProperty({ type: String, enum: ["degrees"] }) coordinateUnit!: "degrees";
+  @ApiProperty({ type: Number }) pointCount!: number;
+  @ApiProperty({ type: Number }) sizeBytes!: number;
+  @ApiProperty({ type: String }) sha256!: string;
+  @ApiProperty({ type: String, format: "date-time" }) createdAt!: string;
 }

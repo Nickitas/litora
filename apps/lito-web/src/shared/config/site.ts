@@ -15,7 +15,7 @@ export const SITE_CONFIG = {
 export const SOCIAL_LINKS = [
   {
     name: "GitHub",
-    url: "https://github.com/Nickitas/litora-cli",
+    url: "https://github.com/Nickitas/litora",
     icon: "📦",
   },
 ] as const;

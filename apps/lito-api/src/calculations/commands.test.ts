@@ -17,6 +17,8 @@ test("пользователь не может передать shell, пути 
 test("допустимый запрос преобразуется в фиксированные аргументы", () => {
   assert.deepEqual(commandArguments({ kind: "erosion" }, "/tmp/job"), [
     "erosion",
+    "--black-sea-sochi",
+    "--offline",
     "--steps",
     "3",
     "--output",
@@ -26,4 +28,33 @@ test("допустимый запрос преобразуется в фикси
     kind: "map",
     input: {},
   });
+});
+
+test("пользовательский расчёт принимает только UUID, а путь создаёт worker", () => {
+  const datasetId = "33333333-3333-4333-8333-333333333333";
+  const job = validateCalculation({
+    kind: "dimension_dataset",
+    input: { datasetId },
+  });
+  assert.deepEqual(job, { kind: "dimension_dataset", input: { datasetId } });
+  assert.throws(() => commandArguments(job, "/tmp/output"));
+  assert.deepEqual(
+    commandArguments(job, "/tmp/output", "/tmp/server/input.geojson"),
+    [
+      "dimension",
+      "--input",
+      "/tmp/server/input.geojson",
+      "--output",
+      "/tmp/output",
+    ],
+  );
+  for (const input of [
+    {},
+    { datasetId: "/etc/passwd" },
+    { datasetId: "http://internal" },
+    { datasetId, path: "x" },
+  ])
+    assert.throws(() =>
+      validateCalculation({ kind: "dimension_dataset", input }),
+    );
 });

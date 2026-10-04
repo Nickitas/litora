@@ -41,8 +41,12 @@ export interface CalculationJobDto {
   kind: string;
   status: CalculationStatus;
   input: Record<string, unknown>;
+  inputSchemaVersion: number | null;
   resultSummary: Record<string, unknown> | null;
+  resultSchemaVersion: number | null;
   coreVersion: string | null;
+  methodId: string | null;
+  methodRevision: string | null;
   commandLine: string | null;
   errorMessage: string | null;
   createdAt: string;
@@ -50,6 +54,72 @@ export interface CalculationJobDto {
   finishedAt: string | null;
   updatedAt: string;
   artifacts: CalculationArtifactDto[];
+}
+
+export interface CalculationMetadataExportV1 {
+  format: "litora.calculation-metadata";
+  schemaVersion: 1;
+  calculation: {
+    id: string;
+    kind: string;
+    status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+    input: { steps?: number; datasetId?: string } | null;
+    inputSchemaVersion: number | null;
+    resultSchemaVersion: number | null;
+    coreVersion: string | null;
+    methodId: string | null;
+    methodRevision: string | null;
+    createdAt: string;
+    startedAt: string | null;
+    finishedAt: string | null;
+    updatedAt: string;
+  };
+  provenance: {
+    dataset: {
+      id: string;
+      schemaVersion: number | null;
+      source: string | null;
+      sourceRevision: string | null;
+      license: string | null;
+      crs: string | null;
+      coordinateUnit: string | null;
+      pointCount: number | null;
+      sha256: string | null;
+    } | null;
+    declaredSources: {
+      generatedAt: string | null;
+      coastline: string | null;
+      waves: string | null;
+      bathymetry: string | null;
+      structures: string | null;
+      structuresWarning: string | null;
+    } | null;
+    inputFiles: { sizeBytes: number | null; sha256: string | null }[];
+  } | null;
+  artifacts: {
+    id: string;
+    category: string;
+    filename: string;
+    contentType: string;
+    sizeBytes: number;
+    sha256: string;
+  }[];
+}
+
+export interface CalculationPageQueryDto {
+  status?: CalculationStatus;
+  kind?: CalculationKind;
+  from?: string;
+  to?: string;
+  jobId?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface CalculationPageDto {
+  items: CalculationJobDto[];
+  nextCursor: string | null;
+  totalCount: number;
 }
 
 export interface UserDto {
@@ -63,19 +133,51 @@ export interface LoginDto {
 }
 export interface RegisterDto extends LoginDto {
   name: string;
+  invitationCode: string;
 }
 export interface AuthDto {
   user: UserDto;
   accessToken: string;
   expiresIn: number;
 }
-export type CalculationKind = "dimension" | "map" | "erosion";
+export type CalculationKind =
+  "dimension" | "dimension_dataset" | "map" | "erosion";
 export interface CreateCalculationDto {
   kind: CalculationKind;
-  input?: { steps?: number };
+  input?: { steps?: number; datasetId?: string };
 }
 export interface CalculationKindDto {
   kind: CalculationKind;
   title: string;
   description: string;
+}
+
+export interface GeoJsonLineStringDto {
+  type: "LineString";
+  coordinates: [number, number][];
+}
+
+export interface CreateDatasetDto {
+  name: string;
+  source: string;
+  sourceRevision?: string;
+  license: string;
+  crs: "EPSG:4326";
+  coordinateUnit: "degrees";
+  geometry: GeoJsonLineStringDto;
+}
+
+export interface DatasetDto {
+  id: string;
+  schemaVersion: number;
+  name: string;
+  source: string;
+  sourceRevision: string | null;
+  license: string;
+  crs: "EPSG:4326";
+  coordinateUnit: "degrees";
+  pointCount: number;
+  sizeBytes: number;
+  sha256: string;
+  createdAt: string;
 }

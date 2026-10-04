@@ -2,12 +2,12 @@ import "reflect-metadata";
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import {
+  cp,
   mkdir,
   readdir,
   readFile,
   rm,
   stat,
-  symlink,
   writeFile,
 } from "node:fs/promises";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -25,10 +25,24 @@ import {
   commandArguments,
   validateCalculation,
 } from "../calculations/commands.js";
+import {
+  assertPinnedSochiInputs,
+  bundledInputProvenance,
+} from "../calculations/input-provenance.js";
+import { resultMethodFromManifest } from "../calculations/result-method.js";
+import { DatasetsRepository } from "../datasets/datasets.repository.js";
+import { maxDatasetBytes } from "../datasets/validation.js";
+import {
+  assertSupportedInputSchemaVersion,
+  calculationResultSchemaVersion,
+} from "../schema-versions.js";
+import { assertOutputBudget, maxOutputBytes, maxOutputFiles } from "./output-budget.js";
+import { cleanupPartialArtifacts } from "./partial-artifacts.js";
 
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
 const repository = new CalculationsRepository(db, storage);
+const datasets = new DatasetsRepository(db, storage);
 const workerId = randomUUID();
 let stopping = false;
 let active: ChildProcess | undefined;
@@ -70,6 +84,10 @@ async function run(job: JobRow) {
     checking = false,
     finished = false,
     log = "";
+  let outputFailure: Error | undefined;
+  let outputCheck: Promise<void> | undefined;
+  let outputMonitor: ReturnType<typeof setInterval> | undefined;
+  const uploadedKeys = new Set<string>();
   const heartbeat = setInterval(async () => {
     if (checking) return;
     checking = true;
@@ -95,16 +113,56 @@ async function run(job: JobRow) {
     stopProcess();
   }, environment.jobTimeoutMs);
   try {
+    assertSupportedInputSchemaVersion(job.input_schema_version);
     await mkdir(output, { recursive: true });
-    await symlink(
+    await cp(
       join(environment.cliDirectory, "data"),
       join(directory, "data"),
-      "dir",
+      { recursive: true, force: false, errorOnExist: true },
     );
+    if (job.kind === "erosion")
+      await assertPinnedSochiInputs(join(directory, "data"));
+    let datasetPath: string | undefined;
+    let provenance: Record<string, unknown> | undefined;
+    if (job.kind === "dimension_dataset") {
+      if (!job.dataset_id || !job.user_id)
+        throw new Error("У расчёта нет набора данных или владельца");
+      const dataset = await datasets.getOwned(job.dataset_id, job.user_id);
+      datasetPath = join(directory, "input.geojson");
+      await storage.downloadFile(
+        dataset.object_key,
+        datasetPath,
+        maxDatasetBytes,
+      );
+      const inputSize = (await stat(datasetPath)).size;
+      const inputHash = await sha256(datasetPath);
+      if (inputSize !== dataset.size_bytes || inputHash !== dataset.sha256)
+        throw new Error(
+          "Контрольная сумма или размер набора не совпадает с паспортом",
+        );
+      provenance = {
+        datasetId: dataset.id,
+        datasetSchemaVersion: dataset.schema_version,
+        sha256: dataset.sha256,
+        files: [
+          { path: "input.geojson", sizeBytes: inputSize, sha256: inputHash },
+        ],
+        source: dataset.source,
+        sourceRevision: dataset.source_revision,
+        license: dataset.license,
+        crs: dataset.crs,
+        coordinateUnit: dataset.coordinate_unit,
+        pointCount: dataset.point_count,
+      };
+    }
+    if (interrupted || stopping)
+      throw new Error("Выполнение прервано до запуска CLI");
+    const validated = validateCalculation({ kind: job.kind, input: job.input });
     const args = [
       ...commandArguments(
-        validateCalculation({ kind: job.kind, input: job.input }),
+        validated,
         output,
+        datasetPath,
       ),
       "--manifest",
       join(output, "manifest.json"),
@@ -118,6 +176,17 @@ async function run(job: JobRow) {
       "INSERT INTO calculation_events(job_id,event_type) VALUES($1,'started')",
       [job.id],
     );
+    outputMonitor = setInterval(() => {
+      if (outputCheck || outputFailure) return;
+      outputCheck = assertOutputBudget(output)
+        .catch((error: unknown) => {
+          outputFailure = error instanceof Error ? error : new Error(String(error));
+          stopProcess();
+        })
+        .finally(() => {
+          outputCheck = undefined;
+        });
+    }, 1000);
     const exitCode = await new Promise<number | null>((resolve, reject) => {
       active = spawn(environment.cliBinary, args, {
         cwd: directory,
@@ -134,8 +203,13 @@ async function run(job: JobRow) {
       active.once("error", reject);
       active.once("close", resolve);
     });
+    clearInterval(outputMonitor);
+    outputMonitor = undefined;
     active = undefined;
+    await outputCheck;
+    if (outputFailure) throw outputFailure;
     await writeFile(join(output, "execution.log"), log);
+    await assertOutputBudget(output);
     const outputs = await filesIn(output);
     if (exitCode !== 0 || interrupted || stopping)
       throw new Error(
@@ -144,6 +218,26 @@ async function run(job: JobRow) {
           : `CLI завершился с кодом ${exitCode}. ${log.slice(-2000)}`,
       );
     if (outputs.length <= 1) throw new Error("CLI не создал отчётов");
+    if (outputs.length > maxOutputFiles)
+      throw new Error("Превышен лимит файлов результата");
+    const outputSizes = await Promise.all(
+      outputs.map(async (path) => (await stat(path)).size),
+    );
+    if (
+      outputSizes.some((size) => size > maxOutputBytes) ||
+      outputSizes.reduce((sum, size) => sum + size, 0) > maxOutputBytes
+    )
+      throw new Error("Превышен лимит размера результата");
+    const method = resultMethodFromManifest(
+      await readFile(join(output, "manifest.json")),
+      validated.kind,
+    );
+    if (job.kind !== "dimension_dataset")
+      provenance = {
+        ...(await bundledInputProvenance(job.kind, join(directory, "data"))),
+      };
+    if (job.kind === "erosion")
+      await assertPinnedSochiInputs(join(directory, "data"));
     const metrics: Record<string, unknown> = {};
     let totalBytes = 0;
     for (const path of outputs) {
@@ -154,6 +248,7 @@ async function run(job: JobRow) {
       const contentType = mime.lookup(path) || "application/octet-stream";
       const digest = await sha256(path);
       await storage.uploadFile(objectKey, path, contentType);
+      uploadedKeys.add(objectKey);
       await repository.addArtifact({
         jobId: job.id,
         category: filename.endsWith(".log") ? "log" : "output",
@@ -176,46 +271,74 @@ async function run(job: JobRow) {
     const summary = {
       fileCount: outputs.length,
       totalBytes,
-      scenario: job.kind === "erosion" ? "demo" : "bundled-data",
+      scenario:
+        job.kind === "erosion"
+          ? "demo"
+          : job.kind === "dimension_dataset"
+            ? "user-data"
+            : "bundled-data",
+      ...(provenance ? { provenance } : {}),
+      method,
       metrics,
     };
-    await db.query(
-      `WITH finished AS (UPDATE calculation_jobs SET status='succeeded',result_summary=$3,finished_at=now(),updated_at=now()
+    const completed = await db.query(
+      `WITH finished AS (UPDATE calculation_jobs SET status='succeeded',result_summary=$3,result_schema_version=$4,method_id=$5,method_revision=$6,finished_at=now(),updated_at=now()
       WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
       INSERT INTO calculation_events(job_id,event_type) SELECT id,'succeeded' FROM finished`,
-      [job.id, workerId, summary],
+      [job.id, workerId, summary, calculationResultSchemaVersion, method.id, method.revision],
     );
+    if (completed.rowCount !== 1)
+      throw new Error("Расчёт уже отменён или потерял владельца worker");
     console.log(`Расчёт ${job.id}: готово, файлов ${outputs.length}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const leftovers = await cleanupPartialArtifacts(
+      job.id,
+      uploadedKeys,
+      (key) => storage.deleteObject(key),
+      (id, key) => repository.removeArtifact(id, key),
+    );
+    if (leftovers.length)
+      console.error(`Не удалось очистить ${leftovers.length} артефактов расчёта ${job.id}`);
+    const failed = await db.query(
+      `WITH failed AS (UPDATE calculation_jobs SET status='failed',error_message=$3,finished_at=now(),updated_at=now()
+      WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
+      INSERT INTO calculation_events(job_id,event_type,payload) SELECT id,'failed',jsonb_build_object('message',$3::text) FROM failed`,
+      [job.id, workerId, message.slice(0, 4000)],
+    );
+    if (!failed.rowCount) {
+      console.error(`Расчёт ${job.id}: ${message}`);
+      return;
+    }
     try {
       const path = join(output, "failure.log");
       await mkdir(output, { recursive: true });
       await writeFile(path, `${message}\n${log}`);
       const objectKey = `users/${job.id}/failure.log`;
       await storage.uploadFile(objectKey, path, "text/plain");
-      await repository.addArtifact({
-        jobId: job.id,
-        category: "log",
-        filename: "failure.log",
-        bucket: storage.bucket,
-        objectKey,
-        contentType: "text/plain",
-        sizeBytes: (await stat(path)).size,
-        sha256: await sha256(path),
-      });
+      try {
+        await repository.addArtifact({
+          jobId: job.id,
+          category: "log",
+          filename: "failure.log",
+          bucket: storage.bucket,
+          objectKey,
+          contentType: "text/plain",
+          sizeBytes: (await stat(path)).size,
+          sha256: await sha256(path),
+        });
+      } catch (metadataError) {
+        await storage.deleteObject(objectKey);
+        throw metadataError;
+      }
     } catch (uploadError) {
       console.error(`Не удалось сохранить журнал ${job.id}`, uploadError);
     }
-    await db.query(
-      `WITH failed AS (UPDATE calculation_jobs SET status='failed',error_message=$3,finished_at=now(),updated_at=now()
-      WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
-      INSERT INTO calculation_events(job_id,event_type,payload) SELECT id,'failed',jsonb_build_object('message',$3::text) FROM failed`,
-      [job.id, workerId, message.slice(0, 4000)],
-    );
     console.error(`Расчёт ${job.id}: ${message}`);
   } finally {
     finished = true;
+    if (outputMonitor) clearInterval(outputMonitor);
+    await outputCheck;
     clearInterval(heartbeat);
     clearTimeout(deadline);
     stopProcess();

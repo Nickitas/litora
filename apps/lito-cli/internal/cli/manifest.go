@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"coastal-geometry/internal/domain/methods"
 )
 
 // ResultArtifact описывает файл, созданный вычислительным ядром.
@@ -21,10 +23,26 @@ type ResultArtifact struct {
 
 // ResultManifest — машинно-читаемый перечень результатов успешной команды.
 type ResultManifest struct {
-	SchemaVersion int              `json:"schemaVersion"`
-	Command       string           `json:"command"`
-	CreatedAt     time.Time        `json:"createdAt"`
-	Artifacts     []ResultArtifact `json:"artifacts"`
+	SchemaVersion int               `json:"schemaVersion"`
+	Command       string            `json:"command"`
+	Method        *methods.Identity `json:"method,omitempty"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	Artifacts     []ResultArtifact  `json:"artifacts"`
+}
+
+func methodForCommand(command string) *methods.Identity {
+	var method methods.Identity
+	switch command {
+	case "lito dimension":
+		method = methods.BoxCounting()
+	case "lito map":
+		method = methods.OverviewMap()
+	case "lito erosion":
+		method = methods.LongshoreCERC()
+	default:
+		return nil
+	}
+	return &method
 }
 
 // WriteResultManifest сохраняет перечень файлов рядом с манифестом без перехода по символическим ссылкам.
@@ -35,7 +53,7 @@ func WriteResultManifest(path, command string) error {
 		return err
 	}
 	directory := filepath.Dir(path)
-	manifest := ResultManifest{SchemaVersion: 1, Command: command, CreatedAt: time.Now().UTC(), Artifacts: []ResultArtifact{}}
+	manifest := ResultManifest{SchemaVersion: 2, Command: command, Method: methodForCommand(command), CreatedAt: time.Now().UTC(), Artifacts: []ResultArtifact{}}
 	err = filepath.WalkDir(directory, func(current string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr

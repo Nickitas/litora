@@ -12,6 +12,12 @@ export const calculationKinds: CalculationKindDto[] = [
       "Box-counting для поставляемой береговой линии. JSON-метрики и SVG-отчёт.",
   },
   {
+    kind: "dimension_dataset",
+    title: "Размерность своей береговой линии",
+    description:
+      "Box-counting по загруженному GeoJSON LineString. Геометрия проверяется Go при запуске.",
+  },
+  {
     kind: "map",
     title: "Карта Чёрного моря",
     description:
@@ -39,8 +45,12 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
     throw new BadRequestException("input должен быть объектом");
   const parameters = input as Record<string, unknown>;
   if (
-    Object.keys(parameters).some(
-      (key) => data.kind !== "erosion" || key !== "steps",
+    Object.keys(parameters).some((key) =>
+      data.kind === "erosion"
+        ? key !== "steps"
+        : data.kind === "dimension_dataset"
+          ? key !== "datasetId"
+          : true,
     )
   )
     throw new BadRequestException("Недопустимые параметры расчёта");
@@ -51,16 +61,29 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
       Number(parameters.steps) > 48)
   )
     throw new BadRequestException("Число шагов: целое от 1 до 48");
+  if (
+    data.kind === "dimension_dataset" &&
+    (typeof parameters.datasetId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        parameters.datasetId,
+      ))
+  )
+    throw new BadRequestException("Укажите UUID своего набора данных");
   return {
     kind: data.kind as CreateCalculationDto["kind"],
     input:
-      data.kind === "erosion" ? { steps: Number(parameters.steps ?? 3) } : {},
+      data.kind === "erosion"
+        ? { steps: Number(parameters.steps ?? 3) }
+        : data.kind === "dimension_dataset"
+          ? { datasetId: parameters.datasetId as string }
+          : {},
   };
 }
 
 export function commandArguments(
   job: CreateCalculationDto,
   output: string,
+  datasetPath?: string,
 ): string[] {
   const validated = validateCalculation(job);
   switch (validated.kind) {
@@ -72,6 +95,12 @@ export function commandArguments(
         "--output",
         output,
       ];
+    case "dimension_dataset":
+      if (!datasetPath)
+        throw new Error(
+          "Для пользовательского расчёта нужен серверный путь набора",
+        );
+      return ["dimension", "--input", datasetPath, "--output", output];
     case "map":
       return [
         "map",
@@ -84,6 +113,8 @@ export function commandArguments(
     case "erosion":
       return [
         "erosion",
+        "--black-sea-sochi",
+        "--offline",
         "--steps",
         String(validated.input!.steps),
         "--output",

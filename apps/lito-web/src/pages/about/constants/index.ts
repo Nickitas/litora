@@ -90,8 +90,8 @@ export const aboutPageContent = {
 
   repository: {
     title: "Репозиторий",
-    url: "https://github.com/Nickitas/litora-cli",
-    displayUrl: "github.com/Nickitas/litora-cli",
+    url: "https://github.com/Nickitas/litora",
+    displayUrl: "github.com/Nickitas/litora",
     description:
       "Исходный код, документация и issue tracker доступны на GitHub",
   },

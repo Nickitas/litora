@@ -21,7 +21,7 @@ export const downloadsPageContent = {
     description:
       "Вы также можете собрать Litora из исходников. Код доступен на GitHub под лицензией MIT.",
     buttonText: "Открыть на GitHub →",
-    url: "https://github.com/Nickitas/litora-cli",
+    url: "https://github.com/Nickitas/litora",
   },
 
   changelog: {

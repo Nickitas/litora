@@ -64,6 +64,21 @@ func TestFetchCoastlineDataParsesGeoJSONPolygon(t *testing.T) {
 	}
 }
 
+func TestLoadBareLineStringForUserDimension(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "input.geojson")
+	payload := `{"type":"LineString","coordinates":[[39.667927,43.6442458],[39.6739089,43.6407472],[39.6792709,43.6389198],[39.6853954,43.6341751]]}`
+	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Load(LoadOptions{LocalPath: path})
+	if err != nil {
+		t.Fatalf("пользовательский LineString не загрузился: %v", err)
+	}
+	if len(result.Points) != 4 || result.Points[0].Lon != 39.667927 || result.Points[0].Lat != 43.6442458 {
+		t.Fatalf("неверные точки пользовательской линии: %+v", result.Points)
+	}
+}
+
 func TestLoadPolygonPreservesIslandHole(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "black-sea.geojson")
 	payload := `{"type":"Polygon","coordinates":[[[34,43],[35,43],[35,44],[34,44],[34,43]],[[34.4,43.4],[34.4,43.6],[34.6,43.6],[34.6,43.4],[34.4,43.4]]]}`

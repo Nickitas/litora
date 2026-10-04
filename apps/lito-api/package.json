@@ -9,8 +9,12 @@
     "start": "node dist/main.js",
     "worker": "tsx src/worker/main.ts",
     "worker:start": "node dist/worker/main.js",
-    "test": "tsx --test src/**/*.test.ts",
-    "artifacts:import": "tsx src/scripts/import-cli-output.ts"
+    "test": "node scripts/test.mjs",
+    "test:db": "node scripts/test.mjs --require-database",
+    "storage:smoke": "node scripts/storage-smoke.mjs",
+    "invitations": "tsx src/scripts/invitations.ts",
+    "artifacts:import": "tsx src/scripts/import-cli-output.ts",
+    "artifacts:reconcile": "tsx src/scripts/reconcile-artifacts.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

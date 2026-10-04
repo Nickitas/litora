@@ -280,9 +280,9 @@ export const Terminal = ({
     >
       <div className="flex flex-col gap-y-2 border-b border-border p-4">
         <div className="flex flex-row gap-x-2">
-          <div className="h-2 w-2 rounded-full bg-red-500"></div>
-          <div className="h-2 w-2 rounded-full bg-yellow-500"></div>
-          <div className="h-2 w-2 rounded-full bg-green-500"></div>
+          <div className="h-2 w-2 rounded-full bg-muted-foreground/60"></div>
+          <div className="h-2 w-2 rounded-full bg-muted-foreground/60"></div>
+          <div className="h-2 w-2 rounded-full bg-muted-foreground/60"></div>
         </div>
       </div>
       <pre className="max-w-full overflow-x-auto p-4 text-xs sm:text-sm">

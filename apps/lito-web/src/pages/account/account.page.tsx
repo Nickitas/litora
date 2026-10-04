@@ -1,365 +1,71 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Navigate } from "react-router-dom";
-import type {
-  CalculationJobDto,
-  CalculationKind,
-  CalculationKindDto,
-  CalculationStatus,
-} from "@litora/contracts";
+import { useRef, useState } from "react";
+import { Navigate, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "@/features/auth";
-import { api } from "@/shared/api/client";
+import { Dialog } from "@/shared/shadcn/components/ui/dialog";
+import { NewCalculationDialog } from "./new-calculation.page";
 
-const labels: Record<CalculationStatus, string> = {
-  queued: "В очереди",
-  running: "Выполняется",
-  succeeded: "Готово",
-  failed: "Ошибка",
-  cancelled: "Отменён",
-};
-const active = (job: CalculationJobDto) =>
-  job.status === "queued" || job.status === "running";
+const navigation = [
+  { to: "/account", label: "Обзор", end: true },
+  { to: "/account/calculations", label: "Расчёты", end: true },
+] as const;
 
 export function AccountPage() {
   const auth = useAuth();
+  const [newCalculationOpen, setNewCalculationOpen] = useState(false);
+  const newCalculationTriggerRef = useRef<HTMLElement | null>(null);
+
+  function changeNewCalculationOpen(open: boolean) {
+    if (open && document.activeElement instanceof HTMLElement) {
+      newCalculationTriggerRef.current = document.activeElement;
+    }
+    setNewCalculationOpen(open);
+  }
+
   if (auth.loading) return <p role="status">Проверяем сессию…</p>;
   if (!auth.isAuthenticated || !auth.user)
     return <Navigate to="/login" replace />;
-  return <Workspace name={auth.user.name} key={auth.user.id} />;
-}
 
-function Workspace({ name }: { name: string }) {
-  const [jobs, setJobs] = useState<CalculationJobDto[]>([]);
-  const [kinds, setKinds] = useState<CalculationKindDto[]>([]);
-  const [kind, setKind] = useState<CalculationKind>("dimension");
-  const [steps, setSteps] = useState(3);
-  const [selectedId, setSelectedId] = useState<string>();
-  const [detail, setDetail] = useState<CalculationJobDto>();
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [revision, setRevision] = useState(0);
-  const fail = useCallback(
-    (error: unknown) =>
-      setError(
-        error instanceof Error ? error.message : "Не удалось получить данные"
-      ),
-    []
-  );
-
-  useEffect(() => {
-    let mounted = true;
-    api
-      .calculationKinds()
-      .then((result) => {
-        if (mounted) setKinds(result);
-      })
-      .catch((error) => {
-        if (mounted) fail(error);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [fail]);
-  useEffect(() => {
-    let mounted = true;
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      try {
-        const result = await api.calculations();
-        if (mounted) {
-          setJobs(result);
-          setLoading(false);
-        }
-      } catch (error) {
-        if (mounted) {
-          fail(error);
-          setLoading(false);
-        }
-      } finally {
-        if (mounted) timer = setTimeout(poll, 4000);
-      }
-    }
-    void poll();
-    return () => {
-      mounted = false;
-      clearTimeout(timer);
-    };
-  }, [revision, fail]);
-  useEffect(() => {
-    if (!selectedId) return;
-    let mounted = true;
-    let timer: ReturnType<typeof setTimeout>;
-    setDetail(undefined);
-    async function poll() {
-      try {
-        const result = await api.calculation(selectedId!);
-        if (mounted) {
-          setDetail(result);
-          timer = setTimeout(poll, active(result) ? 2000 : 600000);
-        }
-      } catch (error) {
-        if (mounted) fail(error);
-      }
-    }
-    void poll();
-    return () => {
-      mounted = false;
-      clearTimeout(timer);
-    };
-  }, [selectedId, revision, fail]);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      const job = await api.createCalculation({
-        kind,
-        input: kind === "erosion" ? { steps } : {},
-      });
-      setSelectedId(job.id);
-      setRevision((value) => value + 1);
-    } catch (error) {
-      fail(error);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function cancel(id: string) {
-    setBusy(true);
-    setError("");
-    try {
-      await api.cancelCalculation(id);
-      setRevision((value) => value + 1);
-    } catch (error) {
-      fail(error);
-    } finally {
-      setBusy(false);
-    }
-  }
-  const scenario = kinds.find((item) => item.kind === kind);
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="text-sm text-muted-foreground">Личный кабинет · {name}</p>
-        <h1 className="mt-2 text-3xl font-bold">Мои исследования</h1>
-        <p className="mt-3 text-muted-foreground">
-          Параметры, отчёты и история ваших расчётов береговой линии.
-        </p>
-      </header>
-      {error && (
-        <div
-          role="alert"
-          className="rounded-xl border border-destructive/40 p-4 text-destructive"
-        >
-          {error}
-          <button
-            className="ml-4 underline"
-            onClick={() => {
-              setError("");
-              setRevision((value) => value + 1);
-            }}
-          >
-            Повторить
-          </button>
-        </div>
-      )}
-      <div className="grid items-start gap-6 lg:grid-cols-[320px_1fr]">
-        <form
-          onSubmit={submit}
-          className="space-y-4 rounded-2xl border bg-background p-5"
-        >
-          <h2 className="text-xl font-semibold">Новый расчёт</h2>
-          <label className="block text-sm">
-            Сценарий
-            <select
-              className="mt-2 w-full rounded-lg border bg-background p-3"
-              value={kind}
-              onChange={(event) =>
-                setKind(event.target.value as CalculationKind)
-              }
-            >
-              {kinds.map((item) => (
-                <option key={item.kind} value={item.kind}>
-                  {item.title}
-                </option>
-              ))}
-            </select>
-          </label>
+    <Dialog open={newCalculationOpen} onOpenChange={changeNewCalculationOpen}>
+      <div className="mx-auto max-w-[1440px] space-y-6">
+        <header>
           <p className="text-sm text-muted-foreground">
-            {scenario?.description}
+            Личный кабинет · {auth.user.name}
           </p>
-          {kind === "erosion" && (
-            <label className="block text-sm">
-              Шаги волнового ряда (1–48)
-              <input
-                className="mt-2 w-full rounded-lg border bg-background p-3"
-                type="number"
-                min={1}
-                max={48}
-                required
-                value={steps}
-                onChange={(event) => setSteps(Number(event.target.value))}
-              />
-            </label>
-          )}
-          <button
-            disabled={busy || !kinds.length}
-            className="w-full rounded-lg bg-primary p-3 text-primary-foreground disabled:opacity-50"
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            Рабочее место для запуска, контроля и изучения.
+          </p>
+        </header>
+        <div className="grid items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <nav
+            aria-label="Разделы личного кабинета"
+            className="flex gap-2 overflow-x-auto pb-1 lg:sticky lg:top-24 lg:block lg:space-y-1 lg:overflow-visible lg:pb-0"
           >
-            {busy ? "Подождите…" : "Запустить расчёт"}
-          </button>
-          <p className="text-xs text-muted-foreground">
-            Используются поставляемые данные Чёрного моря. Результаты доступны
-            только в вашем аккаунте.
-          </p>
-        </form>
-        <section className="space-y-3" aria-label="История расчётов">
-          <h2 className="text-xl font-semibold">История расчётов</h2>
-          {loading ? (
-            <p role="status">Загружаем историю…</p>
-          ) : jobs.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-muted-foreground">
-              Пока нет расчётов. Выберите сценарий и запустите первый.
-            </div>
-          ) : (
-            <ul className="space-y-3">
-              {jobs.map((job) => (
-                <li
-                  key={job.id}
-                  className={`rounded-xl border p-4 ${selectedId === job.id ? "border-primary bg-primary/5" : ""}`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <button
-                      className="text-left font-medium underline-offset-4 hover:underline"
-                      onClick={() => setSelectedId(job.id)}
-                    >
-                      {kinds.find((item) => item.kind === job.kind)?.title ??
-                        job.kind}
-                    </button>
-                    <span
-                      className="rounded-full bg-muted px-3 py-1 text-xs"
-                      role="status"
-                    >
-                      {labels[job.status]}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {new Date(job.createdAt).toLocaleString("ru-RU")} ·{" "}
-                    {job.id.slice(0, 8)}
-                  </p>
-                  <div className="mt-3 flex gap-4 text-sm">
-                    <button
-                      className="text-primary underline"
-                      onClick={() => setSelectedId(job.id)}
-                    >
-                      Результаты и параметры
-                    </button>
-                    {active(job) && (
-                      <button
-                        disabled={busy}
-                        onClick={() => void cancel(job.id)}
-                        className="text-destructive underline"
-                      >
-                        Отменить
-                      </button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            {navigation.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  `inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:flex ${isActive
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+          <Outlet />
+        </div>
+        {newCalculationOpen && (
+          <NewCalculationDialog
+            onOpenChange={changeNewCalculationOpen}
+            onRestoreFocus={() => newCalculationTriggerRef.current?.focus()}
+          />
+        )}
       </div>
-      {selectedId && (
-        <section
-          className="space-y-4 rounded-2xl border p-5"
-          aria-label="Результат расчёта"
-        >
-          <h2 className="text-xl font-semibold">Результат расчёта</h2>
-          {!detail ? (
-            <p role="status">Загружаем результаты…</p>
-          ) : (
-            <>
-              <p className="text-sm">
-                {labels[detail.status]} · {detail.id}
-              </p>
-              {detail.errorMessage && (
-                <p
-                  role="alert"
-                  className="text-sm whitespace-pre-wrap text-destructive"
-                >
-                  {detail.errorMessage}
-                </p>
-              )}
-              {active(detail) && (
-                <p role="status" className="text-muted-foreground">
-                  Результаты появятся здесь автоматически после выполнения.
-                </p>
-              )}
-              {detail.resultSummary?.scenario === "demo" && (
-                <p className="rounded-lg bg-amber-500/10 p-3 text-sm">
-                  Демонстрационный сценарий. Не является прогнозом годового
-                  размыва или калиброванным научным отчётом.
-                </p>
-              )}
-              <div className="grid gap-4 md:grid-cols-2">
-                {detail.artifacts
-                  .filter((file) => file.contentType.startsWith("image/"))
-                  .map((file) => (
-                    <figure
-                      className="overflow-hidden rounded-xl border"
-                      key={file.id}
-                    >
-                      <img
-                        src={file.downloadUrl}
-                        alt={file.filename}
-                        loading="lazy"
-                        className="max-h-96 w-full bg-white object-contain"
-                      />
-                      <figcaption className="p-3 text-sm">
-                        {file.filename}
-                      </figcaption>
-                    </figure>
-                  ))}
-              </div>
-              <ul className="space-y-2 text-sm">
-                {detail.artifacts.map((file) => (
-                  <li key={file.id}>
-                    <a
-                      className="text-primary underline"
-                      href={file.downloadUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {file.filename}
-                    </a>
-                    <span className="ml-3 text-muted-foreground">
-                      {(file.sizeBytes / 1024).toFixed(1)} КБ
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <details>
-                <summary className="cursor-pointer">
-                  Параметры и метрики JSON
-                </summary>
-                <pre className="mt-3 max-h-96 overflow-auto rounded-lg bg-muted p-4 text-xs">
-                  {JSON.stringify(
-                    {
-                      input: detail.input,
-                      result: detail.resultSummary,
-                      coreVersion: detail.coreVersion,
-                    },
-                    null,
-                    2
-                  )}
-                </pre>
-              </details>
-            </>
-          )}
-        </section>
-      )}
-    </div>
+    </Dialog>
   );
 }

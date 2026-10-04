@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17.10-alpine3.24@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-litora}
       POSTGRES_USER: ${POSTGRES_USER:-litora}
@@ -33,7 +33,7 @@ services:
       retries: 20
 
   postgres-init:
-    image: postgres:17-alpine
+    image: postgres:17.10-alpine3.24@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,8 +59,10 @@ services:
     environment: &app-environment
       DATABASE_URL: postgresql://${POSTGRES_USER:-litora}:${POSTGRES_PASSWORD:-litora_local_password}@postgres:5432/${POSTGRES_DB:-litora}
       S3_ENDPOINT: http://minio:9000
+      S3_AUTO_CREATE_BUCKET: "true"
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
+      API_ORIGIN: ${API_ORIGIN:-http://localhost:3000}
       LITO_CLI_BINARY: /usr/local/bin/lito
       PORT: 3000
     ports: ["127.0.0.1:${API_PORT:-3000}:3000"]

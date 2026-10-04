@@ -18,23 +18,53 @@ export const DocsOverview = () => {
     <section className="space-y-12">
       <DocsSearch />
 
-      <div className="relative space-y-6 overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.08] via-background to-cyan-500/[0.06] p-5 sm:p-8">
+      <div className="relative space-y-6 overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.08] via-background to-accent/60 p-5 sm:p-8">
         <div className="pointer-events-none absolute -top-24 -right-20 size-56 rounded-full bg-primary/10 blur-3xl" />
         <div className="relative flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-primary"><Book className="size-4" /> База знаний проекта</div>
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Научный справочник Litora</h2>
-            <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">Практические и научные материалы о моделировании береговых систем: от установки CLI до проверки рельефа и подготовки публикаций.</p>
+            <div className="flex items-center gap-2 text-sm font-medium text-primary">
+              <Book className="size-4" /> База знаний проекта
+            </div>
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              Научный справочник Litora
+            </h2>
+            <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+              Практические и научные материалы о моделировании береговых систем:
+              от установки CLI до проверки рельефа и подготовки публикаций.
+            </p>
           </div>
-          <Badge variant="outline" className="w-fit border-primary/30 bg-background/60">{referenceDocuments.length} материалов</Badge>
+          <Badge
+            variant="outline"
+            className="w-fit border-primary/30 bg-background/60"
+          >
+            {referenceDocuments.length} материалов
+          </Badge>
         </div>
         <div className="relative grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {referenceDocuments.map((document) => (
-            <Link key={document.slug} to={`/docs/reference/${document.slug}`} className="group flex min-h-40 flex-col rounded-xl border border-border/60 bg-background/75 p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg">
-              <div className="mb-4 flex items-start justify-between gap-3"><Badge variant="secondary" className="bg-primary/10 text-primary">{document.category}</Badge><ArrowUpRight className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" /></div>
-              <h3 className="text-base font-semibold transition-colors group-hover:text-primary">{document.title}</h3>
-              <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">{document.description}</p>
-              <span className="mt-4 text-xs font-medium text-primary/80">Открыть материал →</span>
+            <Link
+              key={document.slug}
+              to={`/docs/reference/${document.slug}`}
+              className="group flex min-h-40 flex-col rounded-xl border border-border/60 bg-background/75 p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg"
+            >
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <Badge
+                  variant="secondary"
+                  className="bg-primary/10 text-primary"
+                >
+                  {document.category}
+                </Badge>
+                <ArrowUpRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary" />
+              </div>
+              <h3 className="text-base font-semibold transition-colors group-hover:text-primary">
+                {document.title}
+              </h3>
+              <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
+                {document.description}
+              </p>
+              <span className="mt-4 text-xs font-medium text-primary/80">
+                Открыть материал →
+              </span>
             </Link>
           ))}
         </div>
@@ -77,9 +107,9 @@ export const DocsOverview = () => {
                         </h3>
                         <Badge
                           variant="secondary"
-                          className="border-green-500/20 bg-green-500/10 text-green-500 hover:bg-green-500/20"
+                          className="border-status-succeeded bg-status-succeeded-background text-status-succeeded"
                         >
-                          Stable
+                          Стабильный
                         </Badge>
                       </div>
                     </div>
@@ -149,9 +179,9 @@ export const DocsOverview = () => {
                           </h3>
                           <Badge
                             variant="secondary"
-                            className="border-yellow-500/20 bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20"
+                            className="border-warning bg-warning-background text-warning"
                           >
-                            Experimental
+                            Экспериментальный
                           </Badge>
                         </div>
                       </div>
@@ -290,7 +320,7 @@ export const DocsOverview = () => {
             </Link>
 
             <a
-              href="https://github.com/Nickitas/litora-cli"
+              href="https://github.com/Nickitas/litora"
               target="_blank"
               rel="noopener noreferrer"
               className="group flex flex-col items-center gap-3 rounded-xl border border-transparent p-6 transition-all hover:border-border/50 hover:bg-muted/50"
@@ -302,7 +332,7 @@ export const DocsOverview = () => {
             </a>
 
             <a
-              href="https://github.com/Nickitas/litora-cli/issues"
+              href="https://github.com/Nickitas/litora/issues"
               target="_blank"
               rel="noopener noreferrer"
               className="group flex flex-col items-center gap-3 rounded-xl border border-transparent p-6 transition-all hover:border-border/50 hover:bg-muted/50"

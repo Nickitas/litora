@@ -1,9 +1,29 @@
 name: Проверка Litora
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      TEST_DATABASE_URL: postgresql://litora_test:litora_test_password@localhost:5432/litora_test_invitations
+    services:
+      postgres:
+        image: postgres:17.10-alpine3.24@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+        env:
+          POSTGRES_USER: litora_test
+          POSTGRES_PASSWORD: litora_test_password
+          POSTGRES_DB: litora_test_invitations
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U litora_test -d litora_test_invitations"
+          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,22 +41,4 @@ jobs:
           cache-dependency-path: apps/lito-cli/go.sum
       - run: pnpm install --frozen-lockfile
       - run: pnpm env:init
-      - run: pnpm typecheck && pnpm build:api && pnpm build:web
-      - run: pnpm test:api && pnpm test:cli
-  integration:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: node scripts/setup.mjs
-      - run: docker compose --env-file .env.local -f infra/compose.yaml --profile app up -d --build --wait
-      - run: node scripts/integration-test.mjs
-      - if: failure()
-        run: docker compose --env-file .env.local -f infra/compose.yaml --profile app logs --tail=100
-      - if: always()
-        run: docker compose --env-file .env.local -f infra/compose.yaml --profile app down
+      - run: pnpm verify
