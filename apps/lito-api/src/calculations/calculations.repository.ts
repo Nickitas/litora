@@ -18,6 +18,9 @@ import {
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
 import { calculationInputSchemaVersion } from "../schema-versions.js";
+import { resourceProfileForKind, scientificReferences } from "./commands.js";
+import { ScientificInputsRepository } from "../scientific-inputs/scientific-inputs.repository.js";
+import { maxReusableArtifactTotalBytes } from "../scientific-inputs/reusable-artifacts.js";
 
 export interface JobRow {
   id: string;
@@ -137,19 +140,30 @@ export class CalculationsRepository {
       );
       if (!owned.rows[0]) throw new NotFoundException("Набор данных не найден");
     }
+    const scientificInputs = new ScientificInputsRepository(this.database);
+    let scientificBytes = 0;
+    for (const reference of scientificReferences(job)) {
+      const source = await scientificInputs.resolveOwnedSource(
+        reference.id, userId, reference.role, this.storage.bucket,
+      );
+      scientificBytes += Number(source.size_bytes);
+      if (scientificBytes > maxReusableArtifactTotalBytes)
+        throw new BadRequestException("Суммарный размер научных входов превышает 4 ГиБ");
+    }
     const row = await this.database.transaction(async (client) => {
       await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
         userId,
       ]);
       const result = await client.query<JobRow>(
-        `INSERT INTO calculation_jobs(user_id,kind,input,dataset_id,input_schema_version)
-        SELECT $1,$2,$3,$4,$5 WHERE (SELECT count(*) FROM calculation_jobs WHERE user_id=$1 AND status IN ('queued','running')) < 5 RETURNING *`,
+        `INSERT INTO calculation_jobs(user_id,kind,input,dataset_id,input_schema_version,resource_profile)
+        SELECT $1,$2,$3,$4,$5,$6 WHERE (SELECT count(*) FROM calculation_jobs WHERE user_id=$1 AND status IN ('queued','running')) < 5 RETURNING *`,
         [
           userId,
           job.kind,
           job.input ?? {},
           datasetId,
           calculationInputSchemaVersion,
+          resourceProfileForKind(job.kind),
         ],
       );
       if (!result.rows[0])
@@ -250,13 +264,13 @@ export class CalculationsRepository {
     return this.get(id, userId);
   }
 
-  async claim(workerId: string): Promise<JobRow | undefined> {
+  async claim(workerId: string, profile: "standard" | "heavy" = "standard"): Promise<JobRow | undefined> {
     const result = await this.database.query<JobRow>(
       `WITH candidate AS (
-      SELECT id FROM calculation_jobs WHERE status='queued' AND user_id IS NOT NULL ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
+      SELECT id FROM calculation_jobs WHERE status='queued' AND resource_profile=$2 AND user_id IS NOT NULL ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
     ) UPDATE calculation_jobs j SET status='running', worker_id=$1, heartbeat_at=now(), started_at=now(), updated_at=now()
       FROM candidate c WHERE j.id=c.id RETURNING j.*`,
-      [workerId],
+      [workerId, profile],
     );
     return result.rows[0];
   }

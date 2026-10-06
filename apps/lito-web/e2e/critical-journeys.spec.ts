@@ -7,6 +7,7 @@ import type {
   CalculationMetadataExportV1,
   DatasetDto,
 } from "@litora/contracts";
+import { erosionDemoDefaults } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 
 const user = {
@@ -107,6 +108,9 @@ async function mockApi(
             },
           };
       }
+      if (!result && method === "GET" &&
+          (path === "/api/scientific-inputs" || path === "/api/scientific-inputs/reusable-artifacts"))
+        result = { body: [] };
       if (!result) {
         unexpected.push(`${method} ${path}`);
         await route.abort("blockedbyclient");
@@ -158,6 +162,130 @@ test("устаревшая ссылка на создание возвращае
   await expect(
     page.getByRole("heading", { name: "Обзор исследований" })
   ).toBeVisible();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("расчёт из истории открывает редактируемые параметры без автоматического запуска", async ({ page }) => {
+  const original = { ...job, status: "succeeded" as const };
+  const created = {
+    ...job,
+    id: "44444444-4444-4444-8444-444444444444",
+    input: { steps: 5 },
+  };
+  let submitted: unknown;
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "GET") return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
+    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === "/api/calculations" && method === "POST") {
+      submitted = body;
+      return { status: 201, body: created };
+    }
+  });
+
+  await page.goto(`/account/calculations/${original.id}`);
+  await page.getByRole("link", { name: "Создать на основе" }).click();
+  const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
+  await expect(dialog).toBeVisible();
+  const steps = dialog.getByLabel("Шаги волнового ряда (1–48)");
+  await expect(steps).toHaveValue("4");
+  expect(submitted).toBeUndefined();
+  await steps.fill("5");
+  await dialog.getByLabel("Коэффициент CERC").fill("0.5");
+  await dialog.getByLabel("Сохранить CSV метрик").check();
+  await chooseOption(page, "Формат CSV", "Wide — столбцы по состояниям");
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  expect(submitted).toEqual({ kind: "erosion", input: {
+    ...erosionDemoDefaults, steps: 5, cercCoefficient: 0.5,
+    outputCsv: true, csvFormat: "wide",
+  } });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("отсутствующий исходный набор не заменяется примером без согласия", async ({ page }) => {
+  const original = {
+    ...job,
+    kind: "dimension_dataset",
+    input: { datasetId: "55555555-5555-4555-8555-555555555555" },
+  };
+  const created = {
+    ...job,
+    id: "66666666-6666-4666-8666-666666666666",
+    kind: "dimension_dataset",
+    input: { datasetId: dataset.id },
+  };
+  let submitted: unknown;
+  let datasetCreated = false;
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/datasets" && method === "POST") {
+      datasetCreated = true;
+      return { status: 201, body: dataset };
+    }
+    if (path === "/api/calculations" && method === "GET") return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
+    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === "/api/calculations" && method === "POST") {
+      submitted = body;
+      return { status: 201, body: created };
+    }
+  });
+
+  await page.goto(`/account/calculations/${original.id}`);
+  await page.getByRole("link", { name: "Создать на основе" }).click();
+  const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
+  await expect(dialog.getByText("Исходный набор больше недоступен.", { exact: false })).toBeVisible();
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Исходный набор данных недоступен");
+  expect(datasetCreated).toBe(false);
+  expect(submitted).toBeUndefined();
+  await dialog.getByRole("button", { name: "Использовать встроенный пример вместо исходного" }).click();
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  expect(datasetCreated).toBe(true);
+  expect(submitted).toEqual({ kind: "dimension_dataset", input: { datasetId: dataset.id } });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("недоступный научный файл требует нового выбора и закрытие возвращает фокус", async ({ page }) => {
+  const original = {
+    ...job,
+    kind: "dimension_file",
+    input: { coastlineInputId: "77777777-7777-4777-8777-777777777777" },
+  };
+  let submitted = false;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: [...kinds, { kind: "dimension_file", title: "Полный контур", description: "Тест" }] };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "GET") return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
+    if (path === "/api/calculations" && method === "POST") {
+      submitted = true;
+      return { status: 201, body: original };
+    }
+  });
+
+  await page.goto(`/account/calculations/${original.id}`);
+  await page.getByRole("link", { name: "Создать на основе" }).click();
+  const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
+  await expect(dialog.getByText("Часть исходных данных больше недоступна.", { exact: false })).toBeVisible();
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Выберите все научные входные файлы");
+  expect(submitted).toBe(false);
+  await dialog.getByRole("button", { name: "Закрыть окно нового расчёта" }).click();
+  await expect(page).toHaveURL(/\/account\/calculations$/);
+  await expect(page.getByRole("link", { name: "Расчёты" })).toBeFocused();
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -736,8 +864,8 @@ test("кабинет показывает ошибку расчёта и поз�
     page.getByRole("region", { name: "Результат расчёта" })
   ).toContainText(job.id);
   expect(requests).toEqual([
-    { kind: "erosion", input: { steps: 4 } },
-    { kind: "erosion", input: { steps: 4 } },
+    { kind: "erosion", input: { ...erosionDemoDefaults, steps: 4 } },
+    { kind: "erosion", input: { ...erosionDemoDefaults, steps: 4 } },
   ]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -1145,6 +1273,7 @@ test("полный паспорт показывает происхождени�
   const second = {
     ...job,
     id: "66666666-6666-4666-8666-666666666666",
+    input: { ...erosionDemoDefaults, steps: 4, cercCoefficient: 0.5, outputCsv: true, csvFormat: "wide" as const, accessToken: "input-secret" },
   } satisfies CalculationJobDto;
   const observed = await mockApi(page, (path, method) => {
     if (path === "/api/auth/refresh" && method === "POST")
@@ -1262,10 +1391,11 @@ test("полный паспорт показывает происхождени�
   ) as CalculationMetadataExportV1;
   expect(secondExport.calculation).toMatchObject({
     id: second.id,
-    input: { steps: 4 },
+    input: { ...erosionDemoDefaults, steps: 4, cercCoefficient: 0.5, outputCsv: true, csvFormat: "wide" },
     coreVersion: null,
     resultSchemaVersion: null,
   });
+  expect(JSON.stringify(secondExport)).not.toContain("input-secret");
   expect(secondExport.provenance).toBeNull();
   expect(secondExport.artifacts).toEqual([]);
   expect(

@@ -4,9 +4,16 @@ import { join } from "node:path";
 export const maxOutputFiles = 256;
 export const maxOutputDirectories = 256;
 export const maxOutputBytes = 100 * 1024 * 1024;
+export const maxHeavyOutputBytes = 8 * 1024 * 1024 * 1024;
 
 /** Периодическая программная проверка каталога; не заменяет дисковую квоту ОС. */
-export async function assertOutputBudget(directory: string): Promise<void> {
+export async function assertOutputBudget(
+  directory: string,
+  profile: "standard" | "heavy" = "standard",
+): Promise<void> {
+  const maximumBytes = profile === "heavy" ? maxHeavyOutputBytes : maxOutputBytes;
+  const maximumFiles = profile === "heavy" ? 512 : maxOutputFiles;
+  const maximumDirectories = profile === "heavy" ? 512 : maxOutputDirectories;
   const pending = [directory];
   let files = 0;
   let directories = 0;
@@ -35,14 +42,14 @@ export async function assertOutputBudget(directory: string): Promise<void> {
         throw error;
       }
       if (info.isDirectory()) {
-        if (++directories > maxOutputDirectories)
+        if (++directories > maximumDirectories)
           throw new Error("Превышен лимит каталогов результата");
         pending.push(path);
       } else if (info.isFile()) {
-        if (++files > maxOutputFiles)
+        if (++files > maximumFiles)
           throw new Error("Превышен лимит файлов результата");
         bytes += info.size;
-        if (bytes > maxOutputBytes)
+        if (bytes > maximumBytes)
           throw new Error("Превышен лимит размера результата");
       } else {
         throw new Error("В результате обнаружен недопустимый тип файла");

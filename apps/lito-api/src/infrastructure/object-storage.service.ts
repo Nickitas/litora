@@ -1,6 +1,8 @@
 import { Injectable, OnModuleInit } from "@nestjs/common";
 import { createReadStream } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
 import {
   CreateBucketCommand,
   DeleteObjectCommand,
@@ -12,6 +14,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Upload } from "@aws-sdk/lib-storage";
 import { environment } from "../config/environment.js";
 
 @Injectable()
@@ -78,14 +81,18 @@ export class ObjectStorageService implements OnModuleInit {
     path: string,
     contentType: string,
   ): Promise<void> {
-    await this.client.send(
-      new PutObjectCommand({
+    await new Upload({
+      client: this.client,
+      params: {
         Bucket: this.bucket,
         Key: objectKey,
         Body: createReadStream(path),
         ContentType: contentType,
-      }),
-    );
+      },
+      queueSize: 2,
+      partSize: 16 * 1024 * 1024,
+      leavePartsOnError: false,
+    }).done();
   }
 
   async uploadBytes(
@@ -111,7 +118,8 @@ export class ObjectStorageService implements OnModuleInit {
   ): Promise<void> {
     const response = await this.client.send(
       new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
-      { abortSignal: AbortSignal.timeout(30_000) },
+      { abortSignal: AbortSignal.timeout(maxBytes > 512 * 1024 * 1024 ? 1_800_000
+        : maxBytes > 100 * 1024 * 1024 ? 600_000 : 30_000) },
     );
     if (
       response.ContentLength !== undefined &&
@@ -120,19 +128,18 @@ export class ObjectStorageService implements OnModuleInit {
       throw new Error("Размер сохранённого набора превышает лимит");
     if (!response.Body || !(Symbol.asyncIterator in response.Body))
       throw new Error("S3 не вернул поток набора данных");
-    const chunks: Buffer[] = [];
+    const handle = await open(path, "wx", 0o600);
     let size = 0;
-    for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
-      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      size += bytes.length;
-      if (size > maxBytes)
-        throw new Error("Размер сохранённого набора превышает лимит");
-      chunks.push(bytes);
+    try {
+      const body = response.Body as Readable;
+      body.on("data", (chunk: Buffer) => {
+        size += chunk.length;
+        if (size > maxBytes) body.destroy(new Error("Размер сохранённого набора превышает лимит"));
+      });
+      await pipeline(body, handle.createWriteStream());
+    } finally {
+      await handle.close();
     }
-    await writeFile(path, Buffer.concat(chunks, size), {
-      flag: "wx",
-      mode: 0o600,
-    });
   }
 
   async deleteObject(objectKey: string): Promise<void> {

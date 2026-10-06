@@ -16,7 +16,7 @@ COPY packages/ packages/
 COPY apps/lito-api/ apps/lito-api/
 RUN pnpm --filter litora-api build
 
-FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9
+FROM node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9 AS runtime
 ENV NODE_ENV=production
 WORKDIR /workspace/apps/lito-api
 COPY --from=build /workspace /workspace
@@ -28,3 +28,9 @@ ENV LITO_CLI_BINARY=/usr/local/bin/lito
 USER node
 EXPOSE 3000
 CMD ["node", "dist/main.js"]
+
+FROM runtime AS heavy
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends gmsh ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+USER node

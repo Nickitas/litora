@@ -85,11 +85,14 @@ type ComparisonScore struct {
 
 // ComparisonArtifacts перечисляет файлы одного запуска генератора.
 type ComparisonArtifacts struct {
-	BackgroundPOS string `json:"background_pos"`
-	Geo           string `json:"geo"`
-	MSH           string `json:"msh,omitempty"`
-	Log           string `json:"log"`
-	RunReportJSON string `json:"run_report_json,omitempty"`
+	BackgroundPOS            string `json:"background_pos"`
+	Geo                      string `json:"geo"`
+	MSH                      string `json:"msh,omitempty"`
+	MeshPreviewSVG           string `json:"mesh_preview_svg,omitempty"`
+	MeshWindowSVG            string `json:"mesh_window_svg,omitempty"`
+	MeshWindowPublicationSVG string `json:"mesh_window_publication_svg,omitempty"`
+	Log                      string `json:"log"`
+	RunReportJSON            string `json:"run_report_json,omitempty"`
 }
 
 // GeneratorComparisonRun описывает успешный или неуспешный запуск одного

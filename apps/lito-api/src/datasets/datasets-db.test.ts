@@ -96,7 +96,7 @@ test(
         input: { datasetId: saved.id },
       });
       assert.equal(job.kind, "dimension_dataset");
-      assert.equal(job.inputSchemaVersion, 1);
+      assert.equal(job.inputSchemaVersion, 3);
       assert.equal(job.resultSchemaVersion, null);
       assert.equal(job.methodId, null);
       assert.equal(job.methodRevision, null);

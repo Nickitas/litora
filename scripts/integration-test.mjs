@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
 const base = process.env.TEST_API_URL ?? "http://localhost:3000/api";
@@ -36,6 +37,22 @@ function client() {
       if (response.headers.get("set-cookie"))
         cookie = response.headers.get("set-cookie").split(";")[0];
       if (payload.accessToken) access = payload.accessToken;
+      return payload;
+    },
+    async upload(path, bytes, expected = 200) {
+      const response = await fetch(`${base}${path}`, {
+        method: "PUT",
+        headers: {
+          Origin: new URL(base).origin,
+          "Content-Type": "application/octet-stream",
+          ...(cookie ? { Cookie: cookie } : {}),
+          ...(access ? { Authorization: `Bearer ${access}` } : {}),
+        },
+        body: bytes,
+      });
+      const payload = await response.json();
+      assert.equal(response.status, expected,
+        `PUT ${path}: HTTP ${response.status} ${JSON.stringify(payload)}`);
       return payload;
     },
   };
@@ -120,6 +137,28 @@ assert.equal(uploaded.sourceRevision, "test-snapshot-1");
 assert.match(uploaded.sha256, /^[a-f0-9]{64}$/);
 assert.equal((await first.request("/datasets"))[0].id, uploaded.id);
 assert.deepEqual(await second.request("/datasets"), []);
+const scientificBytes = await readFile(new URL("../apps/lito-cli/data/black-sea.json", import.meta.url));
+const scientificRecord = await first.request("/scientific-inputs", "POST", {
+  name: "Контур для проверки веб-сценариев",
+  role: "coastline_geojson",
+  filename: "black-sea.json",
+  sizeBytes: scientificBytes.length,
+  source: "Поставляемый контур Litora, копия для интеграционного теста",
+  license: "Только для интеграционного теста",
+  crs: "EPSG:4326",
+  coordinateUnit: "degrees",
+}, 201);
+assert.equal(scientificRecord.status, "pending");
+assert.deepEqual(await second.request("/scientific-inputs"), []);
+assert.deepEqual(await second.request("/scientific-inputs/reusable-artifacts"), []);
+await second.upload(`/scientific-inputs/${scientificRecord.id}/content`, scientificBytes, 404);
+const readyScientific = await first.upload(
+  `/scientific-inputs/${scientificRecord.id}/content`, scientificBytes,
+);
+assert.equal(readyScientific.status, "ready");
+assert.equal(readyScientific.sha256,
+  createHash("sha256").update(scientificBytes).digest("hex"));
+assert.equal((await first.request("/scientific-inputs"))[0].id, scientificRecord.id);
 await first.request("/datasets", "POST", {
   name: "Неверный CRS", source: "Тест", license: "Тест", crs: "EPSG:3857",
   coordinateUnit: "meters", geometry: inputGeometry,
@@ -143,7 +182,9 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
   const job = await first.request(
     "/calculations",
     "POST",
-    { kind, input: kind === "erosion" ? { steps: 2 } :
+    { kind, input: kind === "erosion" ? {
+      steps: 2, cercCoefficient: 0.5, outputCsv: true, csvFormat: "wide",
+    } :
       kind === "dimension_dataset" ? { datasetId: uploaded.id } : {} },
     201,
   );
@@ -161,7 +202,7 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
     await delay(1000);
   }
   assert.equal(result.status, "succeeded", JSON.stringify(result));
-  assert.equal(result.inputSchemaVersion, 1);
+  assert.equal(result.inputSchemaVersion, 3);
   assert.equal(result.resultSchemaVersion, 1);
   assert.equal(result.methodId, expectedMethod);
   assert.equal(result.methodRevision, "baseline-1");
@@ -180,8 +221,11 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
     assert.ok(inputFiles.some((file) => file.path === "data/examples/sochi-local-segment.geojson"));
   if (kind === "erosion")
     assert.match(result.resultSummary.provenance.declaredSources.waves, /Open-Meteo/);
-  if (kind === "erosion")
+  if (kind === "erosion") {
     assert.match(result.commandLine, /--black-sea-sochi --offline/);
+    assert.match(result.commandLine, /--cerc-coefficient 0\.5/);
+    assert.match(result.commandLine, /--output-csv erosion-metrics\.csv --csv-format wide/);
+  }
   if (kind === "dimension_dataset") {
     assert.equal(result.resultSummary.provenance.datasetId, uploaded.id);
     assert.equal(result.resultSummary.provenance.sourceRevision, "test-snapshot-1");
@@ -207,6 +251,13 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
     revision: "baseline-1",
   });
   assert.ok(manifest.artifacts.length > 0);
+  if (kind === "erosion") {
+    const csv = result.artifacts.find((file) => file.filename === "erosion-metrics.csv");
+    assert.ok(csv, "CLI должен создать CSV для демонстрационного расчёта");
+    const csvBytes = Buffer.from(await (await fetch(csv.downloadUrl)).arrayBuffer());
+    assert.equal(createHash("sha256").update(csvBytes).digest("hex"), csv.sha256);
+    assert.ok(manifest.artifacts.some((file) => file.path === "csv/erosion-metrics.csv"));
+  }
   const unsigned = new URL(artifact.downloadUrl);
   unsigned.search = "";
   assert.equal(
@@ -217,6 +268,52 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
   console.log(
     `${kind}: готово, ${result.artifacts.length} файлов, проверены манифест, SHA-256 и приватность S3`,
   );
+}
+if (process.env.TEST_HEAVY_ENABLED === "true") {
+  await second.request("/calculations", "POST", {
+    kind: "source_file", input: { coastlineInputId: scientificRecord.id },
+  }, 404);
+  let inputId = scientificRecord.id;
+  for (const kind of ["source_file", "map_file", "dimension_file"]) {
+    const job = await first.request("/calculations", "POST", {
+      kind, input: { coastlineInputId: inputId },
+    }, 201);
+    let result;
+    for (let attempt = 0; attempt < 150; attempt++) {
+      result = await first.request(`/calculations/${job.id}`);
+      if (!["queued", "running"].includes(result.status)) break;
+      await delay(1000);
+    }
+    assert.equal(result.status, "succeeded", JSON.stringify(result));
+    assert.equal(result.resultSummary.scenario, "user-data");
+    assert.equal(result.inputSchemaVersion, 3);
+    const manifestArtifact = result.artifacts.find((artifact) =>
+      artifact.filename === "manifest.json");
+    assert.ok(manifestArtifact);
+    const manifestResponse = await fetch(manifestArtifact.downloadUrl);
+    assert.equal(manifestResponse.status, 200);
+    const manifestBytes = Buffer.from(await manifestResponse.arrayBuffer());
+    assert.equal(createHash("sha256").update(manifestBytes).digest("hex"),
+      manifestArtifact.sha256);
+    const manifest = JSON.parse(manifestBytes);
+    assert.equal(manifest.schemaVersion, 2);
+    assert.equal(manifest.command, kind === "source_file" ? "lito source" :
+      kind === "map_file" ? "lito map" : "lito dimension");
+    assert.equal(result.methodId, kind === "source_file" ? null :
+      kind === "map_file" ? "black-sea-overview" : "box-counting");
+    if (kind === "source_file") {
+      const reusable = await first.request("/scientific-inputs/reusable-artifacts");
+      const snapshot = reusable.find((item) => item.jobId === job.id &&
+        item.role === "coastline_geojson");
+      assert.ok(snapshot, "Снимок Go должен быть доступен как вход следующего задания");
+      inputId = snapshot.id;
+      assert.deepEqual(await second.request("/scientific-inputs/reusable-artifacts"), []);
+      await second.request("/calculations", "POST", {
+        kind: "map_file", input: { coastlineInputId: snapshot.id },
+      }, 404);
+    }
+    console.log(`${kind}: готово, ${result.artifacts.length} файлов`);
+  }
 }
 const rejectedDataset = await first.request("/datasets", "POST", {
   name: "Контур вне Чёрного моря",
@@ -279,6 +376,7 @@ assert.equal((await second.request("/calculations")).length, 0);
 const swagger = await (await fetch(`${base}/docs-json`)).json();
 assert.ok(swagger.paths["/api/calculations"].post);
 assert.ok(swagger.paths["/api/datasets"].post);
+assert.ok(swagger.paths["/api/scientific-inputs/reusable-artifacts"].get);
 assert.ok(swagger.components.securitySchemes.bearer);
 assert.ok(swagger.paths["/api/auth/register"].post.requestBody.content["application/json"].schema.required.includes("invitationCode"));
 await first.request("/auth/logout", "POST");

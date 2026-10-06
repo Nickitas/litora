@@ -23,6 +23,7 @@ import {
 } from "../calculations/calculations.repository.js";
 import {
   commandArguments,
+  scientificReferences,
   validateCalculation,
 } from "../calculations/commands.js";
 import {
@@ -32,17 +33,22 @@ import {
 import { resultMethodFromManifest } from "../calculations/result-method.js";
 import { DatasetsRepository } from "../datasets/datasets.repository.js";
 import { maxDatasetBytes } from "../datasets/validation.js";
+import { ScientificInputsRepository } from "../scientific-inputs/scientific-inputs.repository.js";
+import { maxScientificInputBytes } from "../scientific-inputs/validation.js";
+import { maxReusableArtifactBytes, maxReusableArtifactTotalBytes } from "../scientific-inputs/reusable-artifacts.js";
 import {
   assertSupportedInputSchemaVersion,
   calculationResultSchemaVersion,
 } from "../schema-versions.js";
-import { assertOutputBudget, maxOutputBytes, maxOutputFiles } from "./output-budget.js";
+import { assertOutputBudget, maxHeavyOutputBytes, maxOutputBytes, maxOutputFiles } from "./output-budget.js";
 import { cleanupPartialArtifacts } from "./partial-artifacts.js";
+import { isScientificRejection } from "./scientific-rejection.js";
 
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
 const repository = new CalculationsRepository(db, storage);
 const datasets = new DatasetsRepository(db, storage);
+const scientificInputs = new ScientificInputsRepository(db);
 const workerId = randomUUID();
 let stopping = false;
 let active: ChildProcess | undefined;
@@ -122,6 +128,7 @@ async function run(job: JobRow) {
     );
     if (job.kind === "erosion")
       await assertPinnedSochiInputs(join(directory, "data"));
+    const validated = validateCalculation({ kind: job.kind, input: job.input });
     let datasetPath: string | undefined;
     let provenance: Record<string, unknown> | undefined;
     if (job.kind === "dimension_dataset") {
@@ -155,14 +162,45 @@ async function run(job: JobRow) {
         pointCount: dataset.point_count,
       };
     }
+    const scientificPaths: Record<string, string> = {};
+    const scientificFiles: Record<string, unknown>[] = [];
+    let scientificInputBytes = 0;
+    for (const reference of scientificReferences(validated)) {
+      if (!job.user_id) throw new Error("У расчёта нет владельца");
+      const file = await scientificInputs.resolveOwnedSource(
+        reference.id, job.user_id, reference.role, storage.bucket,
+      );
+      scientificInputBytes += Number(file.size_bytes);
+      if (scientificInputBytes > maxReusableArtifactTotalBytes)
+        throw new Error("Суммарный размер научных входов превышает 4 ГиБ");
+      const suffix = reference.role === "seabed_msh" || reference.role === "flat_mesh_msh" ? ".msh"
+        : reference.role === "adaptive_field_csv" ? ".csv" : ".json";
+      const filePath = join(directory, `scientific-${reference.field}${suffix}`);
+      await storage.downloadFile(file.object_key, filePath,
+        file.origin === "artifact" ? maxReusableArtifactBytes : maxScientificInputBytes);
+      const size = (await stat(filePath)).size;
+      const digest = await sha256(filePath);
+      if (size !== Number(file.size_bytes) || digest !== file.sha256)
+        throw new Error("Научный файл не совпадает с сохранённым паспортом");
+      scientificPaths[reference.field] = filePath;
+      scientificFiles.push({
+        role: reference.role, id: file.id, filename: file.filename,
+        origin: file.origin, ...(file.source_job_id ? { sourceJobId: file.source_job_id } : {}),
+        sizeBytes: size, sha256: digest, source: file.source,
+        sourceRevision: file.source_revision, license: file.license,
+        crs: file.crs, coordinateUnit: file.coordinate_unit,
+      });
+    }
+    if (scientificFiles.length)
+      provenance = { files: scientificFiles };
     if (interrupted || stopping)
       throw new Error("Выполнение прервано до запуска CLI");
-    const validated = validateCalculation({ kind: job.kind, input: job.input });
     const args = [
       ...commandArguments(
         validated,
         output,
         datasetPath,
+        scientificPaths,
       ),
       "--manifest",
       join(output, "manifest.json"),
@@ -178,7 +216,7 @@ async function run(job: JobRow) {
     );
     outputMonitor = setInterval(() => {
       if (outputCheck || outputFailure) return;
-      outputCheck = assertOutputBudget(output)
+      outputCheck = assertOutputBudget(output, environment.workerProfile)
         .catch((error: unknown) => {
           outputFailure = error instanceof Error ? error : new Error(String(error));
           stopProcess();
@@ -209,30 +247,32 @@ async function run(job: JobRow) {
     await outputCheck;
     if (outputFailure) throw outputFailure;
     await writeFile(join(output, "execution.log"), log);
-    await assertOutputBudget(output);
+    await assertOutputBudget(output, environment.workerProfile);
     const outputs = await filesIn(output);
-    if (exitCode !== 0 || interrupted || stopping)
+    const scientificRejection = exitCode !== 0 && !interrupted && !stopping &&
+      await isScientificRejection(job.kind, output);
+    if ((exitCode !== 0 && !scientificRejection) || interrupted || stopping)
       throw new Error(
         interrupted
           ? "Расчёт прерван: отмена, потеря связи или превышение времени"
           : `CLI завершился с кодом ${exitCode}. ${log.slice(-2000)}`,
       );
     if (outputs.length <= 1) throw new Error("CLI не создал отчётов");
-    if (outputs.length > maxOutputFiles)
+    if (outputs.length > (environment.workerProfile === "heavy" ? 512 : maxOutputFiles))
       throw new Error("Превышен лимит файлов результата");
     const outputSizes = await Promise.all(
       outputs.map(async (path) => (await stat(path)).size),
     );
     if (
-      outputSizes.some((size) => size > maxOutputBytes) ||
-      outputSizes.reduce((sum, size) => sum + size, 0) > maxOutputBytes
+      outputSizes.some((size) => size > (environment.workerProfile === "heavy" ? maxHeavyOutputBytes : maxOutputBytes)) ||
+      outputSizes.reduce((sum, size) => sum + size, 0) >
+        (environment.workerProfile === "heavy" ? maxHeavyOutputBytes : maxOutputBytes)
     )
       throw new Error("Превышен лимит размера результата");
-    const method = resultMethodFromManifest(
-      await readFile(join(output, "manifest.json")),
-      validated.kind,
+    const method = scientificRejection ? null : resultMethodFromManifest(
+      await readFile(join(output, "manifest.json")), validated.kind,
     );
-    if (job.kind !== "dimension_dataset")
+    if (job.kind !== "dimension_dataset" && scientificFiles.length === 0)
       provenance = {
         ...(await bundledInputProvenance(job.kind, join(directory, "data"))),
       };
@@ -274,22 +314,33 @@ async function run(job: JobRow) {
       scenario:
         job.kind === "erosion"
           ? "demo"
-          : job.kind === "dimension_dataset"
+          : job.kind === "dimension_dataset" || scientificFiles.length > 0
             ? "user-data"
             : "bundled-data",
       ...(provenance ? { provenance } : {}),
       method,
+      ...(scientificRejection ? { scientificAccepted: false } : {}),
       metrics,
     };
-    const completed = await db.query(
-      `WITH finished AS (UPDATE calculation_jobs SET status='succeeded',result_summary=$3,result_schema_version=$4,method_id=$5,method_revision=$6,finished_at=now(),updated_at=now()
-      WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
-      INSERT INTO calculation_events(job_id,event_type) SELECT id,'succeeded' FROM finished`,
-      [job.id, workerId, summary, calculationResultSchemaVersion, method.id, method.revision],
-    );
+    const completed = scientificRejection
+      ? await db.query(
+        `WITH finished AS (UPDATE calculation_jobs SET status='failed',result_summary=$3,result_schema_version=$4,
+         error_message=$5,finished_at=now(),updated_at=now()
+         WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
+         INSERT INTO calculation_events(job_id,event_type,payload)
+         SELECT id,'failed',jsonb_build_object('message',$5::text) FROM finished`,
+        [job.id, workerId, summary, calculationResultSchemaVersion,
+          `Научные критерии не пройдены. ${log.slice(-2000)}`.slice(0, 4000)],
+      )
+      : await db.query(
+        `WITH finished AS (UPDATE calculation_jobs SET status='succeeded',result_summary=$3,result_schema_version=$4,method_id=$5,method_revision=$6,finished_at=now(),updated_at=now()
+        WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
+        INSERT INTO calculation_events(job_id,event_type) SELECT id,'succeeded' FROM finished`,
+        [job.id, workerId, summary, calculationResultSchemaVersion, method?.id ?? null, method?.revision ?? null],
+      );
     if (completed.rowCount !== 1)
       throw new Error("Расчёт уже отменён или потерял владельца worker");
-    console.log(`Расчёт ${job.id}: готово, файлов ${outputs.length}`);
+    console.log(`Расчёт ${job.id}: ${scientificRejection ? "научные критерии не пройдены" : "готово"}, файлов ${outputs.length}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const leftovers = await cleanupPartialArtifacts(
@@ -351,11 +402,11 @@ async function main() {
   await db.initialize();
   await storage.initialize();
   await stat(environment.cliBinary);
-  console.log(`Worker ${workerId} готов`);
+  console.log(`Worker ${workerId} (${environment.workerProfile}) готов`);
   while (!stopping) {
     await db.query(`UPDATE calculation_jobs SET status='failed',error_message='Worker потерял связь. Создайте новый расчёт.',finished_at=now(),updated_at=now()
       WHERE status='running' AND worker_id IS NOT NULL AND heartbeat_at<now()-interval '60 seconds'`);
-    const job = await repository.claim(workerId);
+    const job = await repository.claim(workerId, environment.workerProfile);
     if (job) await run(job);
     else await delay(1000);
   }

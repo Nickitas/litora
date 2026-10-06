@@ -5,6 +5,7 @@
   "scripts": {
     "env:init": "node scripts/setup.mjs",
     "up": "pnpm env:init && docker compose --env-file .env.local -f infra/compose.yaml --profile app up -d --build",
+    "up:heavy": "pnpm env:init && LITO_HEAVY_ENABLED=true docker compose --env-file .env.local -f infra/compose.yaml --profile app --profile heavy up -d --build",
     "down": "docker compose --env-file .env.local -f infra/compose.yaml --profile app down",
     "logs": "docker compose --env-file .env.local -f infra/compose.yaml --profile app logs -f",
     "build:cli": "cd apps/lito-cli && go build -o bin/lito ./cmd/lito",

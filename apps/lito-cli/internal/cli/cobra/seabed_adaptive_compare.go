@@ -15,6 +15,7 @@ import (
 	"coastal-geometry/internal/domain/coastline"
 	mesh2d "coastal-geometry/internal/domain/mesh"
 	"coastal-geometry/internal/domain/seabed"
+	svgrender "coastal-geometry/internal/render/svg"
 
 	"github.com/spf13/cobra"
 )
@@ -33,6 +34,7 @@ var (
 	seabedAdaptiveCompareMaxCells       int64
 	seabedAdaptiveCompareAllowLarge     bool
 	seabedAdaptiveCompareTimeout        time.Duration
+	seabedAdaptiveCompareDetailPreset   string
 )
 
 var seabedAdaptiveCompareCmd = &cobra.Command{
@@ -61,9 +63,13 @@ func init() {
 	seabedAdaptiveCompareCmd.Flags().Int64Var(&seabedAdaptiveCompareMaxCells, "max-cells", 5_000_000, "предельная оценка числа итоговых ячеек одного запуска")
 	seabedAdaptiveCompareCmd.Flags().BoolVar(&seabedAdaptiveCompareAllowLarge, "allow-large", false, "разрешить уровень сверх --max-cells после проверки ресурсов")
 	seabedAdaptiveCompareCmd.Flags().DurationVar(&seabedAdaptiveCompareTimeout, "generator-timeout", 10*time.Minute, "лимит времени одного запуска Gmsh")
+	seabedAdaptiveCompareCmd.Flags().StringVar(&seabedAdaptiveCompareDetailPreset, "detail-preset", "none", "подробное окно SVG: none или kizilirmak")
 }
 
 func runSeabedAdaptiveCompare(_ *cobra.Command, _ []string) error {
+	if seabedAdaptiveCompareDetailPreset != "none" && seabedAdaptiveCompareDetailPreset != "kizilirmak" {
+		return fmt.Errorf("--detail-preset: допустимы none или kizilirmak")
+	}
 	levels, err := parseAdaptiveComparisonLevels(seabedAdaptiveCompareLevels)
 	if err != nil {
 		return err
@@ -180,11 +186,12 @@ func runSeabedAdaptiveCompare(_ *cobra.Command, _ []string) error {
 		for _, algorithm := range algorithms {
 			runDir := filepath.Join(comparisonDir, level.ID, string(algorithm))
 			artifacts := adaptivemodel.ComparisonArtifacts{
-				BackgroundPOS: filepath.Join(runDir, "background-field.pos"),
-				Geo:           filepath.Join(runDir, "black-sea-adaptive.geo"),
-				MSH:           filepath.Join(runDir, "black-sea-adaptive.msh"),
-				Log:           filepath.Join(runDir, "gmsh.log"),
-				RunReportJSON: filepath.Join(runDir, "run-report.json"),
+				BackgroundPOS:  filepath.Join(runDir, "background-field.pos"),
+				Geo:            filepath.Join(runDir, "black-sea-adaptive.geo"),
+				MSH:            filepath.Join(runDir, "black-sea-adaptive.msh"),
+				MeshPreviewSVG: filepath.Join(runDir, "mesh-preview.svg"),
+				Log:            filepath.Join(runDir, "gmsh.log"),
+				RunReportJSON:  filepath.Join(runDir, "run-report.json"),
 			}
 			if !quiet {
 				fmt.Printf("  • %s...\n", algorithm.RussianName())
@@ -198,6 +205,7 @@ func runSeabedAdaptiveCompare(_ *cobra.Command, _ []string) error {
 			if generateErr != nil {
 				run.Error = generateErr.Error()
 				run.Artifacts.MSH = ""
+				run.Artifacts.MeshPreviewSVG = ""
 				levelReport.Runs = append(levelReport.Runs, run)
 				if writeErr := adaptivemodel.WriteComparisonRunJSON(artifacts.RunReportJSON, run); writeErr != nil {
 					return writeErr
@@ -210,6 +218,7 @@ func runSeabedAdaptiveCompare(_ *cobra.Command, _ []string) error {
 			run.Topology = mesh2d.ValidateFullQuadMesh(generated)
 			if !run.Topology.Accepted {
 				run.Error = strings.Join(run.Topology.Reasons, "; ")
+				run.Artifacts.MeshPreviewSVG = ""
 				levelReport.Runs = append(levelReport.Runs, run)
 				if writeErr := adaptivemodel.WriteComparisonRunJSON(artifacts.RunReportJSON, run); writeErr != nil {
 					return writeErr
@@ -219,6 +228,32 @@ func runSeabedAdaptiveCompare(_ *cobra.Command, _ []string) error {
 				continue
 			}
 			run.Geometry = mesh2d.EvaluateQuality(domain, generated, level.MinimumSizeM)
+			if renderErr := svgrender.DrawMeshReportSVG(domain, generated, run.Geometry, svgrender.MeshReportOptions{
+				DatasetName: polygon.DatasetName, Source: polygon.Source, Algorithm: algorithm,
+				TargetEdgeMeters: level.MinimumSizeM, BoundaryDetailMeters: seabedAdaptiveCompareBoundaryDetail,
+				EffectiveBoundaryDetailMeters: domain.EffectiveBoundaryToleranceMeters,
+				FullMeshPath:                  artifacts.MSH, OriginalPointCount: domain.OriginalPointCount,
+				SimplifiedPointCount: domain.SimplifiedPointCount,
+			}, artifacts.MeshPreviewSVG); renderErr != nil {
+				return fmt.Errorf("SVG адаптивной сетки %s, уровень %s: %w", algorithm, level.ID, renderErr)
+			}
+			if seabedAdaptiveCompareDetailPreset == "kizilirmak" {
+				detailPath := filepath.Join(runDir, "mesh-window-kizilirmak.svg")
+				publicationPath := filepath.Join(runDir, "mesh-window-kizilirmak-publication.svg")
+				rendered, renderErr := svgrender.DrawAdaptiveWindowSVG(domain, generated, svgrender.AdaptiveWindowOptions{
+					Algorithm: algorithm, MinSizeM: level.MinimumSizeM,
+					MaxSizeM: level.MaximumSizeM, Preset: seabedAdaptiveCompareDetailPreset,
+				}, detailPath, publicationPath)
+				if renderErr != nil {
+					return fmt.Errorf("подробное SVG сетки %s, уровень %s: %w", algorithm, level.ID, renderErr)
+				}
+				if rendered {
+					run.Artifacts.MeshWindowSVG = detailPath
+					run.Artifacts.MeshWindowPublicationSVG = publicationPath
+				} else if !quiet {
+					fmt.Printf("    В окне Кызылырмакской косы нет ячеек; подробный SVG пропущен\n")
+				}
+			}
 			run.EdgeZones, err = mesh2d.EvaluateAdaptiveEdges(generated, document.Model.Mesh, values, field.Zones, zoneNames)
 			if err == nil {
 				run.Bathymetry, err = adaptivemodel.EvaluateBathymetryPreservation(document.Model, generated, adaptivemodel.DefaultBathymetryComparisonConfig())

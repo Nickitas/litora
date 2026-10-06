@@ -36,7 +36,10 @@ export const environment = {
     process.env.LITO_JOBS_DIRECTORY ??
       resolve(process.cwd(), "../../.litora/jobs"),
   ),
-  jobTimeoutMs: Number(process.env.JOB_TIMEOUT_MS ?? 300000),
+  workerProfile: process.env.LITO_WORKER_PROFILE === "heavy" ? "heavy" as const : "standard" as const,
+  heavyEnabled: process.env.LITO_HEAVY_ENABLED === "true",
+  jobTimeoutMs: Number(process.env.JOB_TIMEOUT_MS ??
+    (process.env.LITO_WORKER_PROFILE === "heavy" ? 14_400_000 : 300_000)),
   databaseUrl: required("DATABASE_URL"),
   s3: {
     endpoint: required("S3_ENDPOINT"),

@@ -6,11 +6,14 @@ import type {
   CalculationPageQueryDto,
   CreateCalculationDto,
   CreateDatasetDto,
+  CreateScientificInputDto,
   DatasetDto,
   HealthDto,
   LoginDto,
   RegisterDto,
   ReleaseDto,
+  ReusableScientificArtifactDto,
+  ScientificInputDto,
   UserDto,
 } from "@litora/contracts";
 
@@ -64,6 +67,28 @@ export function createApiClient(options: ApiClientOptions = {}) {
     accessToken = result.accessToken;
     return result;
   }
+  async function sendBinary<T>(path: string, body: Blob, retry = true): Promise<T> {
+    const response = await request(`${baseUrl}${path}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body,
+    }).catch(() => {
+      throw new Error("Не удалось передать файл. Проверьте подключение и повторите попытку.");
+    });
+    if (response.status === 401 && retry) {
+      await refresh();
+      return sendBinary<T>(path, body, false);
+    }
+    if (!response.ok) {
+      const error = (await response.json().catch(() => ({}))) as { message?: string };
+      throw new Error(error.message ?? `Ошибка загрузки: ${response.status}`);
+    }
+    return response.json() as Promise<T>;
+  }
   function refresh() {
     if (!refreshing)
       refreshing = session("/auth/refresh")
@@ -91,6 +116,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
     datasets: () => send<DatasetDto[]>("/datasets"),
     createDataset: (body: CreateDatasetDto) =>
       send<DatasetDto>("/datasets", "POST", body),
+    scientificInputs: () => send<ScientificInputDto[]>("/scientific-inputs"),
+    reusableScientificArtifacts: () =>
+      send<ReusableScientificArtifactDto[]>("/scientific-inputs/reusable-artifacts"),
+    createScientificInput: (body: CreateScientificInputDto) =>
+      send<ScientificInputDto>("/scientific-inputs", "POST", body),
+    uploadScientificInput: (id: string, file: Blob) =>
+      sendBinary<ScientificInputDto>(
+        `/scientific-inputs/${encodeURIComponent(id)}/content`,
+        file,
+      ),
+    deletePendingScientificInput: (id: string) =>
+      send<{ deleted: boolean }>(`/scientific-inputs/${encodeURIComponent(id)}`, "DELETE"),
     createCalculation: (body: CreateCalculationDto) =>
       send<CalculationJobDto>("/calculations", "POST", body),
     calculations: () => send<CalculationJobDto[]>("/calculations"),

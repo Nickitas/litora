@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import type { Server } from "node:http";
 import {
   Controller,
   Get,
@@ -26,6 +27,8 @@ import { AuthGuard } from "./auth/auth.guard.js";
 import { DatasetsController } from "./datasets/datasets.controller.js";
 import { DatasetsRepository } from "./datasets/datasets.repository.js";
 import { environment } from "./config/environment.js";
+import { ScientificInputsController } from "./scientific-inputs/scientific-inputs.controller.js";
+import { ScientificInputsRepository } from "./scientific-inputs/scientific-inputs.repository.js";
 
 @Controller()
 @ApiTags("system")
@@ -75,12 +78,14 @@ class AppController {
     AuthController,
     CalculationsController,
     DatasetsController,
+    ScientificInputsController,
   ],
   providers: [
     DatabaseService,
     ObjectStorageService,
     CalculationsRepository,
     DatasetsRepository,
+    ScientificInputsRepository,
     AuthService,
     AuthGuard,
   ],
@@ -102,6 +107,8 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup("api/docs", app, document);
+  // Потоковые научные файлы до 512 МиБ требуют больше стандартных 5 минут HTTP.
+  (app.getHttpServer() as Server).requestTimeout = 30 * 60 * 1000;
   await app.listen(environment.port, "0.0.0.0");
 }
 void bootstrap();

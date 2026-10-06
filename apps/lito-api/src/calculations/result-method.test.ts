@@ -20,6 +20,13 @@ test("worker читает ревизию только из соответств�
     { id: "black-sea-overview", revision: "baseline-1" },
   );
   assert.deepEqual(
+    resultMethodFromManifest(manifest("lito map", "black-sea-overview"), "map_file"),
+    { id: "black-sea-overview", revision: "baseline-1" },
+  );
+  assert.equal(resultMethodFromManifest(Buffer.from(JSON.stringify({
+    schemaVersion: 2, command: "lito source", artifacts: [],
+  })), "source_file"), null);
+  assert.deepEqual(
     resultMethodFromManifest(manifest("lito erosion", "cerc-one-line"), "erosion"),
     { id: "cerc-one-line", revision: "baseline-1" },
   );

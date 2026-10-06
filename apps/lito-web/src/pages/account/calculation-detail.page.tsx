@@ -23,6 +23,8 @@ import { isPreviewableImage } from "./ui/calculation-image-preview.utils";
 import { CalculationMetadataDownload } from "./ui/calculation-metadata-download";
 import { CalculationTitle } from "./ui/calculation-title";
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -158,8 +160,29 @@ function Provenance({ value }: { value: unknown }) {
                   className="min-w-0 rounded-lg border p-3 text-sm"
                 >
                   <p className="font-medium break-all">
-                    {textOrMissing(file.path)}
+                    {textOrMissing(file.filename ?? file.path)}
                   </p>
+                  {typeof file.role === "string" && (
+                    <p className="mt-1 text-muted-foreground">Роль: {file.role}</p>
+                  )}
+                  {typeof file.source === "string" && (
+                    <p className="mt-1 text-muted-foreground">
+                      {file.origin === "artifact" ? "Происхождение: " : "Источник (заявлен пользователем): "}{file.source}
+                    </p>
+                  )}
+                  {file.origin === "artifact" && typeof file.sourceJobId === "string" &&
+                    uuidPattern.test(file.sourceJobId) && (
+                    <p className="mt-1 text-muted-foreground">
+                      Паспорт и права на исходные данные смотрите в{" "}
+                      <Link className="text-primary underline underline-offset-2"
+                        to={`/account/calculations/${file.sourceJobId}`}>
+                        исходном расчёте
+                      </Link>.
+                    </p>
+                  )}
+                  {typeof file.license === "string" && (
+                    <p className="mt-1 text-muted-foreground">Лицензия (заявлена пользователем): {file.license}</p>
+                  )}
                   <p className="mt-1 text-muted-foreground">
                     {typeof file.sizeBytes === "number"
                       ? fileSize(file.sizeBytes)
@@ -260,14 +283,23 @@ function CalculationDetail({ jobId }: { jobId: string }) {
             Результат, входные данные и технический паспорт запуска.
           </p>
         </div>
-        {job && isActiveCalculation(job) && (
-          <Button
-            ref={cancelButtonRef}
-            variant="destructive"
-            onClick={() => setCancelOpen(true)}
-          >
-            Отменить расчёт
-          </Button>
+        {job && (
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link to={`/account/calculations?repeat=${job.id}`}>
+                Создать на основе
+              </Link>
+            </Button>
+            {isActiveCalculation(job) && (
+              <Button
+                ref={cancelButtonRef}
+                variant="destructive"
+                onClick={() => setCancelOpen(true)}
+              >
+                Отменить расчёт
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
@@ -328,6 +360,12 @@ function CalculationDetail({ jobId }: { jobId: string }) {
                 className="text-sm whitespace-pre-wrap text-destructive"
               >
                 {job.errorMessage}
+              </p>
+            )}
+            {summary?.scientificAccepted === false && (
+              <p className="rounded-lg bg-warning-background p-3 text-sm text-warning">
+                Go сохранил диагностические файлы, но научные критерии не пройдены.
+                Используйте отчёт и журнал для проверки причин; эти файлы не подтверждают пригодность модели.
               </p>
             )}
             {isActiveCalculation(job) ? (

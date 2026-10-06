@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Navigate, NavLink, Outlet } from "react-router-dom";
+import { Navigate, NavLink, Outlet, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/features/auth";
 import { Dialog } from "@/shared/shadcn/components/ui/dialog";
 import { NewCalculationDialog } from "./new-calculation.page";
@@ -11,14 +11,24 @@ const navigation = [
 
 export function AccountPage() {
   const auth = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const repeatJobId = searchParams.get("repeat");
   const [newCalculationOpen, setNewCalculationOpen] = useState(false);
   const newCalculationTriggerRef = useRef<HTMLElement | null>(null);
+  const calculationsLinkRef = useRef<HTMLAnchorElement>(null);
 
   function changeNewCalculationOpen(open: boolean) {
     if (open && document.activeElement instanceof HTMLElement) {
       newCalculationTriggerRef.current = document.activeElement;
     }
     setNewCalculationOpen(open);
+    if (!open && repeatJobId) {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("repeat");
+        return next;
+      }, { replace: true });
+    }
   }
 
   if (auth.loading) return <p role="status">Проверяем сессию…</p>;
@@ -26,7 +36,7 @@ export function AccountPage() {
     return <Navigate to="/login" replace />;
 
   return (
-    <Dialog open={newCalculationOpen} onOpenChange={changeNewCalculationOpen}>
+    <Dialog open={newCalculationOpen || Boolean(repeatJobId)} onOpenChange={changeNewCalculationOpen}>
       <div className="mx-auto max-w-[1440px] space-y-6">
         <header>
           <p className="text-sm text-muted-foreground">
@@ -44,6 +54,7 @@ export function AccountPage() {
             {navigation.map((item) => (
               <NavLink
                 key={item.to}
+                ref={item.to === "/account/calculations" ? calculationsLinkRef : undefined}
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) =>
@@ -59,10 +70,16 @@ export function AccountPage() {
           </nav>
           <Outlet />
         </div>
-        {newCalculationOpen && (
+        {(newCalculationOpen || repeatJobId) && (
           <NewCalculationDialog
+            key={repeatJobId ?? "new"}
+            repeatJobId={repeatJobId ?? undefined}
             onOpenChange={changeNewCalculationOpen}
-            onRestoreFocus={() => newCalculationTriggerRef.current?.focus()}
+            onRestoreFocus={() => {
+              const trigger = newCalculationTriggerRef.current;
+              if (trigger?.isConnected) trigger.focus();
+              else calculationsLinkRef.current?.focus();
+            }}
           />
         )}
       </div>

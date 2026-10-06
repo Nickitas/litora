@@ -5,6 +5,7 @@ import type {
   CalculationPageQueryDto,
   CalculationStatus,
 } from "@litora/contracts";
+import { calculationKinds } from "./commands.js";
 
 const statuses = new Set<CalculationStatus>([
   "queued",
@@ -13,12 +14,7 @@ const statuses = new Set<CalculationStatus>([
   "failed",
   "cancelled",
 ]);
-const kinds = new Set<CalculationKind>([
-  "dimension",
-  "dimension_dataset",
-  "map",
-  "erosion",
-]);
+const kinds = new Set<CalculationKind>(calculationKinds.map((item) => item.kind));
 const queryKeys = new Set([
   "status",
   "kind",
