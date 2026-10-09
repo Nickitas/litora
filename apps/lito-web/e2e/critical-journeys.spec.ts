@@ -6,6 +6,8 @@ import type {
   CalculationKindDto,
   CalculationMetadataExportV1,
   DatasetDto,
+  ScientificInputDto,
+  ScientificInputRole,
 } from "@litora/contracts";
 import { erosionDemoDefaults } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
@@ -63,6 +65,29 @@ const dataset = {
   sha256: "a".repeat(64),
   createdAt: "2026-09-29T12:00:00.000Z",
 } satisfies DatasetDto;
+
+const articleInputRoles = [
+  "seabed_msh",
+  "bathymetry_source_json",
+  "export_metadata_json",
+  "adaptive_field_csv",
+  "adaptive_field_report_json",
+  "coastline_geojson",
+] as const satisfies ScientificInputRole[];
+const articleInputs: ScientificInputDto[] = articleInputRoles.map((role, index) => ({
+  id: `77777777-7777-4777-8777-${String(index + 1).padStart(12, "0")}`,
+  role,
+  name: `Архивный вход ${index + 1}`,
+  filename: `input-${index + 1}.json`,
+  sizeBytes: 1024,
+  source: "Тестовый архив",
+  license: "Тестовое использование",
+  crs: "EPSG:4326",
+  coordinateUnit: "degrees",
+  status: "ready",
+  sha256: "a".repeat(64),
+  createdAt: "2026-09-29T12:00:00.000Z",
+}));
 
 type ApiReply = { status?: number; body: unknown };
 
@@ -126,8 +151,9 @@ async function mockApi(
   return { unexpected, pageErrors };
 }
 
-async function openNewCalculation(page: Page) {
+async function openNewCalculation(page: Page, theme?: "light" | "dark") {
   await page.goto("/account");
+  if (theme) await chooseTheme(page, theme);
   await page.getByRole("button", { name: "Новый расчёт", exact: true }).click();
   await expect(
     page.getByRole("dialog", { name: "Новый расчёт" })
@@ -146,6 +172,30 @@ async function chooseTheme(page: Page, mode: "light" | "dark" | "system") {
     await button.click();
   }
   await expect(button).toHaveAttribute("data-theme", mode);
+}
+
+async function selectArticleInput(page: Page, field: string, index: number) {
+  await page.locator(`#scientific-${field}`).click();
+  await page.getByRole("option", { name: new RegExp(`Архивный вход ${index + 1}`) }).click();
+}
+
+async function mockArticleCalculations(page: Page, submissions: unknown[]) {
+  const articleKinds = [
+    { kind: "seabed_adapt", title: "Поле размера", description: "Тестовый сценарий" },
+    { kind: "seabed_compare_adaptive", title: "Сравнение сеток", description: "Тестовый сценарий" },
+  ] satisfies CalculationKindDto[];
+  return mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: articleKinds };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: articleInputs };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      submissions.push(body);
+      return { status: 201, body: job };
+    }
+    if (path === `/api/calculations/${job.id}` && method === "GET") return { body: job };
+  });
 }
 
 test("устаревшая ссылка на создание возвращает к обзору", async ({ page }) => {
@@ -557,6 +607,79 @@ test("перед запуском объясняются входы, огран�
   ).toBeVisible();
   await referenceTab.close();
   await expect(dialog).toBeVisible();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("пресет рисунка 4 переносит точные параметры поля в запрос без выбора файлов", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const observed = await mockArticleCalculations(page, submissions);
+  await page.setViewportSize({ width: 360, height: 780 });
+  await openNewCalculation(page, "light");
+  await expect(page.locator("html")).toHaveClass(/light/);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await dialog.getByRole("button", { name: "Заполнить как рисунок 4: поле 50–250 м" }).click();
+  await expect(dialog.getByRole("status")).toContainText("Параметры рисунка 4 заполнены");
+  await expect(dialog.getByText("пресет не выбирает файлы", { exact: false })).toBeVisible();
+  await expect(dialog.locator("#adapt-minSize")).toHaveValue("50");
+  await expect(dialog.locator("#adapt-deepSize")).toHaveValue("250");
+  await expect(dialog.locator("#adapt-maxSizeGradient")).toHaveValue("0.15");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await selectArticleInput(page, "modelInputId", 0);
+  await selectArticleInput(page, "sourceMetadataInputId", 1);
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  expect(submissions[0]).toEqual({
+    kind: "seabed_adapt",
+    input: {
+      modelInputId: articleInputs[0].id,
+      sourceMetadataInputId: articleInputs[1].id,
+      minSize: 50, coastSize: 75, shelfSize: 125, deepSize: 250,
+      coastInfluence: 25000, curvatureReference: 30, slopeReference: 10,
+      flatDeepSlope: 1, maxNeighbourRatio: 1.25, maxSizeGradient: 0.15,
+    },
+  });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("пресет рисунков 6–7 задаёт архивный уровень и не разрешает большой запуск", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const observed = await mockArticleCalculations(page, submissions);
+  await page.setViewportSize({ width: 360, height: 780 });
+  await openNewCalculation(page, "dark");
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await chooseOption(page, "Что рассчитать", "Сравнение сеток");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await dialog.getByRole("button", { name: "Заполнить как рисунки 6–7: сетки 125–250 м" }).click();
+  await expect(dialog.getByRole("status")).toContainText("Большой расчёт не разрешён автоматически");
+  await expect(dialog.getByText("значительных ресурсов", { exact: false })).toBeVisible();
+  await expect(dialog.locator("#compare-levels")).toHaveValue("coarse:125:250");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await selectArticleInput(page, "modelInputId", 0);
+  await selectArticleInput(page, "exportMetadataInputId", 2);
+  await selectArticleInput(page, "fieldCsvInputId", 3);
+  await selectArticleInput(page, "fieldReportInputId", 4);
+  await selectArticleInput(page, "coastlineInputId", 5);
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  expect(submissions[0]).toEqual({
+    kind: "seabed_compare_adaptive",
+    input: {
+      modelInputId: articleInputs[0].id,
+      exportMetadataInputId: articleInputs[2].id,
+      fieldCsvInputId: articleInputs[3].id,
+      fieldReportInputId: articleInputs[4].id,
+      coastlineInputId: articleInputs[5].id,
+      boundaryDetail: 50,
+      generators: "delaunay,frontal-quad",
+      levels: "coarse:125:250",
+      detailPreset: "kizilirmak",
+      maxCells: 25_000_000,
+      allowLarge: false,
+      generatorTimeoutMinutes: 20,
+    },
+  });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });

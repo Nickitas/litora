@@ -41,6 +41,19 @@ import { DatasetUpload } from "./ui/dataset-upload";
 import { ScientificInputUpload } from "./ui/scientific-input-upload";
 import { scientificRoleLabels } from "./model/scientific-role-labels";
 
+const articleSizeFieldPreset = {
+  minSize: "50",
+  coastSize: "75",
+  shelfSize: "125",
+  deepSize: "250",
+  coastInfluence: "25000",
+  curvatureReference: "30",
+  slopeReference: "10",
+  flatDeepSlope: "1",
+  maxNeighbourRatio: "1.25",
+  maxSizeGradient: "0.15",
+} as const;
+
 export function NewCalculationDialog({
   repeatJobId,
   onOpenChange,
@@ -92,6 +105,7 @@ export function NewCalculationDialog({
   const [maxCells, setMaxCells] = useState(25_000_000);
   const [generatorTimeoutMinutes, setGeneratorTimeoutMinutes] = useState(20);
   const [allowLarge, setAllowLarge] = useState(false);
+  const [articlePresetApplied, setArticlePresetApplied] = useState<"adapt" | "compare" | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [deletingInputId, setDeletingInputId] = useState<string | null>(null);
@@ -504,6 +518,7 @@ export function NewCalculationDialog({
                     disabled={!kinds.length}
                     onValueChange={(value) => {
                       setKind(value as CalculationKind);
+                      setArticlePresetApplied(null);
                       setSelectedScientific({});
                       setMissingRepeatDataset(false);
                       setMissingRepeatInputs([]);
@@ -908,6 +923,20 @@ export function NewCalculationDialog({
                 <section className="space-y-4 border-t pt-6" aria-label="Размеры адаптивного поля">
                   <h3 className="text-lg font-semibold">3. Размеры ячеек</h3>
                   <p className="text-sm text-muted-foreground">Пустое поле использует значение Go по умолчанию.</p>
+                  <div className="space-y-2 rounded-xl border bg-muted/35 p-4 text-sm">
+                    <Button type="button" variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal text-left" onClick={() => {
+                      setAdaptSizes(articleSizeFieldPreset);
+                      setArticlePresetApplied("adapt");
+                    }}>
+                      Заполнить как рисунок 4: поле 50–250 м
+                    </Button>
+                    <p className="text-muted-foreground">
+                      Значения из архивного отчёта статьи. Нужна совместимая модель дна и её паспорт; пресет не выбирает файлы и не запускает расчёт.
+                    </p>
+                    {articlePresetApplied === "adapt" && (
+                      <p role="status">Параметры рисунка 4 заполнены. Их можно изменить перед запуском.</p>
+                    )}
+                  </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     {([
                       ["minSize", "Минимальный размер, м"],
@@ -926,7 +955,10 @@ export function NewCalculationDialog({
                         <Input id={`adapt-${key}`} type="number" min={key === "maxSizeGradient" ? 0.000001 : key === "maxNeighbourRatio" ? 1.000001 : 0.000001}
                           max={key === "coastInfluence" ? 1000000 : key === "maxNeighbourRatio" || key === "maxSizeGradient" ? 100 : 100000} step="any"
                           value={adaptSizes[key] ?? ""}
-                          onChange={(event) => setAdaptSizes((current) => ({ ...current, [key]: event.target.value }))} />
+                          onChange={(event) => {
+                            setAdaptSizes((current) => ({ ...current, [key]: event.target.value }));
+                            setArticlePresetApplied(null);
+                          }} />
                       </div>
                     ))}
                   </div>
@@ -991,10 +1023,33 @@ export function NewCalculationDialog({
               {kind === "seabed_compare_adaptive" && (
                 <section className="space-y-4 border-t pt-6" aria-label="Параметры сравнения Gmsh">
                   <h3 className="text-lg font-semibold">3. Сравнение генераторов</h3>
+                  <div className="space-y-2 rounded-xl border bg-muted/35 p-4 text-sm">
+                    <Button type="button" variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal text-left" onClick={() => {
+                      setCompareLevels("coarse:125:250");
+                      setBoundaryDetail(50);
+                      setGenerators("delaunay,frontal-quad");
+                      setDetailPreset("kizilirmak");
+                      setMaxCells(25_000_000);
+                      setGeneratorTimeoutMinutes(20);
+                      setAllowLarge(false);
+                      setArticlePresetApplied("compare");
+                    }}>
+                      Заполнить как рисунки 6–7: сетки 125–250 м
+                    </Button>
+                    <p className="text-muted-foreground">
+                      Нужны совместимые модель дна, поле размера, контур и паспорта. Расчёт требует Gmsh и значительных ресурсов; совпадение с архивными SVG зависит от входов и версии генератора.
+                    </p>
+                    {articlePresetApplied === "compare" && (
+                      <p role="status">Параметры рисунков 6–7 заполнены. Большой расчёт не разрешён автоматически.</p>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="compare-levels">Контрольные уровни id:min:max, через запятую</Label>
                     <Input id="compare-levels" value={compareLevels} required
-                      onChange={(event) => setCompareLevels(event.target.value)} />
+                      onChange={(event) => {
+                        setCompareLevels(event.target.value);
+                        setArticlePresetApplied(null);
+                      }} />
                     <p className="text-xs text-muted-foreground">Например: detailed:125:250,coarse:500:1000. До четырёх уровней; размеры в метрах.</p>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -1006,13 +1061,19 @@ export function NewCalculationDialog({
                       <div key={label} className="space-y-2">
                         <Label htmlFor={`compare-${index}`}>{label}</Label>
                         <Input id={`compare-${index}`} type="number" min={min} max={max} required
-                          value={value} onChange={(event) => setter(Number(event.target.value))} />
+                          value={value} onChange={(event) => {
+                            setter(Number(event.target.value));
+                            setArticlePresetApplied(null);
+                          }} />
                       </div>
                     ))}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="compare-generators">Генераторы Gmsh</Label>
-                    <Select value={generators} onValueChange={setGenerators}>
+                    <Select value={generators} onValueChange={(value) => {
+                      setGenerators(value);
+                      setArticlePresetApplied(null);
+                    }}>
                       <SelectTrigger id="compare-generators"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="delaunay,frontal-quad">Delaunay и Frontal-Delaunay for Quads</SelectItem>
@@ -1024,7 +1085,10 @@ export function NewCalculationDialog({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="compare-detail-preset">Подробные рисунки сетки</Label>
-                    <Select value={detailPreset} onValueChange={setDetailPreset}>
+                    <Select value={detailPreset} onValueChange={(value) => {
+                      setDetailPreset(value);
+                      setArticlePresetApplied(null);
+                    }}>
                       <SelectTrigger id="compare-detail-preset"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="kizilirmak">Кызылырмакская коса: окно 4,2 × 2,6 км</SelectItem>
@@ -1035,7 +1099,10 @@ export function NewCalculationDialog({
                   </div>
                   <label className="flex min-h-11 items-center gap-3 text-sm">
                     <input type="checkbox" checked={allowLarge}
-                      onChange={(event) => setAllowLarge(event.target.checked)} />
+                      onChange={(event) => {
+                        setAllowLarge(event.target.checked);
+                        setArticlePresetApplied(null);
+                      }} />
                     Разрешить расчёт сверх лимита оценки ячеек после проверки ресурсов
                   </label>
                 </section>
