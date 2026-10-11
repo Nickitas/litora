@@ -1043,6 +1043,9 @@ export function NewCalculationDialog({
               {kind === "seabed_build" && (
                 <section className="space-y-4 border-t pt-6" aria-label="Параметры сборки модели дна">
                   <h3 className="text-lg font-semibold">3. Параметры модели дна</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Принятую MSH из «Построить адаптивную сетку» можно выбрать выше как плоскую сетку. Для рисунка с фрагментами фактических ячеек затем запустите «Визуализировать модель дна» и откройте mesh-details.svg.
+                  </p>
                   <div className="grid gap-4 sm:grid-cols-2">
                     {([
                       ["boundaryDetail", "Детализация берега, м", 10, 10000],

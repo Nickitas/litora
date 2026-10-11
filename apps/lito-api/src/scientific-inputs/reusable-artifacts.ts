@@ -7,6 +7,9 @@ export function reusableArtifactRole(jobKind: string, filename: string): Scienti
   if (jobKind === "mesh" &&
       /^mesh\/msh\/black-sea-edge-\d+-detail-\d+-(delaunay|frontal-quad|parallelograms)\.msh$/.test(filename))
     return "flat_mesh_msh";
+  if (jobKind === "seabed_generate_adaptive" &&
+      filename === "seabed/adaptive/gmsh/black-sea-adaptive.msh")
+    return "flat_mesh_msh";
   if (jobKind === "seabed_build") {
     if (filename === "seabed/black-sea-depth.msh") return "seabed_msh";
     if (filename === "seabed/export-metadata.json") return "export_metadata_json";

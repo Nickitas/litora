@@ -6,6 +6,7 @@ import type {
   CalculationKindDto,
   CalculationMetadataExportV1,
   DatasetDto,
+  ReusableScientificArtifactDto,
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
@@ -955,6 +956,67 @@ test("перед запуском объясняются входы, огран�
   ).toBeVisible();
   await referenceTab.close();
   await expect(dialog).toBeVisible();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("принятая адаптивная MSH выбирается как вход модели дна", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const adaptive = {
+    id: "88888888-8888-4888-8888-888888888888",
+    jobId: "99999999-9999-4999-8999-999999999999",
+    jobKind: "seabed_generate_adaptive",
+    role: "flat_mesh_msh",
+    filename: "seabed/adaptive/gmsh/black-sea-adaptive.msh",
+    sizeBytes: 210_000_000,
+    sha256: "b".repeat(64),
+    createdAt: "2026-10-11T12:00:00.000Z",
+  } satisfies ReusableScientificArtifactDto;
+  const buildInputs: ScientificInputDto[] = [
+    { ...articleInputs[0], id: "77777777-7777-4777-8777-777777777771", role: "bathymetry_grid_json" },
+    { ...articleInputs[1], id: "77777777-7777-4777-8777-777777777772", role: "bathymetry_grid_metadata_json" },
+    articleInputs[5],
+  ];
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: [{ kind: "seabed_build", title: "Построить модель дна", description: "Тестовый сценарий" }] };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: buildInputs };
+    if (path === "/api/scientific-inputs/reusable-artifacts" && method === "GET") return { body: [adaptive] };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      submissions.push(body);
+      return { status: 201, body: job };
+    }
+    if (path === `/api/calculations/${job.id}` && method === "GET") return { body: job };
+  });
+  await page.setViewportSize({ width: 360, height: 780 });
+  await openNewCalculation(page, "dark");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await expect(dialog.getByText("Принятую MSH из «Построить адаптивную сетку»", { exact: false })).toBeVisible();
+  await dialog.locator("#scientific-flatMeshInputId").click();
+  await page.getByRole("option", { name: /black-sea-adaptive\.msh/ }).click();
+  await expect(dialog.getByRole("link", { name: "Открыть исходный результат" }))
+    .toHaveAttribute("href", `/account/calculations/${adaptive.jobId}`);
+  await dialog.locator("#scientific-bathymetryInputId").click();
+  await page.getByRole("option", { name: /Архивный вход 1/ }).click();
+  await dialog.locator("#scientific-bathymetryMetadataInputId").click();
+  await page.getByRole("option", { name: /Архивный вход 2/ }).click();
+  await dialog.locator("#scientific-coastlineInputId").click();
+  await page.getByRole("option", { name: /Архивный вход 6/ }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  expect(submissions[0]).toMatchObject({
+    kind: "seabed_build",
+    input: {
+      flatMeshInputId: adaptive.id,
+      bathymetryInputId: buildInputs[0].id,
+      bathymetryMetadataInputId: buildInputs[1].id,
+      coastlineInputId: buildInputs[2].id,
+    },
+  });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });

@@ -6,6 +6,7 @@ import { reusableArtifactRole } from "./reusable-artifacts.js";
 
 test("только известные результаты Go становятся входами подходящей роли", () => {
   assert.equal(reusableArtifactRole("mesh", "mesh/msh/black-sea-edge-1000-detail-1000-frontal-quad.msh"), "flat_mesh_msh");
+  assert.equal(reusableArtifactRole("seabed_generate_adaptive", "seabed/adaptive/gmsh/black-sea-adaptive.msh"), "flat_mesh_msh");
   assert.equal(reusableArtifactRole("seabed_build", "seabed/black-sea-depth.msh"), "seabed_msh");
   assert.equal(reusableArtifactRole("seabed_build", "seabed/export-metadata.json"), "export_metadata_json");
   assert.equal(reusableArtifactRole("seabed_adapt", "seabed/adaptive/size-field.csv"), "adaptive_field_csv");
@@ -14,6 +15,8 @@ test("только известные результаты Go становятс
   assert.equal(reusableArtifactRole("source_file", "black-sea-20261006-030000.json"), "coastline_geojson");
   for (const [kind, path] of [
     ["mesh", "mesh/msh/../../secret.msh"],
+    ["seabed_generate_adaptive", "seabed/adaptive/gmsh/../black-sea-adaptive.msh"],
+    ["seabed_compare_adaptive", "seabed/adaptive/gmsh/black-sea-adaptive.msh"],
     ["seabed_build", "seabed/build-report.json"],
     ["seabed_compare_adaptive", "seabed/adaptive/comparison/level/gmsh/black-sea-adaptive.msh"],
     ["source_file", "manifest.json"],
@@ -43,8 +46,16 @@ test("повторное использование проверяет влад�
   assert.match(queries[1].sql, /j\.user_id=\$2 AND j\.status='succeeded'/);
   assert.match(queries[1].sql, /a\.category='output' AND a\.bucket=\$3/);
   await assert.rejects(repository.resolveOwnedSource("artifact", "owner", "flat_mesh_msh", "private-bucket"));
-  artifact = { ...artifact, size_bytes: String(3 * 1024 * 1024 * 1024) };
+  artifact = {
+    ...artifact,
+    job_kind: "seabed_generate_adaptive",
+    filename: "seabed/adaptive/gmsh/black-sea-adaptive.msh",
+  };
+  const adaptive = await repository.resolveOwnedSource("artifact", "owner", "flat_mesh_msh", "private-bucket");
+  assert.equal(adaptive.origin, "artifact");
   await assert.rejects(repository.resolveOwnedSource("artifact", "owner", "seabed_msh", "private-bucket"));
+  artifact = { ...artifact, size_bytes: String(3 * 1024 * 1024 * 1024) };
+  await assert.rejects(repository.resolveOwnedSource("artifact", "owner", "flat_mesh_msh", "private-bucket"));
 });
 
 test("список для ЛК фильтрует неизвестные выходы и не выдаёт S3-ключ", async () => {
@@ -58,13 +69,18 @@ test("список для ЛК фильтрует неизвестные вых�
   const database = {
     query: async (sql: string, params: unknown[]) => {
       queries.push({ sql, params });
-      return { rows: [base, { ...base, id: "log", filename: "execution.log" }] };
+      return { rows: [
+        base,
+        { ...base, id: "adaptive", job_kind: "seabed_generate_adaptive", filename: "seabed/adaptive/gmsh/black-sea-adaptive.msh" },
+        { ...base, id: "log", filename: "execution.log" },
+      ] };
     },
   } as unknown as DatabaseService;
   const repository = new ScientificInputsRepository(database);
   const result = await repository.listReusableArtifacts("owner", "private-bucket");
-  assert.equal(result.length, 1);
+  assert.equal(result.length, 2);
   assert.equal(result[0].role, "adaptive_field_csv");
+  assert.equal(result[1].role, "flat_mesh_msh");
   assert.equal("objectKey" in result[0], false);
   assert.equal(queries[0].params[0], "owner");
   assert.equal(queries[0].params[1], "private-bucket");

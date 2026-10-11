@@ -25,32 +25,42 @@ test("PostgreSQL: повторный научный вход принадлеж�
     }
     const succeededJob = randomUUID();
     const failedJob = randomUUID();
+    const adaptiveJob = randomUUID();
     await database.query(
-      "INSERT INTO calculation_jobs(id,user_id,kind,status) VALUES($1,$2,'seabed_build','succeeded'),($3,$2,'seabed_build','failed')",
-      [succeededJob, users[0], failedJob],
+      "INSERT INTO calculation_jobs(id,user_id,kind,status) VALUES($1,$2,'seabed_build','succeeded'),($3,$2,'seabed_build','failed'),($4,$2,'seabed_generate_adaptive','succeeded')",
+      [succeededJob, users[0], failedJob, adaptiveJob],
     );
     const ownArtifact = randomUUID();
     const failedArtifact = randomUUID();
+    const adaptiveArtifact = randomUUID();
     await database.query(
       `INSERT INTO calculation_artifacts(id,job_id,filename,bucket,object_key,size_bytes,sha256)
        VALUES($1,$2,'seabed/black-sea-depth.msh','private-test-bucket',$3,210000000,$4),
-             ($5,$6,'seabed/black-sea-depth.msh','private-test-bucket',$7,210000000,$4)`,
+             ($5,$6,'seabed/black-sea-depth.msh','private-test-bucket',$7,210000000,$4),
+             ($8,$9,'seabed/adaptive/gmsh/black-sea-adaptive.msh','private-test-bucket',$10,210000000,$4)`,
       [ownArtifact, succeededJob, `users/${succeededJob}/seabed/black-sea-depth.msh`,
         "a".repeat(64), failedArtifact, failedJob,
-        `users/${failedJob}/seabed/black-sea-depth.msh`],
+        `users/${failedJob}/seabed/black-sea-depth.msh`,
+        adaptiveArtifact, adaptiveJob, `users/${adaptiveJob}/seabed/adaptive/gmsh/black-sea-adaptive.msh`],
     );
     const source = await repository.resolveOwnedSource(
       ownArtifact, users[0], "seabed_msh", "private-test-bucket",
     );
     assert.equal(source.origin, "artifact");
     assert.equal(source.sha256, "a".repeat(64));
+    const adaptiveSource = await repository.resolveOwnedSource(
+      adaptiveArtifact, users[0], "flat_mesh_msh", "private-test-bucket",
+    );
+    assert.equal(adaptiveSource.source_job_id, adaptiveJob);
     const available = await repository.listReusableArtifacts(users[0], "private-test-bucket");
-    assert.deepEqual(available.map((item) => item.id), [ownArtifact]);
+    assert.deepEqual(available.map((item) => item.id).sort(), [ownArtifact, adaptiveArtifact].sort());
     assert.deepEqual(await repository.listReusableArtifacts(users[1], "private-test-bucket"), []);
     for (const [id, owner, role, bucket] of [
       [ownArtifact, users[1], "seabed_msh", "private-test-bucket"],
       [failedArtifact, users[0], "seabed_msh", "private-test-bucket"],
       [ownArtifact, users[0], "flat_mesh_msh", "private-test-bucket"],
+      [adaptiveArtifact, users[1], "flat_mesh_msh", "private-test-bucket"],
+      [adaptiveArtifact, users[0], "seabed_msh", "private-test-bucket"],
       [ownArtifact, users[0], "seabed_msh", "other-bucket"],
     ] as const) {
       await assert.rejects(repository.resolveOwnedSource(id, owner, role, bucket));
