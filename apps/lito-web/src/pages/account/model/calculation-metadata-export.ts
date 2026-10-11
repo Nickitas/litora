@@ -29,7 +29,7 @@ function sha256OrNull(value: unknown) {
 function knownInput(job: CalculationJobDto) {
   if (!isRecord(job.input)) return null;
   if (job.kind === "dimension" || job.kind === "map") return {};
-  if (job.kind === "erosion") {
+  if (job.kind === "erosion" || job.kind === "all_demo") {
     const steps = countOrNull(job.input.steps);
     if (steps === null || steps === 0) return null;
     const input: Record<string, string | number | boolean> = { steps };
@@ -44,6 +44,16 @@ function knownInput(job: CalculationJobDto) {
     if (typeof job.input.outputCsv === "boolean") input.outputCsv = job.input.outputCsv;
     if (job.input.csvFormat === "long" || job.input.csvFormat === "wide") {
       input.csvFormat = job.input.csvFormat;
+    }
+    if (typeof job.input.outputGif === "boolean") input.outputGif = job.input.outputGif;
+    for (const key of ["gifFps", "gifSkip"]) {
+      const value = countOrNull(job.input[key]);
+      if (value !== null) input[key] = value;
+    }
+    if (job.kind === "all_demo") {
+      if (typeof job.input.noModelSimplify === "boolean") input.noModelSimplify = job.input.noModelSimplify;
+      const modelMaxPoints = countOrNull(job.input.modelMaxPoints);
+      if (modelMaxPoints !== null) input.modelMaxPoints = modelMaxPoints;
     }
     return input;
   }

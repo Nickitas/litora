@@ -9,7 +9,7 @@ import type {
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { erosionDemoDefaults } from "@litora/contracts";
+import { allDemoDefaults, erosionDemoDefaults } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 
 const user = {
@@ -333,11 +333,50 @@ test("расчёт из истории открывает редактируем
   await dialog.getByLabel("Коэффициент CERC").fill("0.5");
   await dialog.getByLabel("Сохранить CSV метрик").check();
   await chooseOption(page, "Формат CSV", "Wide — столбцы по состояниям");
+  await dialog.getByLabel("Сохранить анимацию GIF").check();
+  await dialog.getByLabel("Кадров в секунду (1–30)").fill("8");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "erosion", input: {
     ...erosionDemoDefaults, steps: 5, cercCoefficient: 0.5,
-    outputCsv: true, csvFormat: "wide",
+    outputCsv: true, csvFormat: "wide", outputGif: true, gifFps: 8,
+  } });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("полный демо-конвейер позволяет настроить GIF и повторить параметры", async ({ page }) => {
+  const fullKind = [{ kind: "all_demo", title: "Полный конвейер Сочи", description: "Демо" }] satisfies CalculationKindDto[];
+  const original = { ...job, kind: "all_demo" as const, status: "succeeded" as const,
+    input: { ...allDemoDefaults, steps: 4, outputGif: true, gifFps: 8, gifSkip: 2 } };
+  const created = { ...original, id: "99999999-9999-4999-8999-999999999999", status: "queued" as const };
+  let submitted: unknown;
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: fullKind };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "GET") return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
+    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === "/api/calculations" && method === "POST") {
+      submitted = body;
+      return { status: 201, body: created };
+    }
+  });
+
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto(`/account/calculations/${original.id}`);
+  await page.getByRole("link", { name: "Создать на основе" }).click();
+  const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
+  await expect(dialog.getByText("Демонстрационный сценарий")).toBeVisible();
+  await expect(dialog.getByLabel("Шаги волнового ряда (1–24)")).toHaveValue("4");
+  await expect(dialog.getByLabel("Сохранить анимацию GIF")).toBeChecked();
+  await dialog.getByLabel("Кадров в секунду (1–30)").fill("12");
+  await dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)").fill("300");
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  expect(submitted).toEqual({ kind: "all_demo", input: {
+    ...allDemoDefaults, steps: 4, outputGif: true, gifFps: 12, gifSkip: 2, modelMaxPoints: 300,
   } });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);

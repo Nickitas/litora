@@ -30,6 +30,19 @@ type blackSeaSochiDataPaths struct {
 	StructureWarning string
 }
 
+func validateSochiOfflineMode(offline, demo bool, sourceURL string) error {
+	if !offline {
+		return nil
+	}
+	if sourceURL != "" {
+		return fmt.Errorf("--offline нельзя сочетать с --source-url")
+	}
+	if !demo {
+		return fmt.Errorf("--offline поддерживается только для демонстрационного набора Сочи")
+	}
+	return nil
+}
+
 // prepareBlackSeaSochiData подготавливает открытые данные для стартового
 // сценария Сочи. Сначала используются проверенные локальные файлы, чтобы
 // обычный запуск не зависел от сети. Параметр refresh запрашивает свежие

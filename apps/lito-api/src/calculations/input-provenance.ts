@@ -86,7 +86,7 @@ export async function bundledInputProvenance(
       ),
     };
   }
-  if (kind !== "erosion") throw new Error(`Нет паспорта входов для ${kind}`);
+  if (kind !== "erosion" && kind !== "all_demo") throw new Error(`Нет паспорта входов для ${kind}`);
 
   const manifestPath = "black-sea/sochi/manifest.json";
   let raw: unknown;

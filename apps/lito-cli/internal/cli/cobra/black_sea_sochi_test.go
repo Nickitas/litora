@@ -31,14 +31,26 @@ func TestSochiOfflineRejectsRefresh(t *testing.T) {
 }
 
 func TestErosionOfflineModeOnlyAllowsLocalDemo(t *testing.T) {
-	if err := validateErosionOfflineMode(true, true, ""); err != nil {
+	if err := validateSochiOfflineMode(true, true, ""); err != nil {
 		t.Fatalf("ожидался допустимый офлайн-демо режим: %v", err)
 	}
-	if err := validateErosionOfflineMode(true, false, ""); err == nil {
+	if err := validateSochiOfflineMode(true, false, ""); err == nil {
 		t.Fatal("офлайн-режим не должен обещать отсутствие сети для других входов")
 	}
-	if err := validateErosionOfflineMode(true, true, "https://example.test"); err == nil {
+	if err := validateSochiOfflineMode(true, true, "https://example.test"); err == nil {
 		t.Fatal("офлайн-режим не должен принимать удалённый источник")
+	}
+}
+
+func TestAllOfflineModeExposesFlagAndRejectsUnsafeCombinations(t *testing.T) {
+	if allCmd.Flags().Lookup("offline") == nil {
+		t.Fatal("полный конвейер должен поддерживать офлайн-режим")
+	}
+	if err := validateSochiOfflineMode(true, true, ""); err != nil {
+		t.Fatalf("ожидался допустимый офлайн-режим: %v", err)
+	}
+	if err := validateSochiOfflineMode(true, true, "https://example.test"); err == nil {
+		t.Fatal("офлайн-режим не должен разрешать URL")
 	}
 }
 

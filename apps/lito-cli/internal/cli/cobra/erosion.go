@@ -118,7 +118,7 @@ func runErosion(cmd *cobra.Command, args []string) error {
 		erosionBlackSeaSochi = true
 		fmt.Println("✓ Входные файлы не заданы: выбран демонстрационный набор Чёрного моря — Сочи (demo)")
 	}
-	if err := validateErosionOfflineMode(erosionOffline, erosionBlackSeaSochi, erosionSourceURL); err != nil {
+	if err := validateSochiOfflineMode(erosionOffline, erosionBlackSeaSochi, erosionSourceURL); err != nil {
 		return err
 	}
 	if erosionBlackSeaSochi {
@@ -248,19 +248,6 @@ func runErosion(cmd *cobra.Command, args []string) error {
 	}
 	if err := exportErosionArtifacts(outputMgr, snapshots, nil, erosionOutputCSV, erosionCSVFormat, erosionOutputGIF, erosionGIFFPS, erosionGIFSkip); err != nil {
 		return err
-	}
-	return nil
-}
-
-func validateErosionOfflineMode(offline, demo bool, sourceURL string) error {
-	if !offline {
-		return nil
-	}
-	if sourceURL != "" {
-		return fmt.Errorf("--offline нельзя сочетать с --source-url")
-	}
-	if !demo {
-		return fmt.Errorf("--offline поддерживается только для демонстрационного набора Сочи")
 	}
 	return nil
 }

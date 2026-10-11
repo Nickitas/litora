@@ -1,9 +1,10 @@
 import { BadRequestException } from "@nestjs/common";
-import { erosionDemoDefaults, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, erosionDemoDefaults, scientificInputRequirements } from "@litora/contracts";
 import type {
   CalculationKind,
   CalculationKindDto,
   CreateCalculationDto,
+  ErosionDemoOptionsDto,
   ScientificInputRole,
 } from "@litora/contracts";
 
@@ -15,6 +16,7 @@ export const calculationKinds: CalculationKindDto[] = [
   { kind: "map", title: "Карта Чёрного моря", description: "Обзорная SVG и GeoJSON на поставляемой геометрии." },
   { kind: "map_file", title: "Карта своего контура", description: "Обзорная SVG и GeoJSON по загруженному контуру Чёрного моря." },
   { kind: "erosion", title: "Эрозия: демонстрационный сценарий Сочи", description: "CERC на закреплённых данных; демонстрация, не прогноз." },
+  { kind: "all_demo", title: "Полный демонстрационный конвейер Сочи", description: "Проверка контура, размерность, CERC и баланс наносов; SVG, JSON, опционально CSV и GIF." },
   { kind: "mesh", title: "Плоская сетка Чёрного моря", description: "Gmsh строит MSH и SVG обзоры сеток по загруженному полному контуру." },
   { kind: "seabed_build", title: "Построить модель дна", description: "Назначить глубины плоской сетке и получить MSH, VTU, CSV и паспорт экспорта." },
   { kind: "seabed_render", title: "Карты и 3D-рельеф дна", description: "SVG карты глубин, фрагментов фактической сетки, 3D-рельефа и профилей из готовой модели MSH." },
@@ -100,6 +102,48 @@ function comparisonLevels(value: unknown) {
   return value;
 }
 
+function validateDemoCercOptions(
+  input: Record<string, unknown>,
+  defaults: ErosionDemoOptionsDto,
+  maxSteps: number,
+  maxGifSkip: number,
+): ErosionDemoOptionsDto {
+  if (input.outputCsv !== undefined && typeof input.outputCsv !== "boolean")
+    throw new BadRequestException("Недопустимый флаг экспорта CSV");
+  if (input.csvFormat !== undefined && input.csvFormat !== "long" && input.csvFormat !== "wide")
+    throw new BadRequestException("Формат CSV должен быть long или wide");
+  if (input.outputGif !== undefined && typeof input.outputGif !== "boolean")
+    throw new BadRequestException("Недопустимый флаг экспорта GIF");
+  return {
+    steps: numberIn(input.steps ?? defaults.steps, "Шаги", 1, maxSteps, true),
+    breakingIndex: numberIn(input.breakingIndex ?? defaults.breakingIndex, "Индекс разрушения", 0.55, 1.2),
+    bermHeight: numberIn(input.bermHeight ?? defaults.bermHeight, "Высота бермы", 0.001, 100),
+    closureDepth: numberIn(input.closureDepth ?? defaults.closureDepth, "Глубина замыкания", 0.001, 1000),
+    porosity: numberIn(input.porosity ?? defaults.porosity, "Пористость", 0.000001, 0.699999),
+    cercCoefficient: numberIn(input.cercCoefficient ?? defaults.cercCoefficient, "Коэффициент CERC", 0.000001, 1),
+    offshoreSampleDistance: numberIn(input.offshoreSampleDistance ?? defaults.offshoreSampleDistance, "Отбор глубины", 1, 100000),
+    maxShorelineChange: numberIn(input.maxShorelineChange ?? defaults.maxShorelineChange, "Предел смещения", 0.001, 1000),
+    maxBathymetryGap: numberIn(input.maxBathymetryGap ?? defaults.maxBathymetryGap, "Радиус батиметрии", 1, 100000),
+    outputCsv: input.outputCsv ?? defaults.outputCsv,
+    csvFormat: input.csvFormat ?? defaults.csvFormat,
+    outputGif: input.outputGif ?? defaults.outputGif,
+    gifFps: numberIn(input.gifFps ?? defaults.gifFps, "Частота GIF", 1, 30, true),
+    gifSkip: numberIn(input.gifSkip ?? defaults.gifSkip, "Пропуск кадров", 1, maxGifSkip, true),
+  };
+}
+
+function demoCercArguments(input: Record<string, string | number | boolean | undefined>) {
+  return ["--steps", String(input.steps),
+    "--breaking-index", String(input.breakingIndex),
+    "--berm-height", String(input.bermHeight),
+    "--closure-depth", String(input.closureDepth),
+    "--porosity", String(input.porosity),
+    "--cerc-coefficient", String(input.cercCoefficient),
+    "--offshore-sample-distance", String(input.offshoreSampleDistance),
+    "--max-shoreline-change", String(input.maxShorelineChange),
+    "--max-bathymetry-gap", String(input.maxBathymetryGap)];
+}
+
 export function validateCalculation(body: unknown): CreateCalculationDto {
   if (!body || typeof body !== "object" || Array.isArray(body))
     throw new BadRequestException("Ожидается объект расчёта");
@@ -128,22 +172,20 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
       return { kind: data.kind, input: references(p, scientificInputFields[data.kind]) };
     case "erosion": {
       rejectUnknown(p, Object.keys(erosionDemoDefaults));
-      if (p.outputCsv !== undefined && typeof p.outputCsv !== "boolean")
-        throw new BadRequestException("Недопустимый флаг экспорта CSV");
-      if (p.csvFormat !== undefined && p.csvFormat !== "long" && p.csvFormat !== "wide")
-        throw new BadRequestException("Формат CSV должен быть long или wide");
-      return { kind: "erosion", input: {
-        steps: numberIn(p.steps ?? erosionDemoDefaults.steps, "Шаги", 1, 48, true),
-        breakingIndex: numberIn(p.breakingIndex ?? erosionDemoDefaults.breakingIndex, "Индекс разрушения", 0.55, 1.2),
-        bermHeight: numberIn(p.bermHeight ?? erosionDemoDefaults.bermHeight, "Высота бермы", 0.001, 100),
-        closureDepth: numberIn(p.closureDepth ?? erosionDemoDefaults.closureDepth, "Глубина замыкания", 0.001, 1000),
-        porosity: numberIn(p.porosity ?? erosionDemoDefaults.porosity, "Пористость", 0.000001, 0.699999),
-        cercCoefficient: numberIn(p.cercCoefficient ?? erosionDemoDefaults.cercCoefficient, "Коэффициент CERC", 0.000001, 1),
-        offshoreSampleDistance: numberIn(p.offshoreSampleDistance ?? erosionDemoDefaults.offshoreSampleDistance, "Отбор глубины", 1, 100000),
-        maxShorelineChange: numberIn(p.maxShorelineChange ?? erosionDemoDefaults.maxShorelineChange, "Предел смещения", 0.001, 1000),
-        maxBathymetryGap: numberIn(p.maxBathymetryGap ?? erosionDemoDefaults.maxBathymetryGap, "Радиус батиметрии", 1, 100000),
-        outputCsv: p.outputCsv ?? erosionDemoDefaults.outputCsv,
-        csvFormat: p.csvFormat ?? erosionDemoDefaults.csvFormat,
+      return { kind: "erosion", input: { ...validateDemoCercOptions(p, erosionDemoDefaults, 48, 48) } };
+    }
+    case "all_demo": {
+      rejectUnknown(p, Object.keys(allDemoDefaults));
+      if (p.noModelSimplify !== undefined && typeof p.noModelSimplify !== "boolean")
+        throw new BadRequestException("Недопустимый флаг упрощения модели");
+      const modelMaxPoints = numberIn(p.modelMaxPoints ?? allDemoDefaults.modelMaxPoints, "Число точек модели", 0, 10000, true);
+      if (modelMaxPoints === 1) throw new BadRequestException("Модель должна содержать не менее двух точек");
+      if (modelMaxPoints > 0 && p.noModelSimplify === true)
+        throw new BadRequestException("Отключение упрощения несовместимо с заданным числом точек");
+      return { kind: "all_demo", input: {
+        ...validateDemoCercOptions(p, allDemoDefaults, 24, 24),
+        modelMaxPoints,
+        noModelSimplify: p.noModelSimplify ?? allDemoDefaults.noModelSimplify,
       } };
     }
     case "mesh": {
@@ -301,16 +343,16 @@ export function commandArguments(
     case "map_file":
       return ["map", "black-sea", "--input", required("coastlineInputId"), "--output", output];
     case "erosion":
-      return ["erosion", "--black-sea-sochi", "--offline", "--steps", String(input.steps),
-        "--breaking-index", String(input.breakingIndex),
-        "--berm-height", String(input.bermHeight),
-        "--closure-depth", String(input.closureDepth),
-        "--porosity", String(input.porosity),
-        "--cerc-coefficient", String(input.cercCoefficient),
-        "--offshore-sample-distance", String(input.offshoreSampleDistance),
-        "--max-shoreline-change", String(input.maxShorelineChange),
-        "--max-bathymetry-gap", String(input.maxBathymetryGap),
+      return ["erosion", "--black-sea-sochi", "--offline", ...demoCercArguments(input),
         ...(input.outputCsv ? ["--output-csv", "erosion-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
+        ...(input.outputGif ? ["--output-gif", "erosion-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
+        "--output", output];
+    case "all_demo":
+      return ["all", "--black-sea-sochi", "--offline", ...demoCercArguments(input),
+        ...(input.outputCsv ? ["--output-csv", "all-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
+        ...(input.outputGif ? ["--output-gif", "all-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
+        ...(input.modelMaxPoints ? ["--model-max-points", String(input.modelMaxPoints)] : []),
+        ...(input.noModelSimplify ? ["--no-model-simplify"] : []),
         "--output", output];
     case "mesh":
       return ["mesh", "--input", required("coastlineInputId"),

@@ -20,6 +20,7 @@ test("обычный worker не захватывает тяжёлые зада�
   assert.equal(resourceProfileForKind("source_file"), "heavy");
   assert.equal(resourceProfileForKind("map_file"), "heavy");
   assert.equal(resourceProfileForKind("dimension"), "standard");
+  assert.equal(resourceProfileForKind("all_demo"), "standard");
   await repository.claim("worker-1", "standard");
   await repository.claim("worker-2", "heavy");
   assert.equal(captured.length, 2);

@@ -13,6 +13,7 @@ const expected = {
   map: { command: "lito map", id: "black-sea-overview" },
   map_file: { command: "lito map", id: "black-sea-overview" },
   erosion: { command: "lito erosion", id: "cerc-one-line" },
+  all_demo: { command: "lito all", id: null },
   mesh: { command: "lito mesh", id: null },
   seabed_build: { command: "lito seabed build", id: null },
   seabed_render: { command: "lito seabed render", id: null },

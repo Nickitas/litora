@@ -160,6 +160,7 @@ export type CalculationKind =
   | "map"
   | "map_file"
   | "erosion"
+  | "all_demo"
   | "mesh"
   | "seabed_build"
   | "seabed_render"
@@ -190,6 +191,9 @@ export interface ErosionDemoOptionsDto {
   maxBathymetryGap: number;
   outputCsv: boolean;
   csvFormat: "long" | "wide";
+  outputGif: boolean;
+  gifFps: number;
+  gifSkip: number;
 }
 
 export const erosionDemoDefaults: ErosionDemoOptionsDto = {
@@ -204,6 +208,22 @@ export const erosionDemoDefaults: ErosionDemoOptionsDto = {
   maxBathymetryGap: 3000,
   outputCsv: false,
   csvFormat: "long",
+  outputGif: false,
+  gifFps: 10,
+  gifSkip: 1,
+};
+
+/** Параметры полного демонстрационного конвейера CLI на закреплённых данных Сочи. */
+export interface AllDemoOptionsDto extends ErosionDemoOptionsDto {
+  modelMaxPoints: number;
+  noModelSimplify: boolean;
+}
+
+export const allDemoDefaults: AllDemoOptionsDto = {
+  ...erosionDemoDefaults,
+  steps: 24,
+  modelMaxPoints: 0,
+  noModelSimplify: false,
 };
 
 export interface GeoJsonLineStringDto {

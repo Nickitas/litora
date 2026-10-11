@@ -33,6 +33,8 @@ test("паспорта встроенных сценариев содержат 
     }
   }
   const erosion = await bundledInputProvenance("erosion", dataDirectory);
+  const fullDemo = await bundledInputProvenance("all_demo", dataDirectory);
+  assert.deepEqual(fullDemo, erosion);
   assert.ok(
     erosion.files.some((file) => file.path.endsWith("waves-open-meteo.json")),
   );

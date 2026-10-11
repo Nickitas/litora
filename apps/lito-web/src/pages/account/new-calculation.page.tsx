@@ -4,13 +4,14 @@ import type {
   CalculationKind,
   CalculationKindDto,
   CalculationJobDto,
+  AllDemoOptionsDto,
   DatasetDto,
   ErosionDemoOptionsDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { erosionDemoDefaults, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, erosionDemoDefaults, scientificInputRequirements } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 import { ArrowUpRight, Database, FilePlus2, X } from "lucide-react";
 import { api } from "@/shared/api/client";
@@ -74,6 +75,7 @@ export function NewCalculationDialog({
   const [datasetId, setDatasetId] = useState("");
   const [datasetSelectOpen, setDatasetSelectOpen] = useState(false);
   const [erosionOptions, setErosionOptions] = useState<ErosionDemoOptionsDto>(erosionDemoDefaults);
+  const [allDemoOptions, setAllDemoOptions] = useState<AllDemoOptionsDto>(allDemoDefaults);
   const [meshCellSizes, setMeshCellSizes] = useState("1000");
   const [meshBoundaryDetails, setMeshBoundaryDetails] = useState("1000");
   const [meshGenerators, setMeshGenerators] = useState("frontal-quad");
@@ -164,7 +166,8 @@ export function NewCalculationDialog({
     }
     switch (original.kind) {
       case "erosion":
-        setErosionOptions((current) => {
+      case "all_demo": {
+        const restoreCerc = (current: ErosionDemoOptionsDto) => {
           const next = { ...current };
           for (const key of ["steps", "breakingIndex", "bermHeight", "closureDepth", "porosity",
             "cercCoefficient", "offshoreSampleDistance", "maxShorelineChange", "maxBathymetryGap"] as const) {
@@ -173,9 +176,20 @@ export function NewCalculationDialog({
           }
           if (typeof input.outputCsv === "boolean") next.outputCsv = input.outputCsv;
           if (input.csvFormat === "long" || input.csvFormat === "wide") next.csvFormat = input.csvFormat;
+          if (typeof input.outputGif === "boolean") next.outputGif = input.outputGif;
+          if (typeof input.gifFps === "number" && Number.isFinite(input.gifFps)) next.gifFps = input.gifFps;
+          if (typeof input.gifSkip === "number" && Number.isFinite(input.gifSkip)) next.gifSkip = input.gifSkip;
+          return next;
+        };
+        if (original.kind === "erosion") setErosionOptions(restoreCerc);
+        else setAllDemoOptions((current) => {
+          const next = { ...current, ...restoreCerc(current) };
+          if (typeof input.modelMaxPoints === "number" && Number.isFinite(input.modelMaxPoints)) next.modelMaxPoints = input.modelMaxPoints;
+          if (typeof input.noModelSimplify === "boolean") next.noModelSimplify = input.noModelSimplify;
           return next;
         });
         break;
+      }
       case "mesh":
         string("cellSizes", setMeshCellSizes);
         string("boundaryDetails", setMeshBoundaryDetails);
@@ -336,6 +350,7 @@ export function NewCalculationDialog({
         input: {
           ...scientificParameters,
           ...(kind === "erosion" ? erosionOptions : {}),
+          ...(kind === "all_demo" ? allDemoOptions : {}),
           ...(kind === "mesh" ? {
             cellSizes: meshCellSizes, boundaryDetails: meshBoundaryDetails,
             generators: meshGenerators, maxCells: meshMaxCells,
@@ -378,6 +393,12 @@ export function NewCalculationDialog({
 
   const scenario = kinds.find((item) => item.kind === kind);
   const guidance = scenario ? scenarioGuidance[scenario.kind] : undefined;
+  const isDemoKind = kind === "erosion" || kind === "all_demo";
+  const demoOptions: ErosionDemoOptionsDto = kind === "all_demo" ? allDemoOptions : erosionOptions;
+  const updateDemoOptions = (patch: Partial<ErosionDemoOptionsDto>) => {
+    if (kind === "all_demo") setAllDemoOptions((current) => ({ ...current, ...patch }));
+    else setErosionOptions((current) => ({ ...current, ...patch }));
+  };
   const selectedDataset = datasets.find((dataset) => dataset.id === datasetId);
   const isDatasetCalculation = kind === "dimension_dataset";
   const scientificRequirements = scientificInputRequirements[kind as keyof typeof scientificInputRequirements];
@@ -553,7 +574,7 @@ export function NewCalculationDialog({
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium">{scenario.title}</p>
-                      {kind === "erosion" && (
+                      {isDemoKind && (
                         <span className="rounded-full bg-warning-background px-2.5 py-1 text-xs font-semibold text-warning">
                           Демонстрационный сценарий
                         </span>
@@ -596,7 +617,7 @@ export function NewCalculationDialog({
                 )}
               </section>
 
-              {kind === "erosion" && (
+              {isDemoKind && (
                 <section
                   aria-labelledby="calculation-parameters-heading"
                   className="border-t pt-6"
@@ -609,21 +630,21 @@ export function NewCalculationDialog({
                   </h3>
                   <div className="mt-4 space-y-2">
                     <Label htmlFor="erosion-steps">
-                      Шаги волнового ряда (1–48)
+                      Шаги волнового ряда (1–{kind === "all_demo" ? 24 : 48})
                     </Label>
                     <Input
                       id="erosion-steps"
                       type="number"
                       min={1}
-                      max={48}
+                      max={kind === "all_demo" ? 24 : 48}
                       required
-                      value={erosionOptions.steps}
-                      onChange={(event) => setErosionOptions((current) => ({ ...current, steps: Number(event.target.value) }))}
+                      value={demoOptions.steps}
+                      onChange={(event) => updateDemoOptions({ steps: Number(event.target.value) })}
                     />
                   </div>
                   <Collapsible defaultOpen={Boolean(repeatJobId)} className="mt-5 space-y-3">
                     <CollapsibleTrigger asChild>
-                      <Button type="button" variant="outline">Параметры CERC и экспорт CSV</Button>
+                      <Button type="button" variant="outline">Параметры CERC и экспорт</Button>
                     </CollapsibleTrigger>
                     <CollapsibleContent className="space-y-4 rounded-xl border p-4">
                       <p className="text-sm text-muted-foreground">
@@ -643,31 +664,69 @@ export function NewCalculationDialog({
                           <div key={key} className="space-y-2">
                             <Label htmlFor={`erosion-${key}`}>{label}</Label>
                             <Input id={`erosion-${key}`} type="number" min={min} max={max} step="any" required
-                              value={erosionOptions[key]}
-                              onChange={(event) => setErosionOptions((current) => ({
-                                ...current, [key]: Number(event.target.value),
-                              }))} />
+                              value={demoOptions[key]}
+                              onChange={(event) => updateDemoOptions({ [key]: Number(event.target.value) })} />
                           </div>
                         ))}
                       </div>
                       <label className="flex min-h-11 items-center gap-3 text-sm">
-                        <input type="checkbox" checked={erosionOptions.outputCsv}
-                          onChange={(event) => setErosionOptions((current) => ({ ...current, outputCsv: event.target.checked }))} />
+                        <input type="checkbox" checked={demoOptions.outputCsv}
+                          onChange={(event) => updateDemoOptions({ outputCsv: event.target.checked })} />
                         Сохранить CSV метрик
                       </label>
-                      {erosionOptions.outputCsv && (
+                      {demoOptions.outputCsv && (
                         <div className="space-y-2">
                           <Label htmlFor="erosion-csv-format">Формат CSV</Label>
-                          <Select value={erosionOptions.csvFormat}
-                            onValueChange={(value) => setErosionOptions((current) => ({
-                              ...current, csvFormat: value as ErosionDemoOptionsDto["csvFormat"],
-                            }))}>
+                          <Select value={demoOptions.csvFormat}
+                            onValueChange={(value) => updateDemoOptions({ csvFormat: value as ErosionDemoOptionsDto["csvFormat"] })}>
                             <SelectTrigger id="erosion-csv-format"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="long">Long — одна строка на состояние</SelectItem>
                               <SelectItem value="wide">Wide — столбцы по состояниям</SelectItem>
                             </SelectContent>
                           </Select>
+                        </div>
+                      )}
+                      {isDemoKind && (
+                        <div className="space-y-4 border-t pt-4">
+                          <label className="flex min-h-11 items-center gap-3 text-sm">
+                            <input type="checkbox" checked={demoOptions.outputGif}
+                              onChange={(event) => updateDemoOptions({ outputGif: event.target.checked })} />
+                            Сохранить анимацию GIF
+                          </label>
+                          {demoOptions.outputGif && (
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              <div className="space-y-2">
+                                <Label htmlFor="all-gif-fps">Кадров в секунду (1–30)</Label>
+                                <Input id="all-gif-fps" type="number" min={1} max={30} required value={demoOptions.gifFps}
+                                  onChange={(event) => updateDemoOptions({ gifFps: Number(event.target.value) })} />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="all-gif-skip">Шаг кадров (1–{kind === "all_demo" ? 24 : 48})</Label>
+                                <Input id="all-gif-skip" type="number" min={1} max={kind === "all_demo" ? 24 : 48} required value={demoOptions.gifSkip}
+                                  onChange={(event) => updateDemoOptions({ gifSkip: Number(event.target.value) })} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {kind === "all_demo" && (
+                        <div className="space-y-4 border-t pt-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="all-model-max-points">Максимум точек базовой модели (0 или 2–10000)</Label>
+                            <Input id="all-model-max-points" type="number" min={0} max={10000} required value={allDemoOptions.modelMaxPoints}
+                              onChange={(event) => {
+                                const modelMaxPoints = Number(event.target.value);
+                                setAllDemoOptions((current) => ({ ...current, modelMaxPoints,
+                                  noModelSimplify: modelMaxPoints > 0 ? false : current.noModelSimplify }));
+                              }} />
+                          </div>
+                          <label className="flex min-h-11 items-center gap-3 text-sm">
+                            <input type="checkbox" checked={allDemoOptions.noModelSimplify}
+                              disabled={allDemoOptions.modelMaxPoints > 0}
+                              onChange={(event) => setAllDemoOptions((current) => ({ ...current, noModelSimplify: event.target.checked }))} />
+                            Не упрощать базовую линию
+                          </label>
                         </div>
                       )}
                     </CollapsibleContent>
@@ -1140,7 +1199,7 @@ export function NewCalculationDialog({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
             <span>{scenario?.title ?? "Готовим сценарий…"}</span>
-            {kind === "erosion" && scenario && (
+            {isDemoKind && scenario && (
               <span className="rounded-full bg-warning-background px-2 py-0.5 text-xs text-warning">
                 Демо
               </span>

@@ -126,7 +126,7 @@ async function run(job: JobRow) {
       join(directory, "data"),
       { recursive: true, force: false, errorOnExist: true },
     );
-    if (job.kind === "erosion")
+    if (job.kind === "erosion" || job.kind === "all_demo")
       await assertPinnedSochiInputs(join(directory, "data"));
     const validated = validateCalculation({ kind: job.kind, input: job.input });
     let datasetPath: string | undefined;
@@ -276,7 +276,7 @@ async function run(job: JobRow) {
       provenance = {
         ...(await bundledInputProvenance(job.kind, join(directory, "data"))),
       };
-    if (job.kind === "erosion")
+    if (job.kind === "erosion" || job.kind === "all_demo")
       await assertPinnedSochiInputs(join(directory, "data"));
     const metrics: Record<string, unknown> = {};
     let totalBytes = 0;
@@ -312,7 +312,7 @@ async function run(job: JobRow) {
       fileCount: outputs.length,
       totalBytes,
       scenario:
-        job.kind === "erosion"
+        job.kind === "erosion" || job.kind === "all_demo"
           ? "demo"
           : job.kind === "dimension_dataset" || scientificFiles.length > 0
             ? "user-data"

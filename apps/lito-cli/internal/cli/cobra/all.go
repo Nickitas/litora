@@ -58,6 +58,7 @@ var (
 	allMaxChange              float64
 	allMaxBathymetryGap       float64
 	allBlackSeaSochi          bool
+	allOffline                bool
 )
 
 var allCmd = &cobra.Command{
@@ -105,6 +106,7 @@ func init() {
 	allCmd.Flags().StringVar(&allSedimentSources, "sediment-sources", "", "JSON внешних источников и стоков наносов по ячейкам")
 	allCmd.Flags().StringVar(&allStructures, "structures", "", "JSON сооружений, изменяющих пропуск потока между ячейками")
 	allCmd.Flags().BoolVar(&allBlackSeaSochi, "black-sea-sochi", false, "загрузить открытые данные Сочи для демонстрационного конвейера demo")
+	allCmd.Flags().BoolVar(&allOffline, "offline", false, "для демо Сочи использовать только локальный проверенный кэш без сети")
 
 	// Export options
 	allCmd.Flags().StringVar(&allOutputCSV, "output-csv", "", "путь к CSV файлу для экспорта метрик")
@@ -126,8 +128,11 @@ func runAll(cmd *cobra.Command, args []string) error {
 		allBlackSeaSochi = true
 		fmt.Println("✓ Входные файлы не заданы: выбран демонстрационный набор Чёрного моря — Сочи (demo)")
 	}
+	if err := validateSochiOfflineMode(allOffline, allBlackSeaSochi, allSourceURL); err != nil {
+		return err
+	}
 	if allBlackSeaSochi {
-		paths, err := prepareBlackSeaSochiData(allRefresh)
+		paths, err := prepareBlackSeaSochiDataWithPolicy(allRefresh, allOffline)
 		if err != nil {
 			return fmt.Errorf("подготовка набора Сочи: %w", err)
 		}

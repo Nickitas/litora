@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { erosionDemoDefaults } from "@litora/contracts";
+import { allDemoDefaults, erosionDemoDefaults } from "@litora/contracts";
 import { commandArguments, resourceProfileForKind, scientificReferences, validateCalculation } from "./commands.js";
 
 test("пользователь не может передать shell, пути или URL в CLI", () => {
@@ -42,24 +42,50 @@ test("допустимый запрос преобразуется в фикси
 test("демо CERC принимает ограниченные параметры и экспортирует CSV в каталог worker", () => {
   const job = validateCalculation({ kind: "erosion", input: {
     steps: 12, breakingIndex: 0.85, cercCoefficient: 0.5,
-    outputCsv: true, csvFormat: "wide",
+    outputCsv: true, csvFormat: "wide", outputGif: true, gifFps: 8, gifSkip: 2,
   } });
   assert.deepEqual(job.input, {
     ...erosionDemoDefaults, steps: 12, breakingIndex: 0.85,
-    cercCoefficient: 0.5, outputCsv: true, csvFormat: "wide",
+    cercCoefficient: 0.5, outputCsv: true, csvFormat: "wide", outputGif: true, gifFps: 8, gifSkip: 2,
   });
   const args = commandArguments(job, "/tmp/job");
-  assert.deepEqual(args.slice(-6), [
-    "--output-csv", "erosion-metrics.csv", "--csv-format", "wide", "--output", "/tmp/job",
+  assert.deepEqual(args.slice(-12), [
+    "--output-csv", "erosion-metrics.csv", "--csv-format", "wide",
+    "--output-gif", "erosion-animation.gif", "--gif-fps", "8", "--gif-skip", "2", "--output", "/tmp/job",
   ]);
   assert.ok(args.includes("--offline"));
   assert.ok(!args.includes("--source-url"));
   for (const input of [
     { breakingIndex: 0.5 }, { porosity: 0.7 }, { cercCoefficient: 0 },
     { offshoreSampleDistance: -1 }, { maxBathymetryGap: Infinity },
-    { outputCsv: "true" }, { csvFormat: "../../wide" },
+    { outputCsv: "true" }, { csvFormat: "../../wide" }, { outputGif: "true" },
+    { gifFps: 0 }, { gifSkip: 49 },
     { outputCsv: true, outputPath: "/etc/passwd" },
   ]) assert.throws(() => validateCalculation({ kind: "erosion", input }));
+});
+
+test("составной демо-конвейер принимает только числовые параметры и фиксированные экспорты", () => {
+  const job = validateCalculation({ kind: "all_demo", input: {
+    steps: 12, outputCsv: true, csvFormat: "wide", outputGif: true,
+    gifFps: 8, gifSkip: 2, modelMaxPoints: 500,
+  } });
+  assert.deepEqual(job.input, {
+    ...allDemoDefaults, steps: 12, outputCsv: true, csvFormat: "wide",
+    outputGif: true, gifFps: 8, gifSkip: 2, modelMaxPoints: 500,
+  });
+  const args = commandArguments(job, "/tmp/job");
+  assert.deepEqual(args.slice(0, 4), ["all", "--black-sea-sochi", "--offline", "--steps"]);
+  assert.ok(args.includes("all-metrics.csv"));
+  assert.ok(args.includes("all-animation.gif"));
+  assert.ok(args.includes("--model-max-points"));
+  assert.ok(!args.includes("--source-url"));
+  assert.deepEqual(args.slice(-2), ["--output", "/tmp/job"]);
+  for (const input of [
+    { steps: 25 }, { outputGif: "true" }, { gifFps: 0 }, { gifSkip: 25 },
+    { modelMaxPoints: 1 }, { modelMaxPoints: 200, noModelSimplify: true },
+    { outputGif: true, outputPath: "/etc/passwd" },
+    { sourceUrl: "http://internal" }, { maxBathymetryGap: Infinity },
+  ]) assert.throws(() => validateCalculation({ kind: "all_demo", input }));
 });
 
 test("пользовательский расчёт принимает только UUID, а путь создаёт worker", () => {

@@ -348,7 +348,7 @@ function CalculationDetail({ jobId }: { jobId: string }) {
                 <CalculationStatus status={job.status} />
               </div>
             </div>
-            {job.kind === "erosion" && (
+            {(job.kind === "erosion" || job.kind === "all_demo") && (
               <p className="rounded-lg bg-warning-background p-3 text-sm text-warning">
                 Демонстрационный сценарий. Не является прогнозом годового
                 размыва или калиброванным научным отчётом.
