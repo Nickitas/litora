@@ -147,7 +147,7 @@ export class CalculationsRepository {
       const source = await scientificInputs.resolveOwnedSource(
         reference.id, userId, reference.role, this.storage.bucket,
       );
-      if (job.kind === "erosion_file" && reference.field === "bathymetryInputId" &&
+      if ((job.kind === "erosion_file" || job.kind === "all_file") && reference.field === "bathymetryInputId" &&
           !isErosionBathymetryFilename(source.filename))
         throw new BadRequestException("Имя батиметрии для CERC должно быть простым именем .json без пути");
       scientificBytes += Number(source.size_bytes);

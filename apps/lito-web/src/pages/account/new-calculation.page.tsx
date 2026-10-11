@@ -4,14 +4,14 @@ import type {
   CalculationKind,
   CalculationKindDto,
   CalculationJobDto,
-  AllDemoOptionsDto,
+  AllOptionsDto,
   DatasetDto,
   CercOptionsDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { allDemoDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 import { ArrowUpRight, Database, FilePlus2, X } from "lucide-react";
 import { api } from "@/shared/api/client";
@@ -76,7 +76,8 @@ export function NewCalculationDialog({
   const [datasetSelectOpen, setDatasetSelectOpen] = useState(false);
   const [erosionOptions, setErosionOptions] = useState<CercOptionsDto>(erosionDemoDefaults);
   const [erosionFileOptions, setErosionFileOptions] = useState<CercOptionsDto>(erosionFileDefaults);
-  const [allDemoOptions, setAllDemoOptions] = useState<AllDemoOptionsDto>(allDemoDefaults);
+  const [allDemoOptions, setAllDemoOptions] = useState<AllOptionsDto>(allDemoDefaults);
+  const [allFileOptions, setAllFileOptions] = useState<AllOptionsDto>(allFileDefaults);
   const [meshCellSizes, setMeshCellSizes] = useState("1000");
   const [meshBoundaryDetails, setMeshBoundaryDetails] = useState("1000");
   const [meshGenerators, setMeshGenerators] = useState("frontal-quad");
@@ -168,7 +169,8 @@ export function NewCalculationDialog({
     switch (original.kind) {
       case "erosion":
       case "erosion_file":
-      case "all_demo": {
+      case "all_demo":
+      case "all_file": {
         const restoreCerc = (current: CercOptionsDto) => {
           const next = { ...current };
           for (const key of ["steps", "breakingIndex", "bermHeight", "closureDepth", "porosity",
@@ -185,12 +187,16 @@ export function NewCalculationDialog({
         };
         if (original.kind === "erosion") setErosionOptions(restoreCerc);
         else if (original.kind === "erosion_file") setErosionFileOptions(restoreCerc);
-        else setAllDemoOptions((current) => {
-          const next = { ...current, ...restoreCerc(current) };
-          if (typeof input.modelMaxPoints === "number" && Number.isFinite(input.modelMaxPoints)) next.modelMaxPoints = input.modelMaxPoints;
-          if (typeof input.noModelSimplify === "boolean") next.noModelSimplify = input.noModelSimplify;
-          return next;
-        });
+        else {
+          const restoreAll = (current: AllOptionsDto) => {
+            const next = { ...current, ...restoreCerc(current) };
+            if (typeof input.modelMaxPoints === "number" && Number.isFinite(input.modelMaxPoints)) next.modelMaxPoints = input.modelMaxPoints;
+            if (typeof input.noModelSimplify === "boolean") next.noModelSimplify = input.noModelSimplify;
+            return next;
+          };
+          if (original.kind === "all_file") setAllFileOptions(restoreAll);
+          else setAllDemoOptions(restoreAll);
+        }
         break;
       }
       case "mesh":
@@ -355,6 +361,7 @@ export function NewCalculationDialog({
           ...(kind === "erosion" ? erosionOptions : {}),
           ...(kind === "erosion_file" ? erosionFileOptions : {}),
           ...(kind === "all_demo" ? allDemoOptions : {}),
+          ...(kind === "all_file" ? allFileOptions : {}),
           ...(kind === "mesh" ? {
             cellSizes: meshCellSizes, boundaryDetails: meshBoundaryDetails,
             generators: meshGenerators, maxCells: meshMaxCells,
@@ -398,13 +405,20 @@ export function NewCalculationDialog({
   const scenario = kinds.find((item) => item.kind === kind);
   const guidance = scenario ? scenarioGuidance[scenario.kind] : undefined;
   const isDemoKind = kind === "erosion" || kind === "all_demo";
-  const isCercKind = isDemoKind || kind === "erosion_file";
+  const isAllKind = kind === "all_demo" || kind === "all_file";
+  const isCercKind = isDemoKind || kind === "erosion_file" || kind === "all_file";
   const cercOptions: CercOptionsDto = kind === "all_demo" ? allDemoOptions :
-    kind === "erosion_file" ? erosionFileOptions : erosionOptions;
+    kind === "all_file" ? allFileOptions : kind === "erosion_file" ? erosionFileOptions : erosionOptions;
   const updateCercOptions = (patch: Partial<CercOptionsDto>) => {
     if (kind === "all_demo") setAllDemoOptions((current) => ({ ...current, ...patch }));
+    else if (kind === "all_file") setAllFileOptions((current) => ({ ...current, ...patch }));
     else if (kind === "erosion_file") setErosionFileOptions((current) => ({ ...current, ...patch }));
     else setErosionOptions((current) => ({ ...current, ...patch }));
+  };
+  const allOptions = kind === "all_file" ? allFileOptions : allDemoOptions;
+  const updateAllOptions = (update: (current: AllOptionsDto) => AllOptionsDto) => {
+    if (kind === "all_file") setAllFileOptions(update);
+    else setAllDemoOptions(update);
   };
   const selectedDataset = datasets.find((dataset) => dataset.id === datasetId);
   const isDatasetCalculation = kind === "dimension_dataset";
@@ -719,21 +733,21 @@ export function NewCalculationDialog({
                           )}
                         </div>
                       )}
-                      {kind === "all_demo" && (
+                      {isAllKind && (
                         <div className="space-y-4 border-t pt-4">
                           <div className="space-y-2">
                             <Label htmlFor="all-model-max-points">Максимум точек базовой модели (0 или 2–10000)</Label>
-                            <Input id="all-model-max-points" type="number" min={0} max={10000} required value={allDemoOptions.modelMaxPoints}
+                            <Input id="all-model-max-points" type="number" min={0} max={10000} required value={allOptions.modelMaxPoints}
                               onChange={(event) => {
                                 const modelMaxPoints = Number(event.target.value);
-                                setAllDemoOptions((current) => ({ ...current, modelMaxPoints,
+                                updateAllOptions((current) => ({ ...current, modelMaxPoints,
                                   noModelSimplify: modelMaxPoints > 0 ? false : current.noModelSimplify }));
                               }} />
                           </div>
                           <label className="flex min-h-11 items-center gap-3 text-sm">
-                            <input type="checkbox" checked={allDemoOptions.noModelSimplify}
-                              disabled={allDemoOptions.modelMaxPoints > 0}
-                              onChange={(event) => setAllDemoOptions((current) => ({ ...current, noModelSimplify: event.target.checked }))} />
+                            <input type="checkbox" checked={allOptions.noModelSimplify}
+                              disabled={allOptions.modelMaxPoints > 0}
+                              onChange={(event) => updateAllOptions((current) => ({ ...current, noModelSimplify: event.target.checked }))} />
                             Не упрощать базовую линию
                           </label>
                         </div>
@@ -830,12 +844,12 @@ export function NewCalculationDialog({
                 <section aria-labelledby="scientific-inputs-heading" className="space-y-4 border-t pt-6">
                   <div>
                     <h3 id="scientific-inputs-heading" className="text-lg font-semibold">
-                      {kind === "erosion_file" ? "3. Научные входные файлы" : "2. Научные входные файлы"}
+                      {kind === "erosion_file" || kind === "all_file" ? "3. Научные входные файлы" : "2. Научные входные файлы"}
                     </h3>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Выберите ранее загруженные файлы или сохраните новые. Go проверит их научный формат и совместимость при запуске.
                     </p>
-                    {kind === "erosion_file" && (
+                    {(kind === "erosion_file" || kind === "all_file") && (
                       <p className="mt-2 text-sm text-muted-foreground">
                         Батиметрия — JSON с простым именем файла (латиница, цифры, точка, дефис или подчёркивание) и паспортом, у которого dataset_file и SHA-256 соответствуют этому JSON. Для CSV волн укажите источник в форме загрузки.
                       </p>

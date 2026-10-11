@@ -9,7 +9,7 @@ import type {
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { allDemoDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 
 const user = {
@@ -423,6 +423,46 @@ test("свой CERC выбирает четыре приватных файла 
     ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
     ...erosionFileDefaults, steps: 8, outputGif: true,
   } });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("полный конвейер по своим файлам повторяет входы и параметры без подмены демо", async ({ page }) => {
+  const ownKind = [{ kind: "all_file", title: "Полный конвейер по своим данным", description: "Свои входы" }] satisfies CalculationKindDto[];
+  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json"] as const;
+  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
+  const inputs: ScientificInputDto[] = roles.map((role, index) => ({
+    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Вход полного конвейера ${index + 1}`, filename: index === 1 ? "waves.csv" : "grid.json",
+  }));
+  const original = { ...job, kind: "all_file" as const, status: "succeeded" as const,
+    input: { ...allFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
+      steps: 12, modelMaxPoints: 200 } };
+  const created = { ...original, id: "99999999-9999-4999-8999-999999999999", status: "queued" as const };
+  let submitted: unknown;
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: ownKind };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
+    if (path === "/api/calculations" && method === "GET") return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
+    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === "/api/calculations" && method === "POST") {
+      submitted = body;
+      return { status: 201, body: created };
+    }
+  });
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto(`/account/calculations/${original.id}`);
+  await page.getByRole("link", { name: "Создать на основе" }).click();
+  const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
+  await expect(dialog.getByText("Демонстрационный сценарий")).toHaveCount(0);
+  await expect(dialog.getByLabel("Шаги волнового ряда (1–48)")).toHaveValue("12");
+  await expect(dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)")).toHaveValue("200");
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  expect(submitted).toEqual({ kind: "all_file", input: original.input });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });

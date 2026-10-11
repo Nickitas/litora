@@ -37,6 +37,9 @@ test("worker читает ревизию только из соответств�
   assert.equal(resultMethodFromManifest(Buffer.from(JSON.stringify({
     schemaVersion: 2, command: "lito all", artifacts: [],
   })), "all_demo"), null);
+  assert.equal(resultMethodFromManifest(Buffer.from(JSON.stringify({
+    schemaVersion: 2, command: "lito all", artifacts: [],
+  })), "all_file"), null);
   for (const bytes of [
     Buffer.from("not json"),
     Buffer.from(JSON.stringify({ schemaVersion: 2, command: "lito erosion" })),

@@ -354,9 +354,9 @@ function CalculationDetail({ jobId }: { jobId: string }) {
                 размыва или калиброванным научным отчётом.
               </p>
             )}
-            {job.kind === "erosion_file" && (
+            {(job.kind === "erosion_file" || job.kind === "all_file") && (
               <p className="rounded-lg bg-warning-background p-3 text-sm text-warning">
-                Расчёт CERC по вашим данным. Без независимой калибровки и проверки входов не является прогнозом размыва.
+                Расчёт по вашим данным. Без независимой калибровки и проверки входов не является прогнозом размыва.
               </p>
             )}
             {job.errorMessage && (

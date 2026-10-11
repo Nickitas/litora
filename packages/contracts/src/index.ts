@@ -162,6 +162,7 @@ export type CalculationKind =
   | "erosion"
   | "erosion_file"
   | "all_demo"
+  | "all_file"
   | "mesh"
   | "seabed_build"
   | "seabed_render"
@@ -223,17 +224,27 @@ export const erosionFileDefaults: CercOptionsDto = {
   maxBathymetryGap: 1500,
 };
 
-/** Параметры полного демонстрационного конвейера CLI на закреплённых данных Сочи. */
-export interface AllDemoOptionsDto extends CercOptionsDto {
+/** Общие параметры полного конвейера CLI для демо и собственных входов. */
+export interface AllOptionsDto extends CercOptionsDto {
   modelMaxPoints: number;
   noModelSimplify: boolean;
 }
 
-export const allDemoDefaults: AllDemoOptionsDto = {
+/** Совместимое имя контракта демонстрационного сценария. */
+export type AllDemoOptionsDto = AllOptionsDto;
+
+export const allDemoDefaults: AllOptionsDto = {
   ...erosionDemoDefaults,
   steps: 24,
   modelMaxPoints: 0,
   noModelSimplify: false,
+};
+
+/** Параметры полного конвейера по собственным проверяемым входным файлам. */
+export const allFileDefaults: AllOptionsDto = {
+  ...allDemoDefaults,
+  steps: 3,
+  maxBathymetryGap: 1500,
 };
 
 export interface GeoJsonLineStringDto {
@@ -279,17 +290,20 @@ export type ScientificInputRole =
   | "adaptive_field_csv"
   | "adaptive_field_report_json";
 
+const ownCercInputRequirements = {
+  coastlineInputId: "coastline_geojson",
+  waveInputId: "wave_climate",
+  bathymetryInputId: "bathymetry_grid_json",
+  bathymetryMetadataInputId: "bathymetry_grid_metadata_json",
+} as const;
+
 export const scientificInputRequirements = {
   source_file: { coastlineInputId: "coastline_geojson" },
   dimension_file: { coastlineInputId: "coastline_geojson" },
   map_file: { coastlineInputId: "coastline_geojson" },
   mesh: { coastlineInputId: "coastline_geojson" },
-  erosion_file: {
-    coastlineInputId: "coastline_geojson",
-    waveInputId: "wave_climate",
-    bathymetryInputId: "bathymetry_grid_json",
-    bathymetryMetadataInputId: "bathymetry_grid_metadata_json",
-  },
+  erosion_file: ownCercInputRequirements,
+  all_file: ownCercInputRequirements,
   seabed_build: {
     flatMeshInputId: "flat_mesh_msh",
     bathymetryInputId: "bathymetry_grid_json",

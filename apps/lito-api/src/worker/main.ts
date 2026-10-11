@@ -201,7 +201,7 @@ async function run(job: JobRow) {
     }
     if (scientificFiles.length)
       provenance = { files: scientificFiles };
-    if (job.kind === "erosion_file") {
+    if (job.kind === "erosion_file" || job.kind === "all_file") {
       sensitiveWaveSource = scientificSources.waveInputId;
       scientificPaths.bathymetryInputId = await stageErosionBathymetry(
         directory,

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allDemoDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
 import { commandArguments, resourceProfileForKind, scientificReferences, validateCalculation } from "./commands.js";
 
 test("пользователь не может передать shell, пути или URL в CLI", () => {
@@ -116,6 +116,42 @@ test("составной демо-конвейер принимает тольк
     { outputGif: true, outputPath: "/etc/passwd" },
     { sourceUrl: "http://internal" }, { maxBathymetryGap: Infinity },
   ]) assert.throws(() => validateCalculation({ kind: "all_demo", input }));
+});
+
+test("полный конвейер по своим данным использует четыре приватных входа, а не демо Сочи", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const ids = { coastlineInputId: id, waveInputId: id, bathymetryInputId: id, bathymetryMetadataInputId: id };
+  const job = validateCalculation({ kind: "all_file", input: {
+    ...ids, steps: 48, outputCsv: true, outputGif: true, modelMaxPoints: 250,
+  } });
+  assert.deepEqual(job.input, {
+    ...ids, ...allFileDefaults, steps: 48, outputCsv: true, outputGif: true, modelMaxPoints: 250,
+  });
+  assert.equal(resourceProfileForKind(job.kind), "heavy");
+  assert.deepEqual(scientificReferences(job).map(({ role }) => role), [
+    "coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json",
+  ]);
+  const paths = {
+    coastlineInputId: "/job/coast.geojson", waveInputId: "/job/waves.csv",
+    bathymetryInputId: "/job/erosion-inputs/grid.json", bathymetryMetadataInputId: "/job/erosion-inputs/grid.metadata.json",
+  };
+  assert.throws(() => commandArguments(job, "/job/output", undefined, paths));
+  const args = commandArguments(job, "/job/output", undefined, paths, { waveInputId: "Наблюдения 2024" });
+  assert.deepEqual(args.slice(0, 7), ["all", "--input", paths.coastlineInputId,
+    "--wave-input", paths.waveInputId, "--wave-source", "Наблюдения 2024"]);
+  assert.ok(args.includes(paths.bathymetryInputId));
+  assert.ok(args.includes("--model-max-points"));
+  assert.ok(args.includes("all-animation.gif"));
+  assert.ok(!args.includes("--black-sea-sochi"));
+  assert.ok(!args.includes("--source-url"));
+  for (const bad of [
+    { ...ids, waveInputId: "/etc/passwd" },
+    { ...ids, steps: 0 },
+    { ...ids, steps: 49 },
+    { ...ids, noModelSimplify: true, modelMaxPoints: 250 },
+    { ...ids, sourceUrl: "https://internal.example" },
+    { ...ids, outputPath: "/tmp/out" },
+  ]) assert.throws(() => validateCalculation({ kind: "all_file", input: bad }));
 });
 
 test("пользовательский расчёт принимает только UUID, а путь создаёт worker", () => {

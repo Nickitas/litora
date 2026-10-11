@@ -1,10 +1,11 @@
 import { BadRequestException } from "@nestjs/common";
-import { allDemoDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
 import type {
   CalculationKind,
   CalculationKindDto,
   CreateCalculationDto,
   CercOptionsDto,
+  AllOptionsDto,
   ScientificInputRole,
 } from "@litora/contracts";
 
@@ -18,6 +19,7 @@ export const calculationKinds: CalculationKindDto[] = [
   { kind: "erosion", title: "Эрозия: демонстрационный сценарий Сочи", description: "CERC на закреплённых данных; демонстрация, не прогноз." },
   { kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC по загруженным контуру, волнам и батиметрии с проверяемым паспортом; не калиброванный прогноз." },
   { kind: "all_demo", title: "Полный демонстрационный конвейер Сочи", description: "Проверка контура, размерность, CERC и баланс наносов; SVG, JSON, опционально CSV и GIF." },
+  { kind: "all_file", title: "Полный конвейер по своим данным", description: "Проверка контура, размерность, CERC и баланс наносов по загруженным файлам; не калиброванный прогноз." },
   { kind: "mesh", title: "Плоская сетка Чёрного моря", description: "Gmsh строит MSH и SVG обзоры сеток по загруженному полному контуру." },
   { kind: "seabed_build", title: "Построить модель дна", description: "Назначить глубины плоской сетке и получить MSH, VTU, CSV и паспорт экспорта." },
   { kind: "seabed_render", title: "Карты и 3D-рельеф дна", description: "SVG карты глубин, фрагментов фактической сетки, 3D-рельефа и профилей из готовой модели MSH." },
@@ -31,7 +33,7 @@ export const scientificInputFields = scientificInputRequirements;
 
 export function resourceProfileForKind(kind: CalculationKind) {
   return kind === "source_file" || kind === "dimension_file" || kind === "map_file" ||
-    kind === "mesh" || kind === "erosion_file" || kind.startsWith("seabed_")
+    kind === "mesh" || kind === "erosion_file" || kind === "all_file" || kind.startsWith("seabed_")
     ? "heavy" : "standard";
 }
 
@@ -103,7 +105,7 @@ function comparisonLevels(value: unknown) {
   return value;
 }
 
-function validateDemoCercOptions(
+function validateCercOptions(
   input: Record<string, unknown>,
   defaults: CercOptionsDto,
   maxSteps: number,
@@ -133,7 +135,7 @@ function validateDemoCercOptions(
   };
 }
 
-function demoCercArguments(input: Record<string, string | number | boolean | undefined>) {
+function cercArguments(input: Record<string, string | number | boolean | undefined>) {
   return ["--steps", String(input.steps),
     "--breaking-index", String(input.breakingIndex),
     "--berm-height", String(input.bermHeight),
@@ -143,6 +145,33 @@ function demoCercArguments(input: Record<string, string | number | boolean | und
     "--offshore-sample-distance", String(input.offshoreSampleDistance),
     "--max-shoreline-change", String(input.maxShorelineChange),
     "--max-bathymetry-gap", String(input.maxBathymetryGap)];
+}
+
+function validateAllOptions(
+  input: Record<string, unknown>,
+  defaults: AllOptionsDto,
+  maxSteps: number,
+): AllOptionsDto {
+  if (input.noModelSimplify !== undefined && typeof input.noModelSimplify !== "boolean")
+    throw new BadRequestException("Недопустимый флаг упрощения модели");
+  const modelMaxPoints = numberIn(input.modelMaxPoints ?? defaults.modelMaxPoints, "Число точек модели", 0, 10000, true);
+  if (modelMaxPoints === 1) throw new BadRequestException("Модель должна содержать не менее двух точек");
+  if (modelMaxPoints > 0 && input.noModelSimplify === true)
+    throw new BadRequestException("Отключение упрощения несовместимо с заданным числом точек");
+  return {
+    ...validateCercOptions(input, defaults, maxSteps, maxSteps),
+    modelMaxPoints,
+    noModelSimplify: input.noModelSimplify ?? defaults.noModelSimplify,
+  };
+}
+
+function allExportArguments(input: Record<string, string | number | boolean | undefined>) {
+  return [
+    ...(input.outputCsv ? ["--output-csv", "all-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
+    ...(input.outputGif ? ["--output-gif", "all-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
+    ...(input.modelMaxPoints ? ["--model-max-points", String(input.modelMaxPoints)] : []),
+    ...(input.noModelSimplify ? ["--no-model-simplify"] : []),
+  ];
 }
 
 export function validateCalculation(body: unknown): CreateCalculationDto {
@@ -173,28 +202,26 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
       return { kind: data.kind, input: references(p, scientificInputFields[data.kind]) };
     case "erosion": {
       rejectUnknown(p, Object.keys(erosionDemoDefaults));
-      return { kind: "erosion", input: { ...validateDemoCercOptions(p, erosionDemoDefaults, 48, 48) } };
+      return { kind: "erosion", input: { ...validateCercOptions(p, erosionDemoDefaults, 48, 48) } };
     }
     case "erosion_file": {
       const fields = scientificInputFields.erosion_file;
       rejectUnknown(p, [...Object.keys(fields), ...Object.keys(erosionFileDefaults)]);
       return { kind: "erosion_file", input: {
         ...references(p, fields),
-        ...validateDemoCercOptions(p, erosionFileDefaults, 48, 48),
+        ...validateCercOptions(p, erosionFileDefaults, 48, 48),
       } };
     }
     case "all_demo": {
       rejectUnknown(p, Object.keys(allDemoDefaults));
-      if (p.noModelSimplify !== undefined && typeof p.noModelSimplify !== "boolean")
-        throw new BadRequestException("Недопустимый флаг упрощения модели");
-      const modelMaxPoints = numberIn(p.modelMaxPoints ?? allDemoDefaults.modelMaxPoints, "Число точек модели", 0, 10000, true);
-      if (modelMaxPoints === 1) throw new BadRequestException("Модель должна содержать не менее двух точек");
-      if (modelMaxPoints > 0 && p.noModelSimplify === true)
-        throw new BadRequestException("Отключение упрощения несовместимо с заданным числом точек");
-      return { kind: "all_demo", input: {
-        ...validateDemoCercOptions(p, allDemoDefaults, 24, 24),
-        modelMaxPoints,
-        noModelSimplify: p.noModelSimplify ?? allDemoDefaults.noModelSimplify,
+      return { kind: "all_demo", input: { ...validateAllOptions(p, allDemoDefaults, 24) } };
+    }
+    case "all_file": {
+      const fields = scientificInputFields.all_file;
+      rejectUnknown(p, [...Object.keys(fields), ...Object.keys(allFileDefaults)]);
+      return { kind: "all_file", input: {
+        ...references(p, fields),
+        ...validateAllOptions(p, allFileDefaults, 48),
       } };
     }
     case "mesh": {
@@ -357,23 +384,26 @@ export function commandArguments(
     case "map_file":
       return ["map", "black-sea", "--input", required("coastlineInputId"), "--output", output];
     case "erosion":
-      return ["erosion", "--black-sea-sochi", "--offline", ...demoCercArguments(input),
+      return ["erosion", "--black-sea-sochi", "--offline", ...cercArguments(input),
         ...(input.outputCsv ? ["--output-csv", "erosion-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
         ...(input.outputGif ? ["--output-gif", "erosion-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
         "--output", output];
     case "erosion_file":
       return ["erosion", "--input", required("coastlineInputId"),
         "--wave-input", required("waveInputId"), "--wave-source", requiredSource("waveInputId"),
-        "--bathymetry", required("bathymetryInputId"), ...demoCercArguments(input),
+        "--bathymetry", required("bathymetryInputId"), ...cercArguments(input),
         ...(input.outputCsv ? ["--output-csv", "erosion-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
         ...(input.outputGif ? ["--output-gif", "erosion-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
         "--output", output];
     case "all_demo":
-      return ["all", "--black-sea-sochi", "--offline", ...demoCercArguments(input),
-        ...(input.outputCsv ? ["--output-csv", "all-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
-        ...(input.outputGif ? ["--output-gif", "all-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
-        ...(input.modelMaxPoints ? ["--model-max-points", String(input.modelMaxPoints)] : []),
-        ...(input.noModelSimplify ? ["--no-model-simplify"] : []),
+      return ["all", "--black-sea-sochi", "--offline", ...cercArguments(input),
+        ...allExportArguments(input),
+        "--output", output];
+    case "all_file":
+      return ["all", "--input", required("coastlineInputId"),
+        "--wave-input", required("waveInputId"), "--wave-source", requiredSource("waveInputId"),
+        "--bathymetry", required("bathymetryInputId"), ...cercArguments(input),
+        ...allExportArguments(input),
         "--output", output];
     case "mesh":
       return ["mesh", "--input", required("coastlineInputId"),
