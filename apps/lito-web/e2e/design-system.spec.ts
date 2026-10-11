@@ -184,6 +184,9 @@ test("кабинет на 360 px показывает все статусы бе
   );
   await page.goto("/account/calculations");
   const history = page.getByRole("region", { name: "История расчётов" });
+  await expect(
+    history.getByRole("table", { name: "История расчётов" })
+  ).toBeVisible();
   for (const label of [
     "В очереди",
     "Выполняется",
@@ -191,7 +194,7 @@ test("кабинет на 360 px показывает все статусы бе
     "Ошибка",
     "Отменён",
   ])
-    await expect(history.getByText(label)).toBeVisible();
+    await expect(history.getByText(label, { exact: true })).toBeVisible();
   await page.emulateMedia({ reducedMotion: "reduce" });
   const spinner = history.getByText("Выполняется").locator("svg");
   await expect(spinner).toHaveCSS("animation-name", "none");

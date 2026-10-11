@@ -198,6 +198,91 @@ async function mockArticleCalculations(page: Page, submissions: unknown[]) {
   });
 }
 
+test("каталог показывает паспорт набора, поиск и адаптивную карточку", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  const second = {
+    ...dataset,
+    id: "44444444-4444-4444-8444-444444444444",
+    name: "Контур Анапы",
+    source: "Архивная экспедиция",
+    sourceRevision: "2025-08",
+  } satisfies DatasetDto;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/datasets" && method === "GET") return { body: [dataset, second] };
+  });
+
+  await page.goto("/account/datasets");
+  await chooseTheme(page, "dark");
+  await expect(page.getByRole("heading", { name: "Наборы данных" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: dataset.name })).toBeVisible();
+  await expect(page.getByText(dataset.sha256)).toHaveCount(2);
+  await expect(page.getByText("2 из 100 возможных")).toBeVisible();
+  await page.getByRole("textbox", { name: "Поиск по названию и источнику" }).fill("экспедиция");
+  await expect(page.getByRole("heading", { name: second.name })).toBeVisible();
+  await expect(page.getByRole("heading", { name: dataset.name })).toHaveCount(0);
+  await expect(page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).resolves.toBe(true);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("каталог создаёт набор отдельно от запуска расчёта", async ({ page }) => {
+  const saved = { ...dataset, name: "Новый контур", source: "Полевой архив" };
+  const submissions: unknown[] = [];
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/datasets" && method === "POST") {
+      submissions.push(body);
+      return { status: 201, body: saved };
+    }
+  });
+
+  await page.goto("/account/datasets");
+  await expect(page.getByText("Пока нет сохранённых наборов")).toBeVisible();
+  await page.getByRole("button", { name: "Добавить набор" }).click();
+  await page.getByLabel("Файл GeoJSON").setInputFiles({
+    name: "coast.geojson",
+    mimeType: "application/geo+json",
+    buffer: Buffer.from(JSON.stringify({ type: "LineString", coordinates: [[37, 44], [37.1, 44.1]] })),
+  });
+  await page.getByLabel("Название", { exact: true }).fill(saved.name);
+  await page.getByLabel("Источник данных").fill(saved.source);
+  await page.getByLabel("Лицензия или условия использования").fill(saved.license);
+  await page.getByRole("button", { name: "Сохранить набор" }).click();
+
+  await expect(page.getByRole("heading", { name: saved.name })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "сохранён" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Добавить набор" })).toBeVisible();
+  expect(submissions).toHaveLength(1);
+  expect(submissions[0]).toMatchObject({ name: saved.name, source: saved.source, crs: "EPSG:4326" });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("каталог различает ошибку API и пустой результат поиска", async ({ page }) => {
+  let allowSuccess = false;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/datasets" && method === "GET") {
+      return allowSuccess
+        ? { body: [dataset] }
+        : { status: 503, body: { message: "Хранилище временно недоступно" } };
+    }
+  });
+
+  await page.goto("/account/datasets");
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByText("Пока нет сохранённых наборов")).toHaveCount(0);
+  allowSuccess = true;
+  await page.getByRole("button", { name: "Повторить загрузку" }).click();
+  await expect(page.getByRole("heading", { name: dataset.name })).toBeVisible();
+  await page.getByRole("textbox", { name: "Поиск по названию и источнику" }).fill("неизвестный");
+  await expect(page.getByText("По этому запросу наборы не найдены.", { exact: false })).toBeVisible();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
 test("устаревшая ссылка на создание возвращает к обзору", async ({ page }) => {
   const observed = await mockApi(page, (path, method) => {
     if (path === "/api/auth/refresh" && method === "POST")
@@ -750,6 +835,14 @@ test("история листается сервером и сохраняет �
     kind: "dimension",
     status: "succeeded",
   } satisfies CalculationJobDto;
+  const firstPage = [
+    newest,
+    ...Array.from({ length: 19 }, (_, index) => ({
+      ...job,
+      id: `66666666-6666-4666-8666-${String(index).padStart(12, "0")}`,
+    })),
+  ];
+  let olderPageRequests = 0;
   const observed = await mockApi(page, (path, method, _body, params) => {
     if (path === "/api/auth/refresh" && method === "POST")
       return { body: session };
@@ -760,35 +853,62 @@ test("история листается сервером и сохраняет �
         return {
           body: { items: [newest, older], nextCursor: null, totalCount: 2 },
         };
-      if (params.get("cursor") === "older-page")
-        return { body: { items: [older], nextCursor: null, totalCount: 3 } };
+      if (params.get("cursor") === "older-page") {
+        olderPageRequests++;
+        return {
+          body: {
+            items: [firstPage[19], older],
+            nextCursor: null,
+            totalCount: 21,
+          },
+        };
+      }
       return {
-        body: { items: [newest, job], nextCursor: "older-page", totalCount: 3 },
+        body: { items: firstPage, nextCursor: "older-page", totalCount: 21 },
       };
     }
   });
 
   await page.goto("/account/calculations");
-  await expect(page.getByText("Найдено расчётов: 3")).toBeVisible();
+  await expect(page.getByText("Найдено расчётов: 21")).toBeVisible();
+  const history = page.getByRole("region", { name: "История расчётов" });
   await expect(
-    page.getByRole("region", { name: "История расчётов" }).locator("li")
-  ).toHaveCount(2);
-  await page.getByRole("button", { name: "Следующая страница" }).click();
-  await expect(page).toHaveURL(/cursor=older-page/);
+    history.getByRole("table", { name: "История расчётов" }).locator("tbody tr")
+  ).toHaveCount(20);
+  await page
+    .getByRole("button", { name: "Загрузить ещё" })
+    .scrollIntoViewIfNeeded();
+  await expect(history.getByRole("table").locator("tbody tr")).toHaveCount(21);
+  expect(olderPageRequests).toBe(1);
+  await expect(page).not.toHaveURL(/cursor=/);
+  await history
+    .getByRole("checkbox", { name: /Сравнить расчёт Размерность/ })
+    .check();
+  await history
+    .getByRole("checkbox", { name: /Сравнить расчёт Карта/ })
+    .check();
   await expect(
-    page.getByRole("region", { name: "История расчётов" }).locator("li")
-  ).toHaveCount(1);
+    page.getByRole("button", { name: "Сравнить отчёты" })
+  ).toBeEnabled();
   await chooseOption(page, "Статус", "Завершён");
   await expect(page).toHaveURL(/status=succeeded/);
   await expect(page).not.toHaveURL(/cursor=/);
   await expect(page.getByText("Найдено расчётов: 2")).toBeVisible();
-  await chooseOption(page, "На странице", "10");
+  await expect(history.getByRole("table").locator("tbody tr")).toHaveCount(2);
+  await expect(
+    page.getByRole("button", { name: "Сравнить отчёты" })
+  ).toHaveCount(0);
+  await chooseOption(page, "Загружать по", "10");
   await expect(page).toHaveURL(/limit=10/);
   await page.setViewportSize({ width: 360, height: 780 });
   await page.goto(
     "/account/calculations?from=2026-10-01&to=2026-10-31&cursor=older-page"
   );
   await chooseTheme(page, "dark");
+  const searchWidth = await page
+    .getByLabel("Поиск по UUID расчёта")
+    .evaluate((input) => input.getBoundingClientRect().width);
+  expect(searchWidth).toBeGreaterThan(240);
   const fromDate = page.getByRole("button", { name: /С даты, UTC: 1 октября/ });
   await fromDate.click();
   const datePicker = page.getByRole("dialog", { name: "С даты, UTC" });
@@ -817,6 +937,58 @@ test("история листается сервером и сохраняет �
   await expect(page).not.toHaveURL(/to=/);
   await page.getByRole("button", { name: "Сбросить фильтры" }).click();
   await expect(page).toHaveURL(/\/account\/calculations$/);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("ошибка подгрузки истории не теряет строки и допускает повтор", async ({
+  page,
+}) => {
+  const firstPage = Array.from({ length: 20 }, (_, index) => ({
+    ...job,
+    id: `88888888-8888-4888-8888-${String(index).padStart(12, "0")}`,
+  }));
+  const older = {
+    ...job,
+    id: "99999999-9999-4999-8999-999999999999",
+    status: "succeeded",
+  } satisfies CalculationJobDto;
+  let attempts = 0;
+  const observed = await mockApi(page, (path, method, _body, params) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/calculations/page" && method === "GET") {
+      if (params.get("cursor") === "next-page") {
+        attempts++;
+        return attempts === 1
+          ? { status: 503, body: { message: "Сервис временно недоступен" } }
+          : { body: { items: [older], nextCursor: null, totalCount: 21 } };
+      }
+      return {
+        body: { items: firstPage, nextCursor: "next-page", totalCount: 21 },
+      };
+    }
+  });
+
+  await page.goto("/account/calculations");
+  const history = page.getByRole("region", { name: "История расчётов" });
+  await expect(history.getByRole("table").locator("tbody tr")).toHaveCount(20);
+  await page
+    .getByRole("button", { name: "Загрузить ещё" })
+    .scrollIntoViewIfNeeded();
+  await expect(history.getByRole("alert")).toContainText(
+    "Не удалось загрузить ещё расчёты"
+  );
+  await expect(history.getByRole("table").locator("tbody tr")).toHaveCount(20);
+  expect(attempts).toBe(1);
+  await history.getByRole("button", { name: "Повторить загрузку" }).click();
+  await expect(history.getByRole("table").locator("tbody tr")).toHaveCount(21);
+  await expect(
+    history.getByText("Это все расчёты по выбранным условиям.")
+  ).toBeVisible();
+  expect(attempts).toBe(2);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -1290,7 +1462,7 @@ test("реестр открывает краткий просмотр и соп�
   await expect(quickView).toBeHidden();
   await expect(quickTrigger).toBeFocused();
 
-  const compareControls = page.getByLabel("Сравнить", { exact: true });
+  const compareControls = page.getByRole("checkbox", { name: /Сравнить расчёт/ });
   await compareControls.nth(0).check();
   await compareControls.nth(1).check();
   const comparisonTrigger = page.getByRole("button", {

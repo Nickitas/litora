@@ -72,6 +72,11 @@ const CalculationDetailPage = lazy(() =>
     default: m.CalculationDetailPage,
   }))
 );
+const DatasetsPage = lazy(() =>
+  import("@/pages/account/datasets.page").then((m) => ({
+    default: m.DatasetsPage,
+  }))
+);
 
 export interface AppRoute {
   path?: string;
@@ -95,6 +100,7 @@ export const routes: AppRoute[] = [
       { path: "calculations/new", Component: LegacyNewCalculationRoute },
       { path: "calculations", Component: CalculationsPage },
       { path: "calculations/:jobId", Component: CalculationDetailPage },
+      { path: "datasets", Component: DatasetsPage },
     ],
   },
   { path: "/docs", Component: DocsPage },

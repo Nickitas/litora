@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CalculationJobDto,
   CalculationKindDto,
-  CalculationPageDto,
   CalculationPageQueryDto,
 } from "@litora/contracts";
 import { api } from "@/shared/api/client";
@@ -79,41 +78,100 @@ export function useCalculations() {
   return { jobs, loading, error, reload };
 }
 
-export function useCalculationPage(search: string) {
-  const [state, setState] = useState<{
-    key: string;
-    page?: CalculationPageDto;
-    error: string;
-  }>({ key: "", error: "" });
+type HistoryState = {
+  key: string;
+  jobs: CalculationJobDto[];
+  nextCursor: string | null;
+  totalCount: number | null;
+  loadingMore: boolean;
+  error: string;
+  loadMoreError: string;
+};
+
+function pageQuery(search: string): CalculationPageQueryDto {
+  const params = new URLSearchParams(search);
+  return {
+    status: (params.get("status") ||
+      undefined) as CalculationPageQueryDto["status"],
+    kind: (params.get("kind") || undefined) as CalculationPageQueryDto["kind"],
+    from: params.get("from") || undefined,
+    to: params.get("to") || undefined,
+    jobId: params.get("jobId") || undefined,
+    limit: params.has("limit") ? Number(params.get("limit")) : undefined,
+    cursor: params.get("cursor") || undefined,
+  };
+}
+
+function mergeFirstPage(
+  previous: CalculationJobDto[],
+  firstPage: CalculationJobDto[]
+) {
+  const refreshedIds = new Set(firstPage.map((job) => job.id));
+  return [...firstPage, ...previous.filter((job) => !refreshedIds.has(job.id))];
+}
+
+export function useInfiniteCalculationHistory(search: string) {
+  const [state, setState] = useState<HistoryState>({
+    key: "",
+    jobs: [],
+    nextCursor: null,
+    totalCount: null,
+    loadingMore: false,
+    error: "",
+    loadMoreError: "",
+  });
   const [revision, setRevision] = useState(0);
+  const loadingCursorRef = useRef<string | null>(null);
+  const aliveRef = useRef(true);
   const reload = useCallback(() => setRevision((value) => value + 1), []);
-  const key = JSON.stringify([search, revision]);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const params = new URLSearchParams(search);
-    const query: CalculationPageQueryDto = {
-      status: (params.get("status") ||
-        undefined) as CalculationPageQueryDto["status"],
-      kind: (params.get("kind") ||
-        undefined) as CalculationPageQueryDto["kind"],
-      from: params.get("from") || undefined,
-      to: params.get("to") || undefined,
-      jobId: params.get("jobId") || undefined,
-      limit: params.has("limit") ? Number(params.get("limit")) : undefined,
-      cursor: params.get("cursor") || undefined,
-    };
+    const query = pageQuery(search);
     async function poll() {
       try {
         const result = await api.calculationPage(query);
-        if (mounted) setState({ key, page: result, error: "" });
+        if (mounted)
+          setState((current) =>
+            current.key === search
+              ? {
+                  ...current,
+                  jobs: mergeFirstPage(current.jobs, result.items),
+                  nextCursor:
+                    current.totalCount === null
+                      ? result.nextCursor
+                      : current.nextCursor,
+                  totalCount: result.totalCount,
+                  error: "",
+                }
+              : {
+                  key: search,
+                  jobs: result.items,
+                  nextCursor: result.nextCursor,
+                  totalCount: result.totalCount,
+                  loadingMore: false,
+                  error: "",
+                  loadMoreError: "",
+                }
+          );
       } catch (nextError) {
         if (mounted)
           setState((current) => ({
-            key,
-            page: current.key === key ? current.page : undefined,
+            key: search,
+            jobs: current.key === search ? current.jobs : [],
+            nextCursor: current.key === search ? current.nextCursor : null,
+            totalCount: current.key === search ? current.totalCount : null,
+            loadingMore: current.key === search && current.loadingMore,
             error: messageFromError(nextError),
+            loadMoreError: current.key === search ? current.loadMoreError : "",
           }));
       } finally {
         if (mounted) {
@@ -126,12 +184,96 @@ export function useCalculationPage(search: string) {
       mounted = false;
       if (timer) clearTimeout(timer);
     };
-  }, [search, revision, key]);
+  }, [search, revision]);
+
+  const loadMore = useCallback(async () => {
+    if (state.key !== search || state.loadingMore || !state.nextCursor) return;
+    const cursor = state.nextCursor;
+    const requestKey = `${search}\u0000${cursor}`;
+    if (loadingCursorRef.current === requestKey) return;
+    loadingCursorRef.current = requestKey;
+    setState((current) =>
+      current.key === search && current.nextCursor === cursor
+        ? { ...current, loadingMore: true, loadMoreError: "" }
+        : current
+    );
+
+    try {
+      const result = await api.calculationPage({
+        ...pageQuery(search),
+        cursor,
+      });
+      if (!aliveRef.current) return;
+      setState((current) => {
+        if (current.key !== search || current.nextCursor !== cursor)
+          return current;
+        const knownIds = new Set(current.jobs.map((job) => job.id));
+        return {
+          ...current,
+          jobs: [
+            ...current.jobs,
+            ...result.items.filter((job) => !knownIds.has(job.id)),
+          ],
+          nextCursor: result.nextCursor === cursor ? null : result.nextCursor,
+          totalCount: result.totalCount,
+          loadingMore: false,
+          loadMoreError: "",
+        };
+      });
+    } catch (nextError) {
+      if (!aliveRef.current) return;
+      setState((current) =>
+        current.key === search && current.nextCursor === cursor
+          ? {
+              ...current,
+              loadingMore: false,
+              loadMoreError: messageFromError(nextError),
+            }
+          : current
+      );
+    } finally {
+      if (loadingCursorRef.current === requestKey)
+        loadingCursorRef.current = null;
+    }
+  }, [search, state.key, state.loadingMore, state.nextCursor]);
+
+  const updateJob = useCallback(
+    (job: CalculationJobDto) => {
+      const requestedStatus = pageQuery(search).status;
+      setState((current) => {
+        if (
+          current.key !== search ||
+          !current.jobs.some((item) => item.id === job.id)
+        )
+          return current;
+        const leavesFilter = Boolean(
+          requestedStatus && requestedStatus !== job.status
+        );
+        return {
+          ...current,
+          jobs: leavesFilter
+            ? current.jobs.filter((item) => item.id !== job.id)
+            : current.jobs.map((item) => (item.id === job.id ? job : item)),
+          totalCount:
+            leavesFilter && current.totalCount !== null
+              ? Math.max(0, current.totalCount - 1)
+              : current.totalCount,
+        };
+      });
+    },
+    [search]
+  );
 
   return {
-    page: state.key === key ? state.page : undefined,
-    loading: state.key !== key,
-    error: state.key === key ? state.error : "",
+    jobs: state.key === search ? state.jobs : [],
+    nextCursor: state.key === search ? state.nextCursor : null,
+    totalCount: state.key === search ? state.totalCount : null,
+    loading: state.key !== search,
+    loadingMore: state.key === search && state.loadingMore,
+    error: state.key === search ? state.error : "",
+    loadMoreError: state.key === search ? state.loadMoreError : "",
+    loadMore,
+    updateJob,
     reload,
   };
 }

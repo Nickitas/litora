@@ -7,6 +7,7 @@ import { NewCalculationDialog } from "./new-calculation.page";
 const navigation = [
   { to: "/account", label: "Обзор", end: true },
   { to: "/account/calculations", label: "Расчёты", end: true },
+  { to: "/account/datasets", label: "Наборы данных", end: true },
 ] as const;
 
 export function AccountPage() {

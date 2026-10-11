@@ -8,8 +8,10 @@ import { Label } from "@/shared/shadcn/components/ui/label";
 
 export function DatasetUpload({
   onSaved,
+  separated = true,
 }: {
   onSaved: (dataset: DatasetDto) => void;
+  separated?: boolean;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
@@ -18,6 +20,7 @@ export function DatasetUpload({
   const [license, setLicense] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const Heading = separated ? "h3" : "h2";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,15 +70,18 @@ export function DatasetUpload({
   }
 
   return (
-    <section aria-labelledby="dataset-upload-heading" className="border-t pt-6">
+    <section
+      aria-labelledby="dataset-upload-heading"
+      className={separated ? "border-t pt-6" : ""}
+    >
       <div className="flex gap-3">
         <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <FileUp aria-hidden="true" className="size-4" />
         </div>
         <div>
-          <h3 id="dataset-upload-heading" className="font-semibold">
+          <Heading id="dataset-upload-heading" className="font-semibold">
             Загрузить свой GeoJSON
-          </h3>
+          </Heading>
           <p className="mt-1 text-sm text-muted-foreground">
             Нужен LineString в WGS84 / EPSG:4326: 2–500 точек, до 64 КиБ. На
             запуске геометрию дополнительно проверит Go.
