@@ -129,6 +129,8 @@ function validateCercOptions(
     offshoreSampleDistance: numberIn(input.offshoreSampleDistance ?? defaults.offshoreSampleDistance, "Отбор глубины", 1, 100000),
     maxShorelineChange: numberIn(input.maxShorelineChange ?? defaults.maxShorelineChange, "Предел смещения", 0.001, 1000),
     maxBathymetryGap: numberIn(input.maxBathymetryGap ?? defaults.maxBathymetryGap, "Радиус батиметрии", 1, 100000),
+    leftBoundaryTransport: numberIn(input.leftBoundaryTransport ?? defaults.leftBoundaryTransport, "Левый граничный поток", -1_000_000, 1_000_000),
+    rightBoundaryTransport: numberIn(input.rightBoundaryTransport ?? defaults.rightBoundaryTransport, "Правый граничный поток", -1_000_000, 1_000_000),
     outputCsv: input.outputCsv ?? defaults.outputCsv,
     csvFormat: input.csvFormat ?? defaults.csvFormat,
     outputGif: input.outputGif ?? defaults.outputGif,
@@ -146,7 +148,9 @@ function cercArguments(input: Record<string, string | number | boolean | undefin
     "--cerc-coefficient", String(input.cercCoefficient),
     "--offshore-sample-distance", String(input.offshoreSampleDistance),
     "--max-shoreline-change", String(input.maxShorelineChange),
-    "--max-bathymetry-gap", String(input.maxBathymetryGap)];
+    "--max-bathymetry-gap", String(input.maxBathymetryGap),
+    "--left-boundary-transport", String(input.leftBoundaryTransport),
+    "--right-boundary-transport", String(input.rightBoundaryTransport)];
 }
 
 function validateAllOptions(

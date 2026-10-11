@@ -192,6 +192,8 @@ export interface CercOptionsDto {
   offshoreSampleDistance: number;
   maxShorelineChange: number;
   maxBathymetryGap: number;
+  leftBoundaryTransport: number;
+  rightBoundaryTransport: number;
   outputCsv: boolean;
   csvFormat: "long" | "wide";
   outputGif: boolean;
@@ -212,6 +214,8 @@ export const erosionDemoDefaults: CercOptionsDto = {
   offshoreSampleDistance: 300,
   maxShorelineChange: 25,
   maxBathymetryGap: 3000,
+  leftBoundaryTransport: 0,
+  rightBoundaryTransport: 0,
   outputCsv: false,
   csvFormat: "long",
   outputGif: false,

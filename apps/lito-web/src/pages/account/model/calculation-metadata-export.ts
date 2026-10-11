@@ -36,7 +36,7 @@ function knownInput(job: CalculationJobDto) {
     for (const key of [
       "breakingIndex", "bermHeight", "closureDepth", "porosity",
       "cercCoefficient", "offshoreSampleDistance", "maxShorelineChange",
-      "maxBathymetryGap",
+      "maxBathymetryGap", "leftBoundaryTransport", "rightBoundaryTransport",
     ]) {
       const value = job.input[key];
       if (typeof value === "number" && Number.isFinite(value)) input[key] = value;

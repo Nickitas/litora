@@ -416,12 +416,15 @@ test("свой CERC выбирает четыре приватных файла 
   }
   await dialog.getByLabel("Шаги волнового ряда (1–48)").fill("8");
   await dialog.getByRole("button", { name: "Параметры CERC и экспорт" }).click();
+  await dialog.getByLabel("Поток через левую границу, м³/с").fill("0.02");
+  await dialog.getByLabel("Поток через правую границу, м³/с").fill("-0.01");
   await dialog.getByLabel("Сохранить анимацию GIF").check();
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "erosion_file", input: {
     ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
     ...erosionFileDefaults, steps: 8, outputGif: true,
+    leftBoundaryTransport: 0.02, rightBoundaryTransport: -0.01,
   } });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -437,7 +440,7 @@ test("полный конвейер по своим файлам повторя�
   }));
   const original = { ...job, kind: "all_file" as const, status: "succeeded" as const,
     input: { ...allFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
-      steps: 12, modelMaxPoints: 200 } };
+      steps: 12, modelMaxPoints: 200, leftBoundaryTransport: 0.04, rightBoundaryTransport: -0.03 } };
   const created = { ...original, id: "99999999-9999-4999-8999-999999999999", status: "queued" as const };
   let submitted: unknown;
   const observed = await mockApi(page, (path, method, body) => {
@@ -460,9 +463,19 @@ test("полный конвейер по своим файлам повторя�
   await expect(dialog.getByText("Демонстрационный сценарий")).toHaveCount(0);
   await expect(dialog.getByLabel("Шаги волнового ряда (1–48)")).toHaveValue("12");
   await expect(dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)")).toHaveValue("200");
+  await expect(dialog.getByLabel("Поток через левую границу, м³/с")).toHaveValue("0.04");
+  await expect(dialog.getByLabel("Поток через правую границу, м³/с")).toHaveValue("-0.03");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "all_file", input: original.input });
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
+  const download = await downloadPromise;
+  const exported = JSON.parse(await readFile(await download.path(), "utf8")) as CalculationMetadataExportV1;
+  expect(exported.calculation.input).toMatchObject({
+    leftBoundaryTransport: 0.04,
+    rightBoundaryTransport: -0.03,
+  });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });

@@ -30,6 +30,8 @@ test("допустимый запрос преобразуется в фикси
     "--offshore-sample-distance", "300",
     "--max-shoreline-change", "25",
     "--max-bathymetry-gap", "3000",
+    "--left-boundary-transport", "0",
+    "--right-boundary-transport", "0",
     "--output",
     "/tmp/job",
   ]);
@@ -42,11 +44,13 @@ test("допустимый запрос преобразуется в фикси
 test("демо CERC принимает ограниченные параметры и экспортирует CSV в каталог worker", () => {
   const job = validateCalculation({ kind: "erosion", input: {
     steps: 12, breakingIndex: 0.85, cercCoefficient: 0.5,
+    leftBoundaryTransport: 0.02, rightBoundaryTransport: -0.01,
     outputCsv: true, csvFormat: "wide", outputGif: true, gifFps: 8, gifSkip: 2,
   } });
   assert.deepEqual(job.input, {
     ...erosionDemoDefaults, steps: 12, breakingIndex: 0.85,
-    cercCoefficient: 0.5, outputCsv: true, csvFormat: "wide", outputGif: true, gifFps: 8, gifSkip: 2,
+    cercCoefficient: 0.5, leftBoundaryTransport: 0.02, rightBoundaryTransport: -0.01,
+    outputCsv: true, csvFormat: "wide", outputGif: true, gifFps: 8, gifSkip: 2,
   });
   const args = commandArguments(job, "/tmp/job");
   assert.deepEqual(args.slice(-12), [
@@ -54,12 +58,16 @@ test("демо CERC принимает ограниченные параметр
     "--output-gif", "erosion-animation.gif", "--gif-fps", "8", "--gif-skip", "2", "--output", "/tmp/job",
   ]);
   assert.ok(args.includes("--offline"));
+  assert.deepEqual(args.slice(args.indexOf("--left-boundary-transport"), args.indexOf("--left-boundary-transport") + 4),
+    ["--left-boundary-transport", "0.02", "--right-boundary-transport", "-0.01"]);
   assert.ok(!args.includes("--source-url"));
   for (const input of [
     { breakingIndex: 0.5 }, { porosity: 0.7 }, { cercCoefficient: 0 },
     { offshoreSampleDistance: -1 }, { maxBathymetryGap: Infinity },
     { outputCsv: "true" }, { csvFormat: "../../wide" }, { outputGif: "true" },
     { gifFps: 0 }, { gifSkip: 49 },
+    { leftBoundaryTransport: "0.02" }, { leftBoundaryTransport: Infinity },
+    { rightBoundaryTransport: NaN }, { rightBoundaryTransport: 1_000_001 },
     { outputCsv: true, outputPath: "/etc/passwd" },
   ]) assert.throws(() => validateCalculation({ kind: "erosion", input }));
 });
@@ -123,9 +131,11 @@ test("полный конвейер по своим данным использ�
   const ids = { coastlineInputId: id, waveInputId: id, bathymetryInputId: id, bathymetryMetadataInputId: id };
   const job = validateCalculation({ kind: "all_file", input: {
     ...ids, steps: 48, outputCsv: true, outputGif: true, modelMaxPoints: 250,
+    leftBoundaryTransport: 0.04, rightBoundaryTransport: 0.03,
   } });
   assert.deepEqual(job.input, {
     ...ids, ...allFileDefaults, steps: 48, outputCsv: true, outputGif: true, modelMaxPoints: 250,
+    leftBoundaryTransport: 0.04, rightBoundaryTransport: 0.03,
   });
   assert.equal(resourceProfileForKind(job.kind), "heavy");
   assert.deepEqual(scientificReferences(job).map(({ role }) => role), [
@@ -142,6 +152,8 @@ test("полный конвейер по своим данным использ�
   assert.ok(args.includes(paths.bathymetryInputId));
   assert.ok(args.includes("--model-max-points"));
   assert.ok(args.includes("all-animation.gif"));
+  assert.deepEqual(args.slice(args.indexOf("--left-boundary-transport"), args.indexOf("--left-boundary-transport") + 4),
+    ["--left-boundary-transport", "0.04", "--right-boundary-transport", "0.03"]);
   assert.ok(!args.includes("--black-sea-sochi"));
   assert.ok(!args.includes("--source-url"));
   for (const bad of [

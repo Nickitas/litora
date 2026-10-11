@@ -88,8 +88,8 @@ export class CalculationsController {
             cercCoefficients: { type: "string", description: "calibrate_cerc: от одного до восьми коэффициентов (0;1] через запятую" },
             maxObservationDistance: { type: "number", minimum: 1, maximum: 100000, description: "calibrate_cerc: допустимая дистанция наблюдения до берега, м" },
             minWaveHours: { type: "number", minimum: 8766, maximum: 100000, description: "calibrate_cerc: минимальное покрытие волнового ряда, ч" },
-            leftBoundaryTransport: { type: "number", minimum: -1000000, maximum: 1000000, description: "calibrate_cerc: поток через левую границу, м³/с" },
-            rightBoundaryTransport: { type: "number", minimum: -1000000, maximum: 1000000, description: "calibrate_cerc: поток через правую границу, м³/с" },
+            leftBoundaryTransport: { type: "number", minimum: -1000000, maximum: 1000000, description: "erosion, all и calibrate_cerc: поток через левую границу, м³/с; положительный входит в сегмент" },
+            rightBoundaryTransport: { type: "number", minimum: -1000000, maximum: 1000000, description: "erosion, all и calibrate_cerc: поток через правую границу, м³/с; положительный выходит из сегмента" },
             datasetId: {
               type: "string",
               format: "uuid",

@@ -178,7 +178,8 @@ export function NewCalculationDialog({
         const restoreCerc = (current: CercOptionsDto) => {
           const next = { ...current };
           for (const key of ["steps", "breakingIndex", "bermHeight", "closureDepth", "porosity",
-            "cercCoefficient", "offshoreSampleDistance", "maxShorelineChange", "maxBathymetryGap"] as const) {
+            "cercCoefficient", "offshoreSampleDistance", "maxShorelineChange", "maxBathymetryGap",
+            "leftBoundaryTransport", "rightBoundaryTransport"] as const) {
             const value = input[key];
             if (typeof value === "number" && Number.isFinite(value)) next[key] = value;
           }
@@ -706,6 +707,8 @@ export function NewCalculationDialog({
                           ["offshoreSampleDistance", "Расстояние отбора глубины, м", 1, 100000],
                           ["maxShorelineChange", "Предел смещения за состояние, м", 0.001, 1000],
                           ["maxBathymetryGap", "Радиус поиска глубины, м", 1, 100000],
+                          ["leftBoundaryTransport", "Поток через левую границу, м³/с", -1000000, 1000000],
+                          ["rightBoundaryTransport", "Поток через правую границу, м³/с", -1000000, 1000000],
                         ] as const).map(([key, label, min, max]) => (
                           <div key={key} className="space-y-2">
                             <Label htmlFor={`erosion-${key}`}>{label}</Label>
@@ -715,6 +718,9 @@ export function NewCalculationDialog({
                           </div>
                         ))}
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        Положительный поток через левую границу входит в сегмент, через правую — выходит. Нулевые значения оставьте, если измеренного граничного баланса нет.
+                      </p>
                       <label className="flex min-h-11 items-center gap-3 text-sm">
                         <input type="checkbox" checked={cercOptions.outputCsv}
                           onChange={(event) => updateCercOptions({ outputCsv: event.target.checked })} />
