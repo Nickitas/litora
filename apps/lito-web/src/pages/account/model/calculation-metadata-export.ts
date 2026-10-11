@@ -2,7 +2,7 @@ import type {
   CalculationJobDto,
   CalculationMetadataExportV1,
 } from "@litora/contracts";
-import { scientificInputRequirements } from "@litora/contracts";
+import { optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -61,6 +61,13 @@ function knownInput(job: CalculationJobDto) {
         if (typeof id !== "string" || !uuidPattern.test(id)) return null;
         input[field] = id;
       }
+      for (const field of Object.keys(optionalScientificInputRequirements[job.kind])) {
+        const id = job.input[field];
+        if (id !== undefined) {
+          if (typeof id !== "string" || !uuidPattern.test(id)) return null;
+          input[field] = id;
+        }
+      }
     }
     return input;
   }
@@ -77,6 +84,14 @@ function knownInput(job: CalculationJobDto) {
       const id = job.input[key];
       if (typeof id !== "string" || !uuidPattern.test(id)) return null;
       input[key] = id;
+    }
+    const optional = optionalScientificInputRequirements[job.kind as keyof typeof optionalScientificInputRequirements];
+    if (optional) for (const key of Object.keys(optional)) {
+      const id = job.input[key];
+      if (id !== undefined) {
+        if (typeof id !== "string" || !uuidPattern.test(id)) return null;
+        input[key] = id;
+      }
     }
     const allowedParameters: Record<string, string[]> = {
       source_file: [],

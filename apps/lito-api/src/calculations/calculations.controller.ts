@@ -99,6 +99,8 @@ export class CalculationsController {
             coastlineInputId: { type: "string", format: "uuid", description: "Загруженный GeoJSON-контур для source_file, map_file, dimension_file, erosion_file, all_file, calibrate_cerc и сеточных сценариев" },
             waveInputId: { type: "string", format: "uuid", description: "erosion_file/all_file/calibrate_cerc: волновой ряд CSV/JSON, принадлежащий пользователю" },
             observationsInputId: { type: "string", format: "uuid", description: "calibrate_cerc: независимые годовые скорости берега, JSON EPSG:4326" },
+            sedimentSourcesInputId: { type: "string", format: "uuid", description: "erosion_file/all_file/calibrate_cerc: необязательный JSON источников и стоков наносов; для all_file только без упрощения" },
+            structuresInputId: { type: "string", format: "uuid", description: "erosion_file/all_file/calibrate_cerc: необязательный JSON сооружений; для all_file только без упрощения" },
             flatMeshInputId: { type: "string", format: "uuid", description: "Плоская full-quad MSH для seabed_build" },
             bathymetryInputId: { type: "string", format: "uuid", description: "Производный набор батиметрии JSON для erosion_file, all_file, calibrate_cerc и seabed_build" },
             bathymetryMetadataInputId: { type: "string", format: "uuid", description: "Паспорт проверенного набора батиметрии для erosion_file, all_file, calibrate_cerc и seabed_build" },

@@ -12,6 +12,8 @@ const roles = new Set<ScientificInputRole>([
   "coastline_geojson",
   "wave_climate",
   "shoreline_observations_json",
+  "longshore_sediment_sources_json",
+  "longshore_structures_json",
   "flat_mesh_msh",
   "seabed_msh",
   "bathymetry_grid_json",
@@ -70,6 +72,12 @@ export function validateScientificInput(body: unknown): CreateScientificInputDto
     throw new BadRequestException("Наблюдения береговой линии должны быть JSON");
   if (data.role === "shoreline_observations_json" && Number(data.sizeBytes) > 16 * 1024 * 1024)
     throw new BadRequestException("Наблюдения не должны превышать 16 МиБ");
+  if (data.role === "longshore_sediment_sources_json" || data.role === "longshore_structures_json") {
+    if (!/\.json$/i.test(filename))
+      throw new BadRequestException("Индексный профиль CERC должен быть JSON");
+    if (Number(data.sizeBytes) > 1024 * 1024)
+      throw new BadRequestException("Индексный профиль CERC не должен превышать 1 МиБ");
+  }
   const crs = boundedText(data.crs, "CRS", 80);
   const coordinateUnit = boundedText(data.coordinateUnit, "Единицы", 80);
   if (!["EPSG:4326", "LAEA", "not-applicable"].includes(crs))
@@ -80,6 +88,9 @@ export function validateScientificInput(body: unknown): CreateScientificInputDto
     throw new BadRequestException("Для волнового ряда CRS и единицы координат неприменимы");
   if (data.role === "shoreline_observations_json" && (crs !== "EPSG:4326" || coordinateUnit !== "degrees"))
     throw new BadRequestException("Для наблюдений требуются EPSG:4326 и градусы");
+  if ((data.role === "longshore_sediment_sources_json" || data.role === "longshore_structures_json") &&
+      (crs !== "not-applicable" || coordinateUnit !== "not-applicable"))
+    throw new BadRequestException("Для индексного профиля CRS и единицы координат неприменимы");
   return {
     name: boundedText(data.name, "Название", 100),
     role: data.role as ScientificInputRole,

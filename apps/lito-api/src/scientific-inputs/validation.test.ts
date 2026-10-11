@@ -51,3 +51,16 @@ test("наблюдения для калибровки принимают тол
     { ...observations, coordinateUnit: "meters" },
   ]) assert.throws(() => validateScientificInput(bad));
 });
+
+test("индексные профили CERC принимают только JSON до 1 МиБ без координатного CRS", () => {
+  for (const role of ["longshore_sediment_sources_json", "longshore_structures_json"]) {
+    const profile = { ...valid, role, filename: "profile.json", crs: "not-applicable", coordinateUnit: "not-applicable" };
+    assert.deepEqual(validateScientificInput(profile), profile);
+    for (const bad of [
+      { ...profile, filename: "profile.csv" },
+      { ...profile, sizeBytes: 1024 * 1024 + 1 },
+      { ...profile, crs: "EPSG:4326" },
+      { ...profile, coordinateUnit: "meters" },
+    ]) assert.throws(() => validateScientificInput(bad));
+  }
+});

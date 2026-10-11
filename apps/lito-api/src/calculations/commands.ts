@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
 import type {
   CalculationKind,
   CalculationKindDto,
@@ -43,7 +43,10 @@ export function scientificReferences(job: CreateCalculationDto) {
   const fields = scientificInputFields[job.kind as keyof typeof scientificInputFields];
   if (!fields) return [] as { field: string; id: string; role: ScientificInputRole }[];
   const input = job.input ?? {};
-  return Object.entries(fields).map(([field, role]) => ({
+  const optional = optionalScientificInputRequirements[job.kind as keyof typeof optionalScientificInputRequirements];
+  return Object.entries({ ...fields, ...optional }).filter(([field]) =>
+    Object.hasOwn(fields, field) || input[field] !== undefined
+  ).map(([field, role]) => ({
     field,
     id: String(input[field]),
     role: role as ScientificInputRole,
@@ -68,6 +71,17 @@ function rejectUnknown(input: Record<string, unknown>, allowed: string[]) {
 function references(input: Record<string, unknown>, fields: Record<string, ScientificInputRole>) {
   const result: Record<string, string> = {};
   for (const key of Object.keys(fields)) {
+    if (typeof input[key] !== "string" || !uuid.test(input[key]))
+      throw new BadRequestException(`Укажите UUID файла «${key}»`);
+    result[key] = input[key];
+  }
+  return result;
+}
+
+function optionalReferences(input: Record<string, unknown>, kind: keyof typeof optionalScientificInputRequirements) {
+  const result: Record<string, string> = {};
+  for (const key of Object.keys(optionalScientificInputRequirements[kind])) {
+    if (input[key] === undefined) continue;
     if (typeof input[key] !== "string" || !uuid.test(input[key]))
       throw new BadRequestException(`Укажите UUID файла «${key}»`);
     result[key] = input[key];
@@ -241,9 +255,10 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
     }
     case "erosion_file": {
       const fields = scientificInputFields.erosion_file;
-      rejectUnknown(p, [...Object.keys(fields), ...Object.keys(erosionFileDefaults)]);
+      rejectUnknown(p, [...Object.keys(fields), ...Object.keys(optionalScientificInputRequirements.erosion_file), ...Object.keys(erosionFileDefaults)]);
       return { kind: "erosion_file", input: {
         ...references(p, fields),
+        ...optionalReferences(p, "erosion_file"),
         ...validateCercOptions(p, erosionFileDefaults, 48, 48),
       } };
     }
@@ -253,17 +268,22 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
     }
     case "all_file": {
       const fields = scientificInputFields.all_file;
-      rejectUnknown(p, [...Object.keys(fields), ...Object.keys(allFileDefaults)]);
+      rejectUnknown(p, [...Object.keys(fields), ...Object.keys(optionalScientificInputRequirements.all_file), ...Object.keys(allFileDefaults)]);
+      const options = validateAllOptions(p, allFileDefaults, 48);
+      const optional = optionalReferences(p, "all_file");
+      if (Object.keys(optional).length && (!options.noModelSimplify || options.modelMaxPoints !== 0))
+        throw new BadRequestException("Индексные профили требуют отключить упрощение модели и оставить лимит точек равным 0");
       return { kind: "all_file", input: {
         ...references(p, fields),
-        ...validateAllOptions(p, allFileDefaults, 48),
+        ...optional,
+        ...options,
       } };
     }
     case "calibrate_cerc": {
       const fields = scientificInputFields.calibrate_cerc;
-      rejectUnknown(p, [...Object.keys(fields), ...Object.keys(cercCalibrationDefaults), "bathymetryResolution"]);
+      rejectUnknown(p, [...Object.keys(fields), ...Object.keys(optionalScientificInputRequirements.calibrate_cerc), ...Object.keys(cercCalibrationDefaults), "bathymetryResolution"]);
       return { kind: "calibrate_cerc", input: {
-        ...references(p, fields), ...validateCalibrationOptions(p),
+        ...references(p, fields), ...optionalReferences(p, "calibrate_cerc"), ...validateCalibrationOptions(p),
       } };
     }
     case "mesh": {
@@ -411,6 +431,10 @@ export function commandArguments(
     if (!sources[key]) throw new Error(`Не указан источник научного файла ${key}`);
     return sources[key];
   };
+  const cercProfileArguments = () => [
+    ...(input.sedimentSourcesInputId ? ["--sediment-sources", required("sedimentSourcesInputId")] : []),
+    ...(input.structuresInputId ? ["--structures", required("structuresInputId")] : []),
+  ];
   switch (validated.kind) {
     case "dimension":
       return ["dimension", "--input", "data/black-sea.json", "--output", output];
@@ -433,7 +457,7 @@ export function commandArguments(
     case "erosion_file":
       return ["erosion", "--input", required("coastlineInputId"),
         "--wave-input", required("waveInputId"), "--wave-source", requiredSource("waveInputId"),
-        "--bathymetry", required("bathymetryInputId"), ...cercArguments(input),
+        "--bathymetry", required("bathymetryInputId"), ...cercArguments(input), ...cercProfileArguments(),
         ...(input.outputCsv ? ["--output-csv", "erosion-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
         ...(input.outputGif ? ["--output-gif", "erosion-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
         "--output", output];
@@ -444,7 +468,7 @@ export function commandArguments(
     case "all_file":
       return ["all", "--input", required("coastlineInputId"),
         "--wave-input", required("waveInputId"), "--wave-source", requiredSource("waveInputId"),
-        "--bathymetry", required("bathymetryInputId"), ...cercArguments(input),
+        "--bathymetry", required("bathymetryInputId"), ...cercArguments(input), ...cercProfileArguments(),
         ...allExportArguments(input),
         "--output", output];
     case "calibrate_cerc":
@@ -464,6 +488,7 @@ export function commandArguments(
         "--max-bathymetry-gap", String(input.maxBathymetryGap),
         "--left-boundary-transport", String(input.leftBoundaryTransport),
         "--right-boundary-transport", String(input.rightBoundaryTransport),
+        ...cercProfileArguments(),
         "--output", output];
     case "mesh":
       return ["mesh", "--input", required("coastlineInputId"),

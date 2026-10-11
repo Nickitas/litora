@@ -316,6 +316,8 @@ export type ScientificInputRole =
   | "coastline_geojson"
   | "wave_climate"
   | "shoreline_observations_json"
+  | "longshore_sediment_sources_json"
+  | "longshore_structures_json"
   | "flat_mesh_msh"
   | "seabed_msh"
   | "bathymetry_grid_json"
@@ -381,6 +383,22 @@ export const scientificInputRequirements = {
     fieldCsvInputId: "adaptive_field_csv",
     fieldReportInputId: "adaptive_field_report_json",
     coastlineInputId: "coastline_geojson",
+  },
+} as const satisfies Partial<Record<CalculationKind, Record<string, ScientificInputRole>>>;
+
+/** Необязательные индексные профили CERC, привязанные к нормализованному Go-контуру. */
+export const optionalScientificInputRequirements = {
+  erosion_file: {
+    sedimentSourcesInputId: "longshore_sediment_sources_json",
+    structuresInputId: "longshore_structures_json",
+  },
+  all_file: {
+    sedimentSourcesInputId: "longshore_sediment_sources_json",
+    structuresInputId: "longshore_structures_json",
+  },
+  calibrate_cerc: {
+    sedimentSourcesInputId: "longshore_sediment_sources_json",
+    structuresInputId: "longshore_structures_json",
   },
 } as const satisfies Partial<Record<CalculationKind, Record<string, ScientificInputRole>>>;
 

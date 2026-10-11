@@ -209,6 +209,33 @@ test("калибровка CERC требует пять собственных �
   ]) assert.throws(() => validateCalculation({ kind: "calibrate_cerc", input: bad }));
 });
 
+test("индексные профили CERC передаются только как приватные UUID с проверенной ролью", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const profileId = "44444444-4444-4444-8444-444444444444";
+  const ids = { coastlineInputId: id, waveInputId: id, bathymetryInputId: id, bathymetryMetadataInputId: id };
+  const optional = { sedimentSourcesInputId: profileId, structuresInputId: profileId };
+  for (const kind of ["erosion_file", "all_file", "calibrate_cerc"] as const) {
+    const input = { ...ids, ...(kind === "calibrate_cerc" ? { observationsInputId: id, bathymetryResolution: 0.005 } : {}),
+      ...(kind === "all_file" ? { noModelSimplify: true, modelMaxPoints: 0 } : {}), ...optional };
+    const job = validateCalculation({ kind, input });
+    assert.deepEqual(scientificReferences(job).slice(-2), [
+      { field: "sedimentSourcesInputId", id: profileId, role: "longshore_sediment_sources_json" },
+      { field: "structuresInputId", id: profileId, role: "longshore_structures_json" },
+    ]);
+    const paths = { ...ids, sedimentSourcesInputId: "/worker/sources.json", structuresInputId: "/worker/structures.json",
+      observationsInputId: "/worker/observations.json" };
+    assert.throws(() => commandArguments(job, "/worker/output", undefined, paths));
+    const args = commandArguments(job, "/worker/output", undefined, paths, { waveInputId: "Измерения" });
+    assert.deepEqual(args.slice(args.indexOf("--sediment-sources"), args.indexOf("--sediment-sources") + 4),
+      ["--sediment-sources", paths.sedimentSourcesInputId, "--structures", paths.structuresInputId]);
+    for (const value of ["/etc/passwd", "https://example.org/profile.json", "", 1])
+      assert.throws(() => validateCalculation({ kind, input: { ...input, sedimentSourcesInputId: value } }));
+  }
+  for (const options of [{}, { noModelSimplify: true, modelMaxPoints: 50 }, { noModelSimplify: false, modelMaxPoints: 0 }])
+    assert.throws(() => validateCalculation({ kind: "all_file", input: { ...ids, ...options, ...optional } }));
+  assert.throws(() => validateCalculation({ kind: "erosion", input: optional }));
+});
+
 test("пользовательский расчёт принимает только UUID, а путь создаёт worker", () => {
   const datasetId = "33333333-3333-4333-8333-333333333333";
   const job = validateCalculation({

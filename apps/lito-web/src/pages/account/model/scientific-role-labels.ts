@@ -4,6 +4,8 @@ export const scientificRoleLabels: Record<ScientificInputRole, string> = {
   coastline_geojson: "GeoJSON береговой линии или полного контура",
   wave_climate: "Волновой ряд (JSON или CSV)",
   shoreline_observations_json: "Независимые годовые скорости береговой линии (JSON)",
+  longshore_sediment_sources_json: "Источники и стоки наносов по точкам (JSON)",
+  longshore_structures_json: "Сооружения между соседними точками (JSON)",
   flat_mesh_msh: "Плоская расчётная сетка MSH",
   seabed_msh: "Батиметрическая модель MSH",
   bathymetry_grid_json: "Проверенный набор батиметрии (JSON)",

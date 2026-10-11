@@ -382,16 +382,17 @@ test("полный демо-конвейер позволяет настроит
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("свой CERC выбирает четыре приватных файла и не помечается демо", async ({ page }) => {
+test("свой CERC выбирает приватные файлы и необязательный индексный профиль без демо", async ({ page }) => {
   const ownKind = [{ kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC по своим данным" }] satisfies CalculationKindDto[];
-  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json"] as const;
+  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "longshore_sediment_sources_json"] as const;
   const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
   const inputs: ScientificInputDto[] = roles.map((role, index) => ({
     ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
     name: `Вход CERC ${index + 1}`, filename: index === 1 ? "waves.csv" : "grid.json",
   }));
   const created = { ...job, kind: "erosion_file" as const,
-    input: { ...erosionFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])) } };
+    input: { ...erosionFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
+      sedimentSourcesInputId: inputs[4].id } };
   let submitted: unknown;
   const observed = await mockApi(page, (path, method, body) => {
     if (path === "/api/auth/refresh" && method === "POST") return { body: session };
@@ -414,6 +415,8 @@ test("свой CERC выбирает четыре приватных файла 
     await dialog.locator(`#scientific-${fields[index]}`).click();
     await page.getByRole("option", { name: new RegExp(`Вход CERC ${index + 1}`) }).click();
   }
+  await dialog.locator("#scientific-sedimentSourcesInputId").click();
+  await page.getByRole("option", { name: /Вход CERC 5/ }).click();
   await dialog.getByLabel("Шаги волнового ряда (1–48)").fill("8");
   await dialog.getByRole("button", { name: "Параметры CERC и экспорт" }).click();
   await dialog.getByLabel("Поток через левую границу, м³/с").fill("0.02");
@@ -423,6 +426,7 @@ test("свой CERC выбирает четыре приватных файла 
   await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "erosion_file", input: {
     ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
+    sedimentSourcesInputId: inputs[4].id,
     ...erosionFileDefaults, steps: 8, outputGif: true,
     leftBoundaryTransport: 0.02, rightBoundaryTransport: -0.01,
   } });
@@ -432,7 +436,7 @@ test("свой CERC выбирает четыре приватных файла 
 
 test("полный конвейер по своим файлам повторяет входы и параметры без подмены демо", async ({ page }) => {
   const ownKind = [{ kind: "all_file", title: "Полный конвейер по своим данным", description: "Свои входы" }] satisfies CalculationKindDto[];
-  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json"] as const;
+  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "longshore_structures_json"] as const;
   const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
   const inputs: ScientificInputDto[] = roles.map((role, index) => ({
     ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
@@ -440,7 +444,8 @@ test("полный конвейер по своим файлам повторя�
   }));
   const original = { ...job, kind: "all_file" as const, status: "succeeded" as const,
     input: { ...allFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
-      steps: 12, modelMaxPoints: 200, leftBoundaryTransport: 0.04, rightBoundaryTransport: -0.03 } };
+      structuresInputId: inputs[4].id,
+      steps: 12, modelMaxPoints: 0, noModelSimplify: true, leftBoundaryTransport: 0.04, rightBoundaryTransport: -0.03 } };
   const created = { ...original, id: "99999999-9999-4999-8999-999999999999", status: "queued" as const };
   let submitted: unknown;
   const observed = await mockApi(page, (path, method, body) => {
@@ -462,7 +467,10 @@ test("полный конвейер по своим файлам повторя�
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog.getByText("Демонстрационный сценарий")).toHaveCount(0);
   await expect(dialog.getByLabel("Шаги волнового ряда (1–48)")).toHaveValue("12");
-  await expect(dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)")).toHaveValue("200");
+  await expect(dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)")).toHaveValue("0");
+  await expect(dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)")).toBeDisabled();
+  await expect(dialog.getByLabel("Не упрощать базовую линию")).toBeChecked();
+  await expect(dialog.locator("#scientific-structuresInputId")).toContainText("Вход полного конвейера 5");
   await expect(dialog.getByLabel("Поток через левую границу, м³/с")).toHaveValue("0.04");
   await expect(dialog.getByLabel("Поток через правую границу, м³/с")).toHaveValue("-0.03");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
@@ -475,7 +483,51 @@ test("полный конвейер по своим файлам повторя�
   expect(exported.calculation.input).toMatchObject({
     leftBoundaryTransport: 0.04,
     rightBoundaryTransport: -0.03,
+    structuresInputId: inputs[4].id,
   });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("повтор не отбрасывает недоступный индексный профиль без явного выбора", async ({ page }) => {
+  const ownKind = [{ kind: "erosion_file", title: "Эрозия по своим данным", description: "Свои входы" }] satisfies CalculationKindDto[];
+  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json"] as const;
+  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
+  const inputs: ScientificInputDto[] = roles.map((role, index) => ({
+    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Вход повтора ${index + 1}`, filename: index === 1 ? "waves.csv" : "grid.json",
+  }));
+  const original = { ...job, kind: "erosion_file" as const, status: "succeeded" as const,
+    input: { ...erosionFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
+      structuresInputId: "99999999-9999-4999-8999-999999999991" } };
+  const created = { ...original, id: "99999999-9999-4999-8999-999999999992", status: "queued" as const };
+  let submitted: unknown;
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: ownKind };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
+    if (path === "/api/calculations" && method === "GET") return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
+    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === "/api/calculations" && method === "POST") {
+      submitted = body;
+      return { status: 201, body: created };
+    }
+  });
+  await page.goto(`/account/calculations/${original.id}`);
+  await page.getByRole("link", { name: "Создать на основе" }).click();
+  const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
+  await expect(dialog.getByText("Часть исходных данных больше недоступна.", { exact: false })).toBeVisible();
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Исходный индексный профиль больше недоступен");
+  expect(submitted).toBeUndefined();
+  await dialog.getByRole("button", { name: "Продолжить без недоступного профиля" }).click();
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  expect(submitted).toEqual({ kind: "erosion_file", input: {
+    ...erosionFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
+  } });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });

@@ -12,7 +12,7 @@ import type {
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 import { ArrowUpRight, Database, FilePlus2, X } from "lucide-react";
 import { api } from "@/shared/api/client";
@@ -156,10 +156,12 @@ export function NewCalculationDialog({
     }
     const requirements = scientificInputRequirements[original.kind as keyof typeof scientificInputRequirements];
     if (requirements) {
+      const optional = optionalScientificInputRequirements[original.kind as keyof typeof optionalScientificInputRequirements];
       const selected: Record<string, string> = {};
       const missing: string[] = [];
-      for (const [field, role] of Object.entries(requirements)) {
+      for (const [field, role] of Object.entries({ ...requirements, ...optional })) {
         const id = input[field];
+        if (Object.hasOwn(optional ?? {}, field) && id === undefined) continue;
         const ready = typeof id === "string" && (
           availableInputs.some((item) => item.id === id && item.role === role && item.status === "ready") ||
           availableArtifacts.some((item) => item.id === id && item.role === role)
@@ -367,6 +369,16 @@ export function NewCalculationDialog({
         scientificParameters[field] = selectedScientific[field];
       }
     }
+    const optional = optionalScientificInputRequirements[kind as keyof typeof optionalScientificInputRequirements];
+    if (optional) {
+      for (const field of Object.keys(optional)) {
+        if (missingRepeatInputs.includes(field) && !selectedScientific[field]) {
+          setSubmitError("Исходный индексный профиль больше недоступен. Выберите замену или явно уберите профиль.");
+          return;
+        }
+        if (selectedScientific[field]) scientificParameters[field] = selectedScientific[field];
+      }
+    }
     setBusy(true);
     setSubmitError("");
     try {
@@ -447,9 +459,12 @@ export function NewCalculationDialog({
   const selectedDataset = datasets.find((dataset) => dataset.id === datasetId);
   const isDatasetCalculation = kind === "dimension_dataset";
   const scientificRequirements = scientificInputRequirements[kind as keyof typeof scientificInputRequirements];
+  const optionalScientificRequirements = optionalScientificInputRequirements[kind as keyof typeof optionalScientificInputRequirements];
   const scientificFields = scientificRequirements
-    ? Object.entries(scientificRequirements) as [string, ScientificInputRole][]
+    ? Object.entries({ ...scientificRequirements, ...optionalScientificRequirements }) as [string, ScientificInputRole][]
     : [];
+  const hasAllFileIndexedProfile = kind === "all_file" &&
+    Object.keys(optionalScientificRequirements ?? {}).some((field) => Boolean(selectedScientific[field]));
 
   return (
     <DialogContent
@@ -767,6 +782,7 @@ export function NewCalculationDialog({
                           <div className="space-y-2">
                             <Label htmlFor="all-model-max-points">Максимум точек базовой модели (0 или 2–10000)</Label>
                             <Input id="all-model-max-points" type="number" min={0} max={10000} required value={allOptions.modelMaxPoints}
+                              disabled={hasAllFileIndexedProfile}
                               onChange={(event) => {
                                 const modelMaxPoints = Number(event.target.value);
                                 updateAllOptions((current) => ({ ...current, modelMaxPoints,
@@ -775,10 +791,13 @@ export function NewCalculationDialog({
                           </div>
                           <label className="flex min-h-11 items-center gap-3 text-sm">
                             <input type="checkbox" checked={allOptions.noModelSimplify}
-                              disabled={allOptions.modelMaxPoints > 0}
+                              disabled={allOptions.modelMaxPoints > 0 || hasAllFileIndexedProfile}
                               onChange={(event) => updateAllOptions((current) => ({ ...current, noModelSimplify: event.target.checked }))} />
                             Не упрощать базовую линию
                           </label>
+                          {hasAllFileIndexedProfile && (
+                            <p className="text-xs text-muted-foreground">Упрощение заблокировано, пока выбран индексный профиль CERC.</p>
+                          )}
                         </div>
                       )}
                     </CollapsibleContent>
@@ -894,18 +913,29 @@ export function NewCalculationDialog({
                         Наблюдения — массив JSON или объект с полем observations: lat, lon и shoreline_change_rate_m_per_year (м/год); положительное значение означает размыв. Укажите независимый источник и лицензию.
                       </p>
                     )}
+                    {optionalScientificRequirements && (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Дополнительные профили CERC необязательны. Их индексы относятся к точкам после нормализации контура в Go: для источника point_index, для сооружения left_point_index. Проверьте порядок и число точек на том же входном GeoJSON. Положительный source_rate_m3_s добавляет наносы, отрицательный удаляет; transmission_coefficient сооружения задаётся от 0 до 1. Каждый элемент требует data_source.
+                        {kind === "all_file" && " При выборе профиля упрощение базовой модели выключается: иначе индексы сместятся."}
+                      </p>
+                    )}
                   </div>
                   {scientificFields.map(([field, role]) => {
+                    const isOptional = Object.hasOwn(optionalScientificRequirements ?? {}, field);
                     const options = scientificInputs.filter((item) => item.role === role && item.status === "ready");
                     const artifacts = reusableArtifacts.filter((item) => item.role === role);
                     const pending = scientificInputs.filter((item) => item.role === role && item.status === "pending");
                     const chosenArtifact = artifacts.find((item) => item.id === selectedScientific[field]);
                     return (
                       <div key={field} className="space-y-2 rounded-lg border p-3">
-                        <Label htmlFor={`scientific-${field}`}>{scientificRoleLabels[role]}</Label>
+                        <Label htmlFor={`scientific-${field}`}>{scientificRoleLabels[role]}{isOptional ? " · необязательно" : ""}</Label>
                         <Select
                           value={selectedScientific[field] || undefined}
-                          onValueChange={(value) => setSelectedScientific((current) => ({ ...current, [field]: value }))}
+                          onValueChange={(value) => {
+                            setSelectedScientific((current) => ({ ...current, [field]: value }));
+                            if (isOptional && kind === "all_file")
+                              setAllFileOptions((current) => ({ ...current, modelMaxPoints: 0, noModelSimplify: true }));
+                          }}
                         >
                           <SelectTrigger id={`scientific-${field}`} aria-label={scientificRoleLabels[role]} className="min-w-0 max-w-full">
                             <SelectValue placeholder={options.length || artifacts.length ? "Выберите вход" : "Нет подходящих файлов"} />
@@ -923,6 +953,21 @@ export function NewCalculationDialog({
                             ))}
                           </SelectContent>
                         </Select>
+                        {isOptional && selectedScientific[field] && (
+                          <Button type="button" variant="ghost" onClick={() => {
+                            setSelectedScientific((current) => {
+                              const next = { ...current };
+                              delete next[field];
+                              return next;
+                            });
+                            setMissingRepeatInputs((current) => current.filter((item) => item !== field));
+                          }}>Не использовать этот профиль</Button>
+                        )}
+                        {isOptional && missingRepeatInputs.includes(field) && !selectedScientific[field] && (
+                          <Button type="button" variant="ghost" onClick={() =>
+                            setMissingRepeatInputs((current) => current.filter((item) => item !== field))
+                          }>Продолжить без недоступного профиля</Button>
+                        )}
                         {chosenArtifact && (
                           <p className="text-xs text-muted-foreground">
                             Файл готового расчёта. <Link className="underline underline-offset-2" to={`/account/calculations/${chosenArtifact.jobId}`}>
@@ -1259,6 +1304,8 @@ export function NewCalculationDialog({
             onSaved={(saved) => {
               setScientificInputs((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
               setSelectedScientific((current) => ({ ...current, [uploadField.field]: saved.id }));
+              if (kind === "all_file" && Object.hasOwn(optionalScientificRequirements ?? {}, uploadField.field))
+                setAllFileOptions((current) => ({ ...current, modelMaxPoints: 0, noModelSimplify: true }));
               setUploadField(null);
             }}
             onCancel={() => setUploadField(null)} />

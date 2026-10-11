@@ -60,3 +60,19 @@ test("наблюдения калибровки доступны только в
   await assert.rejects(repository.resolveOwnedSource("observations-id", "other", "shoreline_observations_json", "private"));
   await assert.rejects(repository.resolveOwnedSource("observations-id", "owner", "wave_climate", "private"));
 });
+
+test("индексные профили CERC не подменяются файлом другой роли или владельца", async () => {
+  const database = {
+    query: async (sql: string, params: unknown[]) => {
+      if (sql.startsWith("SELECT * FROM scientific_inputs") && params[1] === "owner" &&
+          params[0] === "profile-id" && params[2] === "longshore_structures_json")
+        return { rows: [{ id: "profile-id", role: "longshore_structures_json",
+          sha256: "a".repeat(64), filename: "structures.json", source: "Обследование" }] };
+      return { rows: [] };
+    },
+  } as unknown as DatabaseService;
+  const repository = new ScientificInputsRepository(database);
+  assert.equal((await repository.resolveOwnedSource("profile-id", "owner", "longshore_structures_json", "private")).origin, "upload");
+  await assert.rejects(repository.resolveOwnedSource("profile-id", "other", "longshore_structures_json", "private"));
+  await assert.rejects(repository.resolveOwnedSource("profile-id", "owner", "longshore_sediment_sources_json", "private"));
+});
