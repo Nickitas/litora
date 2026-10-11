@@ -16,6 +16,7 @@ const expected = {
   erosion_file: { command: "lito erosion", id: "cerc-one-line" },
   all_demo: { command: "lito all", id: null },
   all_file: { command: "lito all", id: null },
+  calibrate_cerc: { command: "lito calibrate-cerc", id: null },
   mesh: { command: "lito mesh", id: null },
   seabed_build: { command: "lito seabed build", id: null },
   seabed_render: { command: "lito seabed render", id: null },

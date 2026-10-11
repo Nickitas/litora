@@ -28,15 +28,15 @@ export function ScientificInputUpload({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(existing?.id ?? null);
-  const crs = role === "coastline_geojson" || role === "bathymetry_grid_json"
+  const crs = role === "coastline_geojson" || role === "bathymetry_grid_json" || role === "shoreline_observations_json"
     ? "EPSG:4326" : role === "seabed_msh" || role === "flat_mesh_msh" ? "LAEA" : "not-applicable";
-  const coordinateUnit = role === "coastline_geojson" || role === "bathymetry_grid_json"
+  const coordinateUnit = role === "coastline_geojson" || role === "bathymetry_grid_json" || role === "shoreline_observations_json"
     ? "degrees" : role === "seabed_msh" || role === "flat_mesh_msh" ? "meters" : "not-applicable";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!file) return;
-    const maximum = role === "wave_climate" ? 16 : 512;
+    const maximum = role === "wave_climate" || role === "shoreline_observations_json" ? 16 : 512;
     if (file.size < 1 || file.size > maximum * 1024 * 1024) {
       setError(`Размер файла должен быть от 1 байта до ${maximum} МиБ.`);
       return;
@@ -80,9 +80,9 @@ export function ScientificInputUpload({
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="space-y-2">
-        <Label htmlFor="scientific-file">Файл (до {role === "wave_climate" ? 16 : 512} МиБ)</Label>
+        <Label htmlFor="scientific-file">Файл (до {role === "wave_climate" || role === "shoreline_observations_json" ? 16 : 512} МиБ)</Label>
         <Input id="scientific-file" type="file" required disabled={busy}
-          accept={role === "wave_climate" ? ".json,.csv" : undefined}
+          accept={role === "wave_climate" ? ".json,.csv" : role === "shoreline_observations_json" ? ".json" : undefined}
           onChange={(event) => {
             const selected = event.target.files?.[0] ?? null;
             setFile(selected);

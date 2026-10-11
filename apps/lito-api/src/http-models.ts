@@ -39,7 +39,7 @@ export class CalculationResponse implements CalculationJobDto {
   @ApiProperty({ type: String, format: "uuid" }) id!: string;
   @ApiProperty({
     type: String,
-    enum: ["source_file", "dimension", "dimension_dataset", "dimension_file", "map", "map_file", "erosion", "erosion_file", "all_demo", "all_file", "mesh", "seabed_build", "seabed_render", "seabed_adapt", "seabed_generate_adaptive", "seabed_validate", "seabed_compare_adaptive"],
+    enum: ["source_file", "dimension", "dimension_dataset", "dimension_file", "map", "map_file", "erosion", "erosion_file", "all_demo", "all_file", "calibrate_cerc", "mesh", "seabed_build", "seabed_render", "seabed_adapt", "seabed_generate_adaptive", "seabed_validate", "seabed_compare_adaptive"],
   })
   kind!: string;
   @ApiProperty({
@@ -122,7 +122,7 @@ export class DatasetResponse implements DatasetDto {
 export class ScientificInputResponse implements ScientificInputDto {
   @ApiProperty({ type: String, format: "uuid" }) id!: string;
   @ApiProperty({ type: String }) name!: string;
-  @ApiProperty({ type: String, enum: ["coastline_geojson", "wave_climate", "flat_mesh_msh", "seabed_msh", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "relief_reference_passport_json", "export_metadata_json", "bathymetry_source_json", "adaptive_field_csv", "adaptive_field_report_json"] })
+  @ApiProperty({ type: String, enum: ["coastline_geojson", "wave_climate", "shoreline_observations_json", "flat_mesh_msh", "seabed_msh", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "relief_reference_passport_json", "export_metadata_json", "bathymetry_source_json", "adaptive_field_csv", "adaptive_field_report_json"] })
   role!: ScientificInputRole;
   @ApiProperty({ type: String }) filename!: string;
   @ApiProperty({ type: Number }) sizeBytes!: number;

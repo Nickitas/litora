@@ -43,3 +43,20 @@ test("волновой ряд доступен worker только владел�
   await assert.rejects(repository.resolveOwnedSource("wave-id", "owner", "coastline_geojson", "private"));
   assert.match(calls[0].sql, /owner_id=\$2 AND role=\$3 AND status='ready'/);
 });
+
+test("наблюдения калибровки доступны только владельцу и с ролью наблюдений", async () => {
+  const database = {
+    query: async (sql: string, params: unknown[]) => {
+      if (sql.startsWith("SELECT * FROM scientific_inputs") &&
+          params[0] === "observations-id" && params[1] === "owner" &&
+          params[2] === "shoreline_observations_json")
+        return { rows: [{ id: "observations-id", role: "shoreline_observations_json",
+          sha256: "a".repeat(64), filename: "rates.json", source: "Независимая съёмка" }] };
+      return { rows: [] };
+    },
+  } as unknown as DatabaseService;
+  const repository = new ScientificInputsRepository(database);
+  assert.equal((await repository.resolveOwnedSource("observations-id", "owner", "shoreline_observations_json", "private")).origin, "upload");
+  await assert.rejects(repository.resolveOwnedSource("observations-id", "other", "shoreline_observations_json", "private"));
+  await assert.rejects(repository.resolveOwnedSource("observations-id", "owner", "wave_climate", "private"));
+});

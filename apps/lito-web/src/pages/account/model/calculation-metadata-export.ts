@@ -99,6 +99,11 @@ function knownInput(job: CalculationJobDto) {
         "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "detailPreset",
         "maxCells", "allowLarge", "generatorTimeoutMinutes",
       ],
+      calibrate_cerc: [
+        "bathymetryResolution", "cercCoefficients", "maxObservationDistance", "minWaveHours",
+        "breakingIndex", "bermHeight", "closureDepth", "porosity", "offshoreSampleDistance",
+        "maxBathymetryGap", "leftBoundaryTransport", "rightBoundaryTransport",
+      ],
     };
     for (const key of allowedParameters[job.kind] ?? []) {
       const value = job.input[key];

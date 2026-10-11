@@ -18,6 +18,7 @@ import {
   useCalculationKinds,
 } from "./model/use-calculations";
 import { CancelCalculationDialog } from "./ui/cancel-calculation-dialog";
+import { CercCalibrationResults } from "./ui/cerc-calibration-results";
 import { CalculationImagePreview } from "./ui/calculation-image-preview";
 import { isPreviewableImage } from "./ui/calculation-image-preview.utils";
 import { CalculationMetadataDownload } from "./ui/calculation-metadata-download";
@@ -359,6 +360,11 @@ function CalculationDetail({ jobId }: { jobId: string }) {
                 Расчёт по вашим данным. Без независимой калибровки и проверки входов не является прогнозом размыва.
               </p>
             )}
+            {job.kind === "calibrate_cerc" && (
+              <p className="rounded-lg bg-warning-background p-3 text-sm text-warning">
+                Рейтинг коэффициентов CERC зависит от качества независимых наблюдений и годового волнового ряда. Он не является научной аттестацией или готовым прогнозом.
+              </p>
+            )}
             {job.errorMessage && (
               <p
                 role="alert"
@@ -410,6 +416,10 @@ function CalculationDetail({ jobId }: { jobId: string }) {
               </p>
             )}
           </section>
+
+          {job.kind === "calibrate_cerc" && job.status === "succeeded" && (
+            <CercCalibrationResults summary={summary ?? null} />
+          )}
 
           {images && images.length > 0 && (
             <section aria-labelledby="visual-reports-heading">

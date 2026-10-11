@@ -40,3 +40,14 @@ test("волновой ряд принимает JSON/CSV с лимитом 16 �
     { ...wave, crs: "EPSG:4326" },
   ]) assert.throws(() => validateScientificInput(bad));
 });
+
+test("наблюдения для калибровки принимают только JSON EPSG:4326 до 16 МиБ", () => {
+  const observations = { ...valid, role: "shoreline_observations_json", filename: "rates.json" };
+  assert.deepEqual(validateScientificInput(observations), observations);
+  for (const bad of [
+    { ...observations, filename: "rates.csv" },
+    { ...observations, sizeBytes: 16 * 1024 * 1024 + 1 },
+    { ...observations, crs: "not-applicable" },
+    { ...observations, coordinateUnit: "meters" },
+  ]) assert.throws(() => validateScientificInput(bad));
+});

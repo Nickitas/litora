@@ -9,7 +9,7 @@ import type {
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { allDemoDefaults, allFileDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 
 const user = {
@@ -463,6 +463,80 @@ test("полный конвейер по своим файлам повторя�
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "all_file", input: original.input });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("калибровка CERC требует наблюдения и фактический шаг батиметрии", async ({ page }) => {
+  const calibrationKind = [{ kind: "calibrate_cerc", title: "Калибровка CERC по наблюдениям", description: "Годовой ряд" }] satisfies CalculationKindDto[];
+  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "shoreline_observations_json"] as const;
+  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId", "observationsInputId"] as const;
+  const inputs: ScientificInputDto[] = roles.map((role, index) => ({
+    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Вход калибровки ${index + 1}`, filename: index === 1 ? "waves.csv" : "rates.json",
+  }));
+  const created = { ...job, kind: "calibrate_cerc" as const,
+    input: { ...cercCalibrationDefaults, bathymetryResolution: 0.005,
+      ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])) } };
+  let submitted: unknown;
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: calibrationKind };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      submitted = body;
+      return { status: 201, body: created };
+    }
+    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+  });
+  await page.setViewportSize({ width: 360, height: 780 });
+  await openNewCalculation(page, "dark");
+  await chooseOption(page, "Что рассчитать", "Калибровка CERC по наблюдениям");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await expect(dialog.getByLabel("Фактический шаг батиметрии, градусы")).toBeEmpty();
+  await dialog.getByLabel("Фактический шаг батиметрии, градусы").fill("0.005");
+  await expect(dialog.getByLabel("Коэффициенты CERC (1–8 через запятую)")).toHaveValue(cercCalibrationDefaults.cercCoefficients);
+  for (let index = 0; index < fields.length; index += 1) {
+    await dialog.locator(`#scientific-${fields[index]}`).click();
+    await page.getByRole("option", { name: new RegExp(`Вход калибровки ${index + 1}`) }).click();
+  }
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  expect(submitted).toEqual({ kind: "calibrate_cerc", input: created.input });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("результат калибровки показывает рейтинг Go без пересчёта и полный отчёт", async ({ page }) => {
+  const completed = { ...job, kind: "calibrate_cerc", status: "succeeded" as const,
+    resultSummary: { fileCount: 2, totalBytes: 2048, metrics: {
+      "cerc-calibration.json": { results: [
+        { cerc_coefficient: 0.39, metrics: { rmse_m_per_year: 0.125, mae_m_per_year: 0.1,
+          mbe_m_per_year: -0.05, r_squared: 0.85, count: 12 } },
+        { cerc_coefficient: 0.2, metrics: { rmse_m_per_year: 0.5, mae_m_per_year: 0.4,
+          mbe_m_per_year: 0.2, r_squared: 0.2, count: 12 } },
+      ] },
+    } },
+    artifacts: [{ id: "99999999-9999-4999-8999-999999999999", category: "output",
+      filename: "erosion/cerc-calibration.json", contentType: "application/json",
+      sizeBytes: 2048, sha256: "b".repeat(64), downloadUrl: "https://example.test/signed-report" }],
+  } satisfies CalculationJobDto;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: [{ kind: "calibrate_cerc", title: "Калибровка CERC", description: "Годовой ряд" }] };
+    if (path === `/api/calculations/${completed.id}` && method === "GET") return { body: completed };
+  });
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto(`/account/calculations/${completed.id}`);
+  const rating = page.getByRole("region", { name: "Рейтинг коэффициентов CERC" });
+  await expect(rating.getByRole("row")).toHaveCount(3);
+  await expect(rating.getByRole("row").nth(1)).toContainText("0,125");
+  await expect(rating.getByRole("row").nth(2)).toContainText("0,5");
+  await expect(page.getByRole("link", { name: "erosion/cerc-calibration.json" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });

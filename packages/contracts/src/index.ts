@@ -163,6 +163,7 @@ export type CalculationKind =
   | "erosion_file"
   | "all_demo"
   | "all_file"
+  | "calibrate_cerc"
   | "mesh"
   | "seabed_build"
   | "seabed_render"
@@ -247,6 +248,36 @@ export const allFileDefaults: AllOptionsDto = {
   maxBathymetryGap: 1500,
 };
 
+/** Ограниченные параметры физической калибровки; расчёт и научная проверка выполняются в Go. */
+export interface CercCalibrationOptionsDto {
+  bathymetryResolution: number;
+  cercCoefficients: string;
+  maxObservationDistance: number;
+  minWaveHours: number;
+  breakingIndex: number;
+  bermHeight: number;
+  closureDepth: number;
+  porosity: number;
+  offshoreSampleDistance: number;
+  maxBathymetryGap: number;
+  leftBoundaryTransport: number;
+  rightBoundaryTransport: number;
+}
+
+export const cercCalibrationDefaults: Omit<CercCalibrationOptionsDto, "bathymetryResolution"> = {
+  cercCoefficients: "0.2,0.3,0.39,0.5,0.6",
+  maxObservationDistance: 500,
+  minWaveHours: 8766,
+  breakingIndex: 0.78,
+  bermHeight: 2,
+  closureDepth: 8,
+  porosity: 0.4,
+  offshoreSampleDistance: 300,
+  maxBathymetryGap: 1500,
+  leftBoundaryTransport: 0,
+  rightBoundaryTransport: 0,
+};
+
 export interface GeoJsonLineStringDto {
   type: "LineString";
   coordinates: [number, number][];
@@ -280,6 +311,7 @@ export interface DatasetDto {
 export type ScientificInputRole =
   | "coastline_geojson"
   | "wave_climate"
+  | "shoreline_observations_json"
   | "flat_mesh_msh"
   | "seabed_msh"
   | "bathymetry_grid_json"
@@ -304,6 +336,10 @@ export const scientificInputRequirements = {
   mesh: { coastlineInputId: "coastline_geojson" },
   erosion_file: ownCercInputRequirements,
   all_file: ownCercInputRequirements,
+  calibrate_cerc: {
+    ...ownCercInputRequirements,
+    observationsInputId: "shoreline_observations_json",
+  },
   seabed_build: {
     flatMeshInputId: "flat_mesh_msh",
     bathymetryInputId: "bathymetry_grid_json",

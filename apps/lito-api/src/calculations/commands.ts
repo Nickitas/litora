@@ -1,11 +1,12 @@
 import { BadRequestException } from "@nestjs/common";
-import { allDemoDefaults, allFileDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
 import type {
   CalculationKind,
   CalculationKindDto,
   CreateCalculationDto,
   CercOptionsDto,
   AllOptionsDto,
+  CercCalibrationOptionsDto,
   ScientificInputRole,
 } from "@litora/contracts";
 
@@ -20,6 +21,7 @@ export const calculationKinds: CalculationKindDto[] = [
   { kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC по загруженным контуру, волнам и батиметрии с проверяемым паспортом; не калиброванный прогноз." },
   { kind: "all_demo", title: "Полный демонстрационный конвейер Сочи", description: "Проверка контура, размерность, CERC и баланс наносов; SVG, JSON, опционально CSV и GIF." },
   { kind: "all_file", title: "Полный конвейер по своим данным", description: "Проверка контура, размерность, CERC и баланс наносов по загруженным файлам; не калиброванный прогноз." },
+  { kind: "calibrate_cerc", title: "Калибровка CERC по наблюдениям", description: "Сравнение коэффициентов CERC с независимыми годовыми скоростями береговой линии и фактическим годовым волновым рядом." },
   { kind: "mesh", title: "Плоская сетка Чёрного моря", description: "Gmsh строит MSH и SVG обзоры сеток по загруженному полному контуру." },
   { kind: "seabed_build", title: "Построить модель дна", description: "Назначить глубины плоской сетке и получить MSH, VTU, CSV и паспорт экспорта." },
   { kind: "seabed_render", title: "Карты и 3D-рельеф дна", description: "SVG карты глубин, фрагментов фактической сетки, 3D-рельефа и профилей из готовой модели MSH." },
@@ -33,7 +35,7 @@ export const scientificInputFields = scientificInputRequirements;
 
 export function resourceProfileForKind(kind: CalculationKind) {
   return kind === "source_file" || kind === "dimension_file" || kind === "map_file" ||
-    kind === "mesh" || kind === "erosion_file" || kind === "all_file" || kind.startsWith("seabed_")
+    kind === "mesh" || kind === "erosion_file" || kind === "all_file" || kind === "calibrate_cerc" || kind.startsWith("seabed_")
     ? "heavy" : "standard";
 }
 
@@ -174,6 +176,35 @@ function allExportArguments(input: Record<string, string | number | boolean | un
   ];
 }
 
+function calibrationCoefficients(value: unknown) {
+  if (typeof value !== "string" || value.length > 96)
+    throw new BadRequestException("Коэффициенты CERC задаются числами через запятую");
+  const items = value.split(",").map((item) => item.trim());
+  if (items.length < 1 || items.length > 8 || items.some((item) =>
+    !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(item) ||
+    !Number.isFinite(Number(item)) || Number(item) <= 0 || Number(item) > 1
+  )) throw new BadRequestException("Коэффициенты CERC должны содержать от одного до восьми чисел в диапазоне (0;1]");
+  return items.join(",");
+}
+
+function validateCalibrationOptions(input: Record<string, unknown>): CercCalibrationOptionsDto {
+  const defaults = cercCalibrationDefaults;
+  return {
+    bathymetryResolution: numberIn(input.bathymetryResolution, "Шаг батиметрии", 0.000000001, 1),
+    cercCoefficients: calibrationCoefficients(input.cercCoefficients ?? defaults.cercCoefficients),
+    maxObservationDistance: numberIn(input.maxObservationDistance ?? defaults.maxObservationDistance, "Удаление наблюдения", 1, 100000),
+    minWaveHours: numberIn(input.minWaveHours ?? defaults.minWaveHours, "Покрытие волнового ряда", 8766, 100000),
+    breakingIndex: numberIn(input.breakingIndex ?? defaults.breakingIndex, "Индекс разрушения", 0.55, 1.2),
+    bermHeight: numberIn(input.bermHeight ?? defaults.bermHeight, "Высота бермы", 0.001, 100),
+    closureDepth: numberIn(input.closureDepth ?? defaults.closureDepth, "Глубина замыкания", 0.001, 1000),
+    porosity: numberIn(input.porosity ?? defaults.porosity, "Пористость", 0.000001, 0.699999),
+    offshoreSampleDistance: numberIn(input.offshoreSampleDistance ?? defaults.offshoreSampleDistance, "Отбор глубины", 1, 100000),
+    maxBathymetryGap: numberIn(input.maxBathymetryGap ?? defaults.maxBathymetryGap, "Радиус батиметрии", 1, 100000),
+    leftBoundaryTransport: numberIn(input.leftBoundaryTransport ?? defaults.leftBoundaryTransport, "Левый граничный поток", -1_000_000, 1_000_000),
+    rightBoundaryTransport: numberIn(input.rightBoundaryTransport ?? defaults.rightBoundaryTransport, "Правый граничный поток", -1_000_000, 1_000_000),
+  };
+}
+
 export function validateCalculation(body: unknown): CreateCalculationDto {
   if (!body || typeof body !== "object" || Array.isArray(body))
     throw new BadRequestException("Ожидается объект расчёта");
@@ -222,6 +253,13 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
       return { kind: "all_file", input: {
         ...references(p, fields),
         ...validateAllOptions(p, allFileDefaults, 48),
+      } };
+    }
+    case "calibrate_cerc": {
+      const fields = scientificInputFields.calibrate_cerc;
+      rejectUnknown(p, [...Object.keys(fields), ...Object.keys(cercCalibrationDefaults), "bathymetryResolution"]);
+      return { kind: "calibrate_cerc", input: {
+        ...references(p, fields), ...validateCalibrationOptions(p),
       } };
     }
     case "mesh": {
@@ -404,6 +442,24 @@ export function commandArguments(
         "--wave-input", required("waveInputId"), "--wave-source", requiredSource("waveInputId"),
         "--bathymetry", required("bathymetryInputId"), ...cercArguments(input),
         ...allExportArguments(input),
+        "--output", output];
+    case "calibrate_cerc":
+      return ["calibrate-cerc", "--input", required("coastlineInputId"),
+        "--wave-input", required("waveInputId"), "--wave-source", requiredSource("waveInputId"),
+        "--bathymetry", required("bathymetryInputId"),
+        "--bathymetry-resolution", String(input.bathymetryResolution),
+        "--observations", required("observationsInputId"),
+        "--cerc-coefficients", String(input.cercCoefficients),
+        "--max-observation-distance", String(input.maxObservationDistance),
+        "--min-wave-hours", String(input.minWaveHours),
+        "--breaking-index", String(input.breakingIndex),
+        "--berm-height", String(input.bermHeight),
+        "--closure-depth", String(input.closureDepth),
+        "--porosity", String(input.porosity),
+        "--offshore-sample-distance", String(input.offshoreSampleDistance),
+        "--max-bathymetry-gap", String(input.maxBathymetryGap),
+        "--left-boundary-transport", String(input.leftBoundaryTransport),
+        "--right-boundary-transport", String(input.rightBoundaryTransport),
         "--output", output];
     case "mesh":
       return ["mesh", "--input", required("coastlineInputId"),

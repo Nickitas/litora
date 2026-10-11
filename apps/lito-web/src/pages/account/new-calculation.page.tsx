@@ -7,11 +7,12 @@ import type {
   AllOptionsDto,
   DatasetDto,
   CercOptionsDto,
+  CercCalibrationOptionsDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { allDemoDefaults, allFileDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 import { ArrowUpRight, Database, FilePlus2, X } from "lucide-react";
 import { api } from "@/shared/api/client";
@@ -40,6 +41,7 @@ import { errorMessage } from "./model/use-calculations";
 import { scenarioGuidance } from "./model/scenario-guidance";
 import { DatasetUpload } from "./ui/dataset-upload";
 import { ScientificInputUpload } from "./ui/scientific-input-upload";
+import { CercCalibrationFields } from "./ui/cerc-calibration-fields";
 import { scientificRoleLabels } from "./model/scientific-role-labels";
 
 const articleSizeFieldPreset = {
@@ -78,6 +80,8 @@ export function NewCalculationDialog({
   const [erosionFileOptions, setErosionFileOptions] = useState<CercOptionsDto>(erosionFileDefaults);
   const [allDemoOptions, setAllDemoOptions] = useState<AllOptionsDto>(allDemoDefaults);
   const [allFileOptions, setAllFileOptions] = useState<AllOptionsDto>(allFileDefaults);
+  const [calibrationOptions, setCalibrationOptions] = useState<Omit<CercCalibrationOptionsDto, "bathymetryResolution">>(cercCalibrationDefaults);
+  const [calibrationResolution, setCalibrationResolution] = useState("");
   const [meshCellSizes, setMeshCellSizes] = useState("1000");
   const [meshBoundaryDetails, setMeshBoundaryDetails] = useState("1000");
   const [meshGenerators, setMeshGenerators] = useState("frontal-quad");
@@ -197,6 +201,24 @@ export function NewCalculationDialog({
           if (original.kind === "all_file") setAllFileOptions(restoreAll);
           else setAllDemoOptions(restoreAll);
         }
+        break;
+      }
+      case "calibrate_cerc": {
+        const resolution = input.bathymetryResolution;
+        if (typeof resolution === "number" && Number.isFinite(resolution))
+          setCalibrationResolution(String(resolution));
+        setCalibrationOptions((current) => {
+          const next = { ...current };
+          for (const key of Object.keys(current) as (keyof typeof current)[]) {
+            const value = input[key];
+            if (key === "cercCoefficients") {
+              if (typeof value === "string") next.cercCoefficients = value;
+            } else if (typeof value === "number" && Number.isFinite(value)) {
+              next[key] = value;
+            }
+          }
+          return next;
+        });
         break;
       }
       case "mesh":
@@ -362,6 +384,7 @@ export function NewCalculationDialog({
           ...(kind === "erosion_file" ? erosionFileOptions : {}),
           ...(kind === "all_demo" ? allDemoOptions : {}),
           ...(kind === "all_file" ? allFileOptions : {}),
+          ...(kind === "calibrate_cerc" ? { ...calibrationOptions, bathymetryResolution: Number(calibrationResolution) } : {}),
           ...(kind === "mesh" ? {
             cellSizes: meshCellSizes, boundaryDetails: meshBoundaryDetails,
             generators: meshGenerators, maxCells: meshMaxCells,
@@ -757,6 +780,12 @@ export function NewCalculationDialog({
                 </section>
               )}
 
+              {kind === "calibrate_cerc" && (
+                <CercCalibrationFields options={calibrationOptions} resolution={calibrationResolution}
+                  onOptionsChange={(patch) => setCalibrationOptions((current) => ({ ...current, ...patch }))}
+                  onResolutionChange={setCalibrationResolution} />
+              )}
+
               {isDatasetCalculation && (
                 <section
                   aria-labelledby="calculation-data-heading"
@@ -844,14 +873,19 @@ export function NewCalculationDialog({
                 <section aria-labelledby="scientific-inputs-heading" className="space-y-4 border-t pt-6">
                   <div>
                     <h3 id="scientific-inputs-heading" className="text-lg font-semibold">
-                      {kind === "erosion_file" || kind === "all_file" ? "3. Научные входные файлы" : "2. Научные входные файлы"}
+                      {kind === "erosion_file" || kind === "all_file" || kind === "calibrate_cerc" ? "3. Научные входные файлы" : "2. Научные входные файлы"}
                     </h3>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Выберите ранее загруженные файлы или сохраните новые. Go проверит их научный формат и совместимость при запуске.
                     </p>
-                    {(kind === "erosion_file" || kind === "all_file") && (
+                    {(kind === "erosion_file" || kind === "all_file" || kind === "calibrate_cerc") && (
                       <p className="mt-2 text-sm text-muted-foreground">
                         Батиметрия — JSON с простым именем файла (латиница, цифры, точка, дефис или подчёркивание) и паспортом, у которого dataset_file и SHA-256 соответствуют этому JSON. Для CSV волн укажите источник в форме загрузки.
+                      </p>
+                    )}
+                    {kind === "calibrate_cerc" && (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Наблюдения — массив JSON или объект с полем observations: lat, lon и shoreline_change_rate_m_per_year (м/год); положительное значение означает размыв. Укажите независимый источник и лицензию.
                       </p>
                     )}
                   </div>

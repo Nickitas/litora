@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allDemoDefaults, allFileDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
 import { commandArguments, resourceProfileForKind, scientificReferences, validateCalculation } from "./commands.js";
 
 test("пользователь не может передать shell, пути или URL в CLI", () => {
@@ -152,6 +152,49 @@ test("полный конвейер по своим данным использ�
     { ...ids, sourceUrl: "https://internal.example" },
     { ...ids, outputPath: "/tmp/out" },
   ]) assert.throws(() => validateCalculation({ kind: "all_file", input: bad }));
+});
+
+test("калибровка CERC требует пять собственных файлов и годовое покрытие волн", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const ids = {
+    coastlineInputId: id, waveInputId: id, bathymetryInputId: id,
+    bathymetryMetadataInputId: id, observationsInputId: id,
+  };
+  const job = validateCalculation({ kind: "calibrate_cerc", input: {
+    ...ids, bathymetryResolution: 0.005, cercCoefficients: "0.2,0.39,0.6",
+  } });
+  assert.deepEqual(job.input, { ...ids, ...cercCalibrationDefaults,
+    bathymetryResolution: 0.005, cercCoefficients: "0.2,0.39,0.6" });
+  assert.equal(resourceProfileForKind(job.kind), "heavy");
+  assert.deepEqual(scientificReferences(job).map(({ role }) => role), [
+    "coastline_geojson", "wave_climate", "bathymetry_grid_json",
+    "bathymetry_grid_metadata_json", "shoreline_observations_json",
+  ]);
+  const paths = {
+    coastlineInputId: "/job/coast.geojson", waveInputId: "/job/waves.csv",
+    bathymetryInputId: "/job/erosion-inputs/grid.json",
+    bathymetryMetadataInputId: "/job/erosion-inputs/grid.metadata.json",
+    observationsInputId: "/job/observations.json",
+  };
+  assert.throws(() => commandArguments(job, "/job/output", undefined, paths));
+  const args = commandArguments(job, "/job/output", undefined, paths, { waveInputId: "Реанализ" });
+  assert.deepEqual(args.slice(0, 7), ["calibrate-cerc", "--input", paths.coastlineInputId,
+    "--wave-input", paths.waveInputId, "--wave-source", "Реанализ"]);
+  assert.ok(args.includes(paths.observationsInputId));
+  assert.ok(args.includes("--bathymetry-resolution"));
+  assert.ok(!args.includes("--source-url"));
+  const smallCoefficientJob = validateCalculation({ kind: "calibrate_cerc", input: {
+    ...ids, bathymetryResolution: 0.005, cercCoefficients: "1e-12, +0.39",
+  } });
+  assert.equal(smallCoefficientJob.input?.cercCoefficients, "1e-12,+0.39");
+  for (const bad of [
+    { ...ids },
+    { ...ids, bathymetryResolution: 0, observationsInputId: "/etc/passwd" },
+    { ...ids, bathymetryResolution: 0.005, minWaveHours: 100 },
+    { ...ids, bathymetryResolution: 0.005, cercCoefficients: "0.2;echo" },
+    { ...ids, bathymetryResolution: 0.005, cercCoefficients: "1.1" },
+    { ...ids, bathymetryResolution: 0.005, outputPath: "/tmp/report" },
+  ]) assert.throws(() => validateCalculation({ kind: "calibrate_cerc", input: bad }));
 });
 
 test("пользовательский расчёт принимает только UUID, а путь создаёт worker", () => {
