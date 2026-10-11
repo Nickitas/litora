@@ -1,10 +1,10 @@
 import { BadRequestException } from "@nestjs/common";
-import { allDemoDefaults, erosionDemoDefaults, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
 import type {
   CalculationKind,
   CalculationKindDto,
   CreateCalculationDto,
-  ErosionDemoOptionsDto,
+  CercOptionsDto,
   ScientificInputRole,
 } from "@litora/contracts";
 
@@ -16,6 +16,7 @@ export const calculationKinds: CalculationKindDto[] = [
   { kind: "map", title: "Карта Чёрного моря", description: "Обзорная SVG и GeoJSON на поставляемой геометрии." },
   { kind: "map_file", title: "Карта своего контура", description: "Обзорная SVG и GeoJSON по загруженному контуру Чёрного моря." },
   { kind: "erosion", title: "Эрозия: демонстрационный сценарий Сочи", description: "CERC на закреплённых данных; демонстрация, не прогноз." },
+  { kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC по загруженным контуру, волнам и батиметрии с проверяемым паспортом; не калиброванный прогноз." },
   { kind: "all_demo", title: "Полный демонстрационный конвейер Сочи", description: "Проверка контура, размерность, CERC и баланс наносов; SVG, JSON, опционально CSV и GIF." },
   { kind: "mesh", title: "Плоская сетка Чёрного моря", description: "Gmsh строит MSH и SVG обзоры сеток по загруженному полному контуру." },
   { kind: "seabed_build", title: "Построить модель дна", description: "Назначить глубины плоской сетке и получить MSH, VTU, CSV и паспорт экспорта." },
@@ -30,7 +31,7 @@ export const scientificInputFields = scientificInputRequirements;
 
 export function resourceProfileForKind(kind: CalculationKind) {
   return kind === "source_file" || kind === "dimension_file" || kind === "map_file" ||
-    kind === "mesh" || kind.startsWith("seabed_")
+    kind === "mesh" || kind === "erosion_file" || kind.startsWith("seabed_")
     ? "heavy" : "standard";
 }
 
@@ -104,10 +105,10 @@ function comparisonLevels(value: unknown) {
 
 function validateDemoCercOptions(
   input: Record<string, unknown>,
-  defaults: ErosionDemoOptionsDto,
+  defaults: CercOptionsDto,
   maxSteps: number,
   maxGifSkip: number,
-): ErosionDemoOptionsDto {
+): CercOptionsDto {
   if (input.outputCsv !== undefined && typeof input.outputCsv !== "boolean")
     throw new BadRequestException("Недопустимый флаг экспорта CSV");
   if (input.csvFormat !== undefined && input.csvFormat !== "long" && input.csvFormat !== "wide")
@@ -173,6 +174,14 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
     case "erosion": {
       rejectUnknown(p, Object.keys(erosionDemoDefaults));
       return { kind: "erosion", input: { ...validateDemoCercOptions(p, erosionDemoDefaults, 48, 48) } };
+    }
+    case "erosion_file": {
+      const fields = scientificInputFields.erosion_file;
+      rejectUnknown(p, [...Object.keys(fields), ...Object.keys(erosionFileDefaults)]);
+      return { kind: "erosion_file", input: {
+        ...references(p, fields),
+        ...validateDemoCercOptions(p, erosionFileDefaults, 48, 48),
+      } };
     }
     case "all_demo": {
       rejectUnknown(p, Object.keys(allDemoDefaults));
@@ -321,12 +330,17 @@ export function commandArguments(
   output: string,
   datasetPath?: string,
   files: Record<string, string> = {},
+  sources: Record<string, string> = {},
 ): string[] {
   const validated = validateCalculation(job);
   const input = validated.input ?? {};
   const required = (key: string) => {
     if (!files[key]) throw new Error(`Не подготовлен научный файл ${key}`);
     return files[key];
+  };
+  const requiredSource = (key: string) => {
+    if (!sources[key]) throw new Error(`Не указан источник научного файла ${key}`);
+    return sources[key];
   };
   switch (validated.kind) {
     case "dimension":
@@ -344,6 +358,13 @@ export function commandArguments(
       return ["map", "black-sea", "--input", required("coastlineInputId"), "--output", output];
     case "erosion":
       return ["erosion", "--black-sea-sochi", "--offline", ...demoCercArguments(input),
+        ...(input.outputCsv ? ["--output-csv", "erosion-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
+        ...(input.outputGif ? ["--output-gif", "erosion-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
+        "--output", output];
+    case "erosion_file":
+      return ["erosion", "--input", required("coastlineInputId"),
+        "--wave-input", required("waveInputId"), "--wave-source", requiredSource("waveInputId"),
+        "--bathymetry", required("bathymetryInputId"), ...demoCercArguments(input),
         ...(input.outputCsv ? ["--output-csv", "erosion-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
         ...(input.outputGif ? ["--output-gif", "erosion-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
         "--output", output];

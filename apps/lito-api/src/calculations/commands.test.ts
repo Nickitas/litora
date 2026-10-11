@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allDemoDefaults, erosionDemoDefaults } from "@litora/contracts";
+import { allDemoDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
 import { commandArguments, resourceProfileForKind, scientificReferences, validateCalculation } from "./commands.js";
 
 test("пользователь не может передать shell, пути или URL в CLI", () => {
@@ -62,6 +62,36 @@ test("демо CERC принимает ограниченные параметр
     { gifFps: 0 }, { gifSkip: 49 },
     { outputCsv: true, outputPath: "/etc/passwd" },
   ]) assert.throws(() => validateCalculation({ kind: "erosion", input }));
+});
+
+test("CERC по своим данным принимает только четыре UUID и ограниченные параметры", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const ids = { coastlineInputId: id, waveInputId: id, bathymetryInputId: id, bathymetryMetadataInputId: id };
+  const job = validateCalculation({ kind: "erosion_file", input: { ...ids, outputGif: true } });
+  assert.deepEqual(job.input, { ...ids, ...erosionFileDefaults, outputGif: true });
+  assert.equal(resourceProfileForKind(job.kind), "heavy");
+  assert.deepEqual(scientificReferences(job).map(({ role }) => role), [
+    "coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json",
+  ]);
+  const paths = {
+    coastlineInputId: "/job/coastline.geojson", waveInputId: "/job/waves.csv",
+    bathymetryInputId: "/job/erosion-inputs/grid.json", bathymetryMetadataInputId: "/job/erosion-inputs/grid.metadata.json",
+  };
+  assert.throws(() => commandArguments(job, "/job/output", undefined, paths));
+  const args = commandArguments(job, "/job/output", undefined, paths, { waveInputId: "Реанализ 2024" });
+  assert.deepEqual(args.slice(0, 7), ["erosion", "--input", paths.coastlineInputId,
+    "--wave-input", paths.waveInputId, "--wave-source", "Реанализ 2024"]);
+  assert.ok(args.includes(paths.bathymetryInputId));
+  assert.ok(args.includes("erosion-animation.gif"));
+  assert.ok(!args.includes("--black-sea-sochi"));
+  assert.ok(!args.includes("--source-url"));
+  for (const bad of [
+    { ...ids, waveInputId: "/etc/passwd" },
+    { ...ids, waveInputId: "https://internal.example" },
+    { ...ids, outputPath: "/tmp/out" },
+    { ...ids, steps: 49 },
+    { ...ids, maxBathymetryGap: Infinity },
+  ]) assert.throws(() => validateCalculation({ kind: "erosion_file", input: bad }));
 });
 
 test("составной демо-конвейер принимает только числовые параметры и фиксированные экспорты", () => {

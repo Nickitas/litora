@@ -78,7 +78,7 @@ export class ScientificInputsController {
       additionalProperties: false,
       properties: {
         name: { type: "string", maxLength: 100 },
-        role: { type: "string", enum: ["coastline_geojson", "flat_mesh_msh", "seabed_msh", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "relief_reference_passport_json", "export_metadata_json", "bathymetry_source_json", "adaptive_field_csv", "adaptive_field_report_json"] },
+        role: { type: "string", enum: ["coastline_geojson", "wave_climate", "flat_mesh_msh", "seabed_msh", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "relief_reference_passport_json", "export_metadata_json", "bathymetry_source_json", "adaptive_field_csv", "adaptive_field_report_json"] },
         filename: { type: "string", maxLength: 160 },
         sizeBytes: { type: "integer", minimum: 1, maximum: 536870912 },
         source: { type: "string", maxLength: 200 },
@@ -138,13 +138,15 @@ export class ScientificInputsController {
       const prefix = probe.subarray(0, bytesRead).toString("utf8").trimStart();
       if ((record.role === "seabed_msh" || record.role === "flat_mesh_msh") && !prefix.startsWith("$MeshFormat"))
         throw new BadRequestException("Ожидается файл MSH с заголовком $MeshFormat");
-      if (record.role.endsWith("json") || record.role === "coastline_geojson") {
+      if (record.role.endsWith("json") || record.role === "coastline_geojson" ||
+          (record.role === "wave_climate" && record.filename.toLowerCase().endsWith(".json"))) {
         if (!prefix.startsWith("{") && !prefix.startsWith("["))
           throw new BadRequestException("Ожидается JSON или GeoJSON");
       }
       const contentType = record.role === "seabed_msh" || record.role === "flat_mesh_msh"
         ? "application/octet-stream"
-        : record.role === "adaptive_field_csv"
+        : record.role === "adaptive_field_csv" ||
+          (record.role === "wave_climate" && record.filename.toLowerCase().endsWith(".csv"))
           ? "text/csv"
           : "application/json";
       await this.storage.uploadFile(record.object_key, path, contentType);

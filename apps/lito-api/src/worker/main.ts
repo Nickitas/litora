@@ -43,6 +43,8 @@ import {
 import { assertOutputBudget, maxHeavyOutputBytes, maxOutputBytes, maxOutputFiles } from "./output-budget.js";
 import { cleanupPartialArtifacts } from "./partial-artifacts.js";
 import { isScientificRejection } from "./scientific-rejection.js";
+import { stageErosionBathymetry } from "./erosion-inputs.js";
+import { auditableCommandLine, redactExecutionLog } from "./command-line.js";
 
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
@@ -91,6 +93,7 @@ async function run(job: JobRow) {
     finished = false,
     log = "";
   let outputFailure: Error | undefined;
+  let sensitiveWaveSource = "";
   let outputCheck: Promise<void> | undefined;
   let outputMonitor: ReturnType<typeof setInterval> | undefined;
   const uploadedKeys = new Set<string>();
@@ -163,6 +166,8 @@ async function run(job: JobRow) {
       };
     }
     const scientificPaths: Record<string, string> = {};
+    const scientificSources: Record<string, string> = {};
+    const scientificFilenames: Record<string, string> = {};
     const scientificFiles: Record<string, unknown>[] = [];
     let scientificInputBytes = 0;
     for (const reference of scientificReferences(validated)) {
@@ -174,7 +179,8 @@ async function run(job: JobRow) {
       if (scientificInputBytes > maxReusableArtifactTotalBytes)
         throw new Error("Суммарный размер научных входов превышает 4 ГиБ");
       const suffix = reference.role === "seabed_msh" || reference.role === "flat_mesh_msh" ? ".msh"
-        : reference.role === "adaptive_field_csv" ? ".csv" : ".json";
+        : reference.role === "adaptive_field_csv" ||
+          (reference.role === "wave_climate" && file.filename.toLowerCase().endsWith(".csv")) ? ".csv" : ".json";
       const filePath = join(directory, `scientific-${reference.field}${suffix}`);
       await storage.downloadFile(file.object_key, filePath,
         file.origin === "artifact" ? maxReusableArtifactBytes : maxScientificInputBytes);
@@ -183,6 +189,8 @@ async function run(job: JobRow) {
       if (size !== Number(file.size_bytes) || digest !== file.sha256)
         throw new Error("Научный файл не совпадает с сохранённым паспортом");
       scientificPaths[reference.field] = filePath;
+      scientificSources[reference.field] = file.source;
+      scientificFilenames[reference.field] = file.filename;
       scientificFiles.push({
         role: reference.role, id: file.id, filename: file.filename,
         origin: file.origin, ...(file.source_job_id ? { sourceJobId: file.source_job_id } : {}),
@@ -193,6 +201,15 @@ async function run(job: JobRow) {
     }
     if (scientificFiles.length)
       provenance = { files: scientificFiles };
+    if (job.kind === "erosion_file") {
+      sensitiveWaveSource = scientificSources.waveInputId;
+      scientificPaths.bathymetryInputId = await stageErosionBathymetry(
+        directory,
+        scientificPaths.bathymetryInputId,
+        scientificPaths.bathymetryMetadataInputId,
+        scientificFilenames.bathymetryInputId,
+      );
+    }
     if (interrupted || stopping)
       throw new Error("Выполнение прервано до запуска CLI");
     const args = [
@@ -201,6 +218,7 @@ async function run(job: JobRow) {
         output,
         datasetPath,
         scientificPaths,
+        scientificSources,
       ),
       "--manifest",
       join(output, "manifest.json"),
@@ -208,7 +226,7 @@ async function run(job: JobRow) {
     const coreVersion = await sha256(environment.cliBinary);
     await db.query(
       "UPDATE calculation_jobs SET command_line=$2,core_version=$3 WHERE id=$1 AND worker_id=$4 AND status='running'",
-      [job.id, ["lito", ...args].join(" "), `sha256:${coreVersion}`, workerId],
+      [job.id, auditableCommandLine(args), `sha256:${coreVersion}`, workerId],
     );
     await db.query(
       "INSERT INTO calculation_events(job_id,event_type) VALUES($1,'started')",
@@ -246,6 +264,7 @@ async function run(job: JobRow) {
     active = undefined;
     await outputCheck;
     if (outputFailure) throw outputFailure;
+    log = redactExecutionLog(log, [sensitiveWaveSource]);
     await writeFile(join(output, "execution.log"), log);
     await assertOutputBudget(output, environment.workerProfile);
     const outputs = await filesIn(output);
@@ -342,7 +361,8 @@ async function run(job: JobRow) {
       throw new Error("Расчёт уже отменён или потерял владельца worker");
     console.log(`Расчёт ${job.id}: ${scientificRejection ? "научные критерии не пройдены" : "готово"}, файлов ${outputs.length}`);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = redactExecutionLog(error instanceof Error ? error.message : String(error), [sensitiveWaveSource]);
+    log = redactExecutionLog(log, [sensitiveWaveSource]);
     const leftovers = await cleanupPartialArtifacts(
       job.id,
       uploadedKeys,

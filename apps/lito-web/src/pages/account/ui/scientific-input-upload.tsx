@@ -36,8 +36,9 @@ export function ScientificInputUpload({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!file) return;
-    if (file.size < 1 || file.size > 512 * 1024 * 1024) {
-      setError("Размер файла должен быть от 1 байта до 512 МиБ.");
+    const maximum = role === "wave_climate" ? 16 : 512;
+    if (file.size < 1 || file.size > maximum * 1024 * 1024) {
+      setError(`Размер файла должен быть от 1 байта до ${maximum} МиБ.`);
       return;
     }
     if (existing && (file.name !== existing.filename || file.size !== existing.sizeBytes)) {
@@ -79,8 +80,9 @@ export function ScientificInputUpload({
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="space-y-2">
-        <Label htmlFor="scientific-file">Файл (до 512 МиБ)</Label>
+        <Label htmlFor="scientific-file">Файл (до {role === "wave_climate" ? 16 : 512} МиБ)</Label>
         <Input id="scientific-file" type="file" required disabled={busy}
+          accept={role === "wave_climate" ? ".json,.csv" : undefined}
           onChange={(event) => {
             const selected = event.target.files?.[0] ?? null;
             setFile(selected);

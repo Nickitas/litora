@@ -2,6 +2,7 @@ import type { ScientificInputRole } from "@litora/contracts";
 
 export const scientificRoleLabels: Record<ScientificInputRole, string> = {
   coastline_geojson: "GeoJSON береговой линии или полного контура",
+  wave_climate: "Волновой ряд (JSON или CSV)",
   flat_mesh_msh: "Плоская расчётная сетка MSH",
   seabed_msh: "Батиметрическая модель MSH",
   bathymetry_grid_json: "Проверенный набор батиметрии (JSON)",

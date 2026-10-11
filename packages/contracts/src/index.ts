@@ -160,6 +160,7 @@ export type CalculationKind =
   | "map"
   | "map_file"
   | "erosion"
+  | "erosion_file"
   | "all_demo"
   | "mesh"
   | "seabed_build"
@@ -178,8 +179,8 @@ export interface CalculationKindDto {
   description: string;
 }
 
-/** Управляемые параметры демонстрационного CERC-сценария Сочи; расчёт выполняет Go. */
-export interface ErosionDemoOptionsDto {
+/** Управляемые параметры CERC; научный расчёт выполняет только Go. */
+export interface CercOptionsDto {
   steps: number;
   breakingIndex: number;
   bermHeight: number;
@@ -196,7 +197,10 @@ export interface ErosionDemoOptionsDto {
   gifSkip: number;
 }
 
-export const erosionDemoDefaults: ErosionDemoOptionsDto = {
+/** Совместимое имя контракта демонстрационного сценария. */
+export type ErosionDemoOptionsDto = CercOptionsDto;
+
+export const erosionDemoDefaults: CercOptionsDto = {
   steps: 3,
   breakingIndex: 0.78,
   bermHeight: 2,
@@ -213,8 +217,14 @@ export const erosionDemoDefaults: ErosionDemoOptionsDto = {
   gifSkip: 1,
 };
 
+/** Параметры CERC для собственного контура, волнового ряда и батиметрии. */
+export const erosionFileDefaults: CercOptionsDto = {
+  ...erosionDemoDefaults,
+  maxBathymetryGap: 1500,
+};
+
 /** Параметры полного демонстрационного конвейера CLI на закреплённых данных Сочи. */
-export interface AllDemoOptionsDto extends ErosionDemoOptionsDto {
+export interface AllDemoOptionsDto extends CercOptionsDto {
   modelMaxPoints: number;
   noModelSimplify: boolean;
 }
@@ -258,6 +268,7 @@ export interface DatasetDto {
 
 export type ScientificInputRole =
   | "coastline_geojson"
+  | "wave_climate"
   | "flat_mesh_msh"
   | "seabed_msh"
   | "bathymetry_grid_json"
@@ -273,6 +284,12 @@ export const scientificInputRequirements = {
   dimension_file: { coastlineInputId: "coastline_geojson" },
   map_file: { coastlineInputId: "coastline_geojson" },
   mesh: { coastlineInputId: "coastline_geojson" },
+  erosion_file: {
+    coastlineInputId: "coastline_geojson",
+    waveInputId: "wave_climate",
+    bathymetryInputId: "bathymetry_grid_json",
+    bathymetryMetadataInputId: "bathymetry_grid_metadata_json",
+  },
   seabed_build: {
     flatMeshInputId: "flat_mesh_msh",
     bathymetryInputId: "bathymetry_grid_json",

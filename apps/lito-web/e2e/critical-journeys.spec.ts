@@ -9,7 +9,7 @@ import type {
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { allDemoDefaults, erosionDemoDefaults } from "@litora/contracts";
+import { allDemoDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 
 const user = {
@@ -377,6 +377,51 @@ test("полный демо-конвейер позволяет настроит
   await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "all_demo", input: {
     ...allDemoDefaults, steps: 4, outputGif: true, gifFps: 12, gifSkip: 2, modelMaxPoints: 300,
+  } });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("свой CERC выбирает четыре приватных файла и не помечается демо", async ({ page }) => {
+  const ownKind = [{ kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC по своим данным" }] satisfies CalculationKindDto[];
+  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json"] as const;
+  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
+  const inputs: ScientificInputDto[] = roles.map((role, index) => ({
+    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Вход CERC ${index + 1}`, filename: index === 1 ? "waves.csv" : "grid.json",
+  }));
+  const created = { ...job, kind: "erosion_file" as const,
+    input: { ...erosionFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])) } };
+  let submitted: unknown;
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: ownKind };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      submitted = body;
+      return { status: 201, body: created };
+    }
+    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+  });
+  await page.setViewportSize({ width: 360, height: 780 });
+  await openNewCalculation(page, "dark");
+  await chooseOption(page, "Что рассчитать", "Эрозия по своим данным");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await expect(dialog.getByText("Демонстрационный сценарий")).toHaveCount(0);
+  for (let index = 0; index < fields.length; index += 1) {
+    await dialog.locator(`#scientific-${fields[index]}`).click();
+    await page.getByRole("option", { name: new RegExp(`Вход CERC ${index + 1}`) }).click();
+  }
+  await dialog.getByLabel("Шаги волнового ряда (1–48)").fill("8");
+  await dialog.getByRole("button", { name: "Параметры CERC и экспорт" }).click();
+  await dialog.getByLabel("Сохранить анимацию GIF").check();
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  expect(submitted).toEqual({ kind: "erosion_file", input: {
+    ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
+    ...erosionFileDefaults, steps: 8, outputGif: true,
   } });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);

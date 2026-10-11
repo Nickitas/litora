@@ -25,3 +25,21 @@ test("повторная загрузка получает новый ключ, 
   assert.match(calls.at(-1)!.sql, /object_key=\$3 AND status='uploading'/);
   assert.equal(calls.at(-1)!.params[2], second.object_key);
 });
+
+test("волновой ряд доступен worker только владельцу и с нужной ролью", async () => {
+  const calls: { sql: string; params: unknown[] }[] = [];
+  const database = {
+    query: async (sql: string, params: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql.startsWith("SELECT * FROM scientific_inputs") &&
+          params[0] === "wave-id" && params[1] === "owner" && params[2] === "wave_climate")
+        return { rows: [{ id: "wave-id", role: "wave_climate", sha256: "a".repeat(64), filename: "waves.csv", source: "Наблюдения" }] };
+      return { rows: [] };
+    },
+  } as unknown as DatabaseService;
+  const repository = new ScientificInputsRepository(database);
+  assert.equal((await repository.resolveOwnedSource("wave-id", "owner", "wave_climate", "private")).origin, "upload");
+  await assert.rejects(repository.resolveOwnedSource("wave-id", "other", "wave_climate", "private"));
+  await assert.rejects(repository.resolveOwnedSource("wave-id", "owner", "coastline_geojson", "private"));
+  assert.match(calls[0].sql, /owner_id=\$2 AND role=\$3 AND status='ready'/);
+});

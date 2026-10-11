@@ -6,12 +6,12 @@ import type {
   CalculationJobDto,
   AllDemoOptionsDto,
   DatasetDto,
-  ErosionDemoOptionsDto,
+  CercOptionsDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { allDemoDefaults, erosionDemoDefaults, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, erosionDemoDefaults, erosionFileDefaults, scientificInputRequirements } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 import { ArrowUpRight, Database, FilePlus2, X } from "lucide-react";
 import { api } from "@/shared/api/client";
@@ -74,7 +74,8 @@ export function NewCalculationDialog({
   const [kind, setKind] = useState<CalculationKind>("dimension");
   const [datasetId, setDatasetId] = useState("");
   const [datasetSelectOpen, setDatasetSelectOpen] = useState(false);
-  const [erosionOptions, setErosionOptions] = useState<ErosionDemoOptionsDto>(erosionDemoDefaults);
+  const [erosionOptions, setErosionOptions] = useState<CercOptionsDto>(erosionDemoDefaults);
+  const [erosionFileOptions, setErosionFileOptions] = useState<CercOptionsDto>(erosionFileDefaults);
   const [allDemoOptions, setAllDemoOptions] = useState<AllDemoOptionsDto>(allDemoDefaults);
   const [meshCellSizes, setMeshCellSizes] = useState("1000");
   const [meshBoundaryDetails, setMeshBoundaryDetails] = useState("1000");
@@ -166,8 +167,9 @@ export function NewCalculationDialog({
     }
     switch (original.kind) {
       case "erosion":
+      case "erosion_file":
       case "all_demo": {
-        const restoreCerc = (current: ErosionDemoOptionsDto) => {
+        const restoreCerc = (current: CercOptionsDto) => {
           const next = { ...current };
           for (const key of ["steps", "breakingIndex", "bermHeight", "closureDepth", "porosity",
             "cercCoefficient", "offshoreSampleDistance", "maxShorelineChange", "maxBathymetryGap"] as const) {
@@ -182,6 +184,7 @@ export function NewCalculationDialog({
           return next;
         };
         if (original.kind === "erosion") setErosionOptions(restoreCerc);
+        else if (original.kind === "erosion_file") setErosionFileOptions(restoreCerc);
         else setAllDemoOptions((current) => {
           const next = { ...current, ...restoreCerc(current) };
           if (typeof input.modelMaxPoints === "number" && Number.isFinite(input.modelMaxPoints)) next.modelMaxPoints = input.modelMaxPoints;
@@ -350,6 +353,7 @@ export function NewCalculationDialog({
         input: {
           ...scientificParameters,
           ...(kind === "erosion" ? erosionOptions : {}),
+          ...(kind === "erosion_file" ? erosionFileOptions : {}),
           ...(kind === "all_demo" ? allDemoOptions : {}),
           ...(kind === "mesh" ? {
             cellSizes: meshCellSizes, boundaryDetails: meshBoundaryDetails,
@@ -394,9 +398,12 @@ export function NewCalculationDialog({
   const scenario = kinds.find((item) => item.kind === kind);
   const guidance = scenario ? scenarioGuidance[scenario.kind] : undefined;
   const isDemoKind = kind === "erosion" || kind === "all_demo";
-  const demoOptions: ErosionDemoOptionsDto = kind === "all_demo" ? allDemoOptions : erosionOptions;
-  const updateDemoOptions = (patch: Partial<ErosionDemoOptionsDto>) => {
+  const isCercKind = isDemoKind || kind === "erosion_file";
+  const cercOptions: CercOptionsDto = kind === "all_demo" ? allDemoOptions :
+    kind === "erosion_file" ? erosionFileOptions : erosionOptions;
+  const updateCercOptions = (patch: Partial<CercOptionsDto>) => {
     if (kind === "all_demo") setAllDemoOptions((current) => ({ ...current, ...patch }));
+    else if (kind === "erosion_file") setErosionFileOptions((current) => ({ ...current, ...patch }));
     else setErosionOptions((current) => ({ ...current, ...patch }));
   };
   const selectedDataset = datasets.find((dataset) => dataset.id === datasetId);
@@ -617,7 +624,7 @@ export function NewCalculationDialog({
                 )}
               </section>
 
-              {isDemoKind && (
+              {isCercKind && (
                 <section
                   aria-labelledby="calculation-parameters-heading"
                   className="border-t pt-6"
@@ -638,8 +645,8 @@ export function NewCalculationDialog({
                       min={1}
                       max={kind === "all_demo" ? 24 : 48}
                       required
-                      value={demoOptions.steps}
-                      onChange={(event) => updateDemoOptions({ steps: Number(event.target.value) })}
+                      value={cercOptions.steps}
+                      onChange={(event) => updateCercOptions({ steps: Number(event.target.value) })}
                     />
                   </div>
                   <Collapsible defaultOpen={Boolean(repeatJobId)} className="mt-5 space-y-3">
@@ -648,7 +655,9 @@ export function NewCalculationDialog({
                     </CollapsibleTrigger>
                     <CollapsibleContent className="space-y-4 rounded-xl border p-4">
                       <p className="text-sm text-muted-foreground">
-                        Настройки меняют демонстрационный расчёт, но не превращают набор Сочи в калиброванный прогноз.
+                        {isDemoKind
+                          ? "Настройки меняют демонстрационный расчёт, но не превращают набор Сочи в калиброванный прогноз."
+                          : "Расчёт по своим данным без независимой калибровки не является прогнозом размыва."}
                       </p>
                       <div className="grid gap-4 sm:grid-cols-2">
                         {([
@@ -664,21 +673,21 @@ export function NewCalculationDialog({
                           <div key={key} className="space-y-2">
                             <Label htmlFor={`erosion-${key}`}>{label}</Label>
                             <Input id={`erosion-${key}`} type="number" min={min} max={max} step="any" required
-                              value={demoOptions[key]}
-                              onChange={(event) => updateDemoOptions({ [key]: Number(event.target.value) })} />
+                              value={cercOptions[key]}
+                              onChange={(event) => updateCercOptions({ [key]: Number(event.target.value) })} />
                           </div>
                         ))}
                       </div>
                       <label className="flex min-h-11 items-center gap-3 text-sm">
-                        <input type="checkbox" checked={demoOptions.outputCsv}
-                          onChange={(event) => updateDemoOptions({ outputCsv: event.target.checked })} />
+                        <input type="checkbox" checked={cercOptions.outputCsv}
+                          onChange={(event) => updateCercOptions({ outputCsv: event.target.checked })} />
                         Сохранить CSV метрик
                       </label>
-                      {demoOptions.outputCsv && (
+                      {cercOptions.outputCsv && (
                         <div className="space-y-2">
                           <Label htmlFor="erosion-csv-format">Формат CSV</Label>
-                          <Select value={demoOptions.csvFormat}
-                            onValueChange={(value) => updateDemoOptions({ csvFormat: value as ErosionDemoOptionsDto["csvFormat"] })}>
+                          <Select value={cercOptions.csvFormat}
+                            onValueChange={(value) => updateCercOptions({ csvFormat: value as CercOptionsDto["csvFormat"] })}>
                             <SelectTrigger id="erosion-csv-format"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="long">Long — одна строка на состояние</SelectItem>
@@ -687,24 +696,24 @@ export function NewCalculationDialog({
                           </Select>
                         </div>
                       )}
-                      {isDemoKind && (
+                      {isCercKind && (
                         <div className="space-y-4 border-t pt-4">
                           <label className="flex min-h-11 items-center gap-3 text-sm">
-                            <input type="checkbox" checked={demoOptions.outputGif}
-                              onChange={(event) => updateDemoOptions({ outputGif: event.target.checked })} />
+                            <input type="checkbox" checked={cercOptions.outputGif}
+                              onChange={(event) => updateCercOptions({ outputGif: event.target.checked })} />
                             Сохранить анимацию GIF
                           </label>
-                          {demoOptions.outputGif && (
+                          {cercOptions.outputGif && (
                             <div className="grid gap-4 sm:grid-cols-2">
                               <div className="space-y-2">
                                 <Label htmlFor="all-gif-fps">Кадров в секунду (1–30)</Label>
-                                <Input id="all-gif-fps" type="number" min={1} max={30} required value={demoOptions.gifFps}
-                                  onChange={(event) => updateDemoOptions({ gifFps: Number(event.target.value) })} />
+                                <Input id="all-gif-fps" type="number" min={1} max={30} required value={cercOptions.gifFps}
+                                  onChange={(event) => updateCercOptions({ gifFps: Number(event.target.value) })} />
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="all-gif-skip">Шаг кадров (1–{kind === "all_demo" ? 24 : 48})</Label>
-                                <Input id="all-gif-skip" type="number" min={1} max={kind === "all_demo" ? 24 : 48} required value={demoOptions.gifSkip}
-                                  onChange={(event) => updateDemoOptions({ gifSkip: Number(event.target.value) })} />
+                                <Input id="all-gif-skip" type="number" min={1} max={kind === "all_demo" ? 24 : 48} required value={cercOptions.gifSkip}
+                                  onChange={(event) => updateCercOptions({ gifSkip: Number(event.target.value) })} />
                               </div>
                             </div>
                           )}
@@ -820,10 +829,17 @@ export function NewCalculationDialog({
               {scientificFields.length > 0 && (
                 <section aria-labelledby="scientific-inputs-heading" className="space-y-4 border-t pt-6">
                   <div>
-                    <h3 id="scientific-inputs-heading" className="text-lg font-semibold">2. Научные входные файлы</h3>
+                    <h3 id="scientific-inputs-heading" className="text-lg font-semibold">
+                      {kind === "erosion_file" ? "3. Научные входные файлы" : "2. Научные входные файлы"}
+                    </h3>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Выберите ранее загруженные файлы или сохраните новые. Go проверит их научный формат и совместимость при запуске.
                     </p>
+                    {kind === "erosion_file" && (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Батиметрия — JSON с простым именем файла (латиница, цифры, точка, дефис или подчёркивание) и паспортом, у которого dataset_file и SHA-256 соответствуют этому JSON. Для CSV волн укажите источник в форме загрузки.
+                      </p>
+                    )}
                   </div>
                   {scientificFields.map(([field, role]) => {
                     const options = scientificInputs.filter((item) => item.role === role && item.status === "ready");

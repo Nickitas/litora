@@ -21,6 +21,7 @@ import { calculationInputSchemaVersion } from "../schema-versions.js";
 import { resourceProfileForKind, scientificReferences } from "./commands.js";
 import { ScientificInputsRepository } from "../scientific-inputs/scientific-inputs.repository.js";
 import { maxReusableArtifactTotalBytes } from "../scientific-inputs/reusable-artifacts.js";
+import { isErosionBathymetryFilename } from "./erosion-bathymetry-filename.js";
 
 export interface JobRow {
   id: string;
@@ -146,6 +147,9 @@ export class CalculationsRepository {
       const source = await scientificInputs.resolveOwnedSource(
         reference.id, userId, reference.role, this.storage.bucket,
       );
+      if (job.kind === "erosion_file" && reference.field === "bathymetryInputId" &&
+          !isErosionBathymetryFilename(source.filename))
+        throw new BadRequestException("Имя батиметрии для CERC должно быть простым именем .json без пути");
       scientificBytes += Number(source.size_bytes);
       if (scientificBytes > maxReusableArtifactTotalBytes)
         throw new BadRequestException("Суммарный размер научных входов превышает 4 ГиБ");

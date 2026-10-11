@@ -24,7 +24,7 @@
 | `seabed check-full` | — | — | `--bathymetry`, `--bathymetry-metadata`, `--boundary-detail`, `--coast-transition`, `--coastline`, `--control-points`, `--generator`, `--isobaths`, `--max-source-distance`, `--mesh`, `--mesh-report`, `--target-edge`, `--vertical-exaggeration`, `--output`, `--manifest` |
 | `seabed expert-set` | — | — | `--comparison`, `--levels`, `--seed`, `--output`, `--manifest` |
 | `seabed assess-ml` | — | — | `--min-evaluation`, `--min-experts-per-card`, `--min-rmse-improvement`, `--min-training`, `--organizer-key`, `--ratings`, `--ridge-lambda`, `--output`, `--manifest` |
-| `erosion` | Демо Сочи: `--steps`, `--breaking-index`, `--berm-height`, `--closure-depth`, `--porosity`, `--cerc-coefficient`, `--offshore-sample-distance`, `--max-shoreline-change`, `--max-bathymetry-gap`, `--output-csv`, `--csv-format`, `--output-gif`, `--gif-fps`, `--gif-skip` | `--black-sea-sochi`, `--offline`, `--output`, `--manifest` | Собственные `--input`, `--wave-input`, `--wave-source`, `--bathymetry`, `--bathymetry-resolution`, `--sediment-sources`, `--structures`, `--left-boundary-transport`, `--right-boundary-transport`; `--source-url`, `--refresh` |
+| `erosion` | Демо Сочи и свои входы (`erosion_file`): `--input`, `--wave-input`, `--bathymetry`, `--steps` (1–48), `--breaking-index`, `--berm-height`, `--closure-depth`, `--porosity`, `--cerc-coefficient`, `--offshore-sample-distance`, `--max-shoreline-change`, `--max-bathymetry-gap`, `--output-csv`, `--csv-format`, `--output-gif`, `--gif-fps`, `--gif-skip` | Демо: `--black-sea-sochi`, `--offline`; свой ряд: `--wave-source` из паспорта загрузки; всем: `--output`, `--manifest` | `--steps=0` (весь ряд), `--bathymetry-resolution` без паспорта, `--sediment-sources`, `--structures`, `--left-boundary-transport`, `--right-boundary-transport`; `--source-url`, `--refresh` |
 | `calibrate-cerc` | — | — | `--bathymetry`, `--bathymetry-resolution`, `--berm-height`, `--breaking-index`, `--cerc-coefficients`, `--closure-depth`, `--input`, `--left-boundary-transport`, `--max-bathymetry-gap`, `--max-observation-distance`, `--min-wave-hours`, `--observations`, `--offshore-sample-distance`, `--porosity`, `--right-boundary-transport`, `--sediment-sources`, `--structures`, `--wave-input`, `--wave-source`, `--output`, `--manifest` |
 | `all` | Демо Сочи (`all_demo`): `--steps`, параметры CERC, `--output-csv`, `--csv-format`, `--output-gif`, `--gif-fps`, `--gif-skip`, `--model-max-points`, `--no-model-simplify` | `--black-sea-sochi`, `--offline`, `--output`, `--manifest` | Собственные `--input`, `--wave-input`, `--wave-source`, `--bathymetry`, `--bathymetry-resolution`, `--sediment-sources`, `--structures`, `--left-boundary-transport`, `--right-boundary-transport`; `--source-url`, `--refresh` |
 
@@ -36,8 +36,8 @@
 
 ## Приоритеты закрытия
 
-1. Свои входы `erosion`/`all` и `calibrate-cerc`: роли волн, наблюдений,
-   глубин, сооружений, паспорт времени/CRS/единиц/лицензии; Go-проверки
+1. Расширить свои входы `erosion`/`all` и `calibrate-cerc`: роли наблюдений,
+   источников наносов и сооружений, паспорт времени/CRS/единиц/лицензии; Go-проверки
    совместимости и отрицательные owner-тесты. Без научно корректных входов
    нельзя выдавать «полный CLI» через web.
 2. `check-full`: отдельный тяжёлый профиль, лимиты памяти/временного диска,

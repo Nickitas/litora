@@ -30,6 +30,10 @@ test("worker читает ревизию только из соответств�
     resultMethodFromManifest(manifest("lito erosion", "cerc-one-line"), "erosion"),
     { id: "cerc-one-line", revision: "baseline-1" },
   );
+  assert.deepEqual(
+    resultMethodFromManifest(manifest("lito erosion", "cerc-one-line"), "erosion_file"),
+    { id: "cerc-one-line", revision: "baseline-1" },
+  );
   assert.equal(resultMethodFromManifest(Buffer.from(JSON.stringify({
     schemaVersion: 2, command: "lito all", artifacts: [],
   })), "all_demo"), null);
