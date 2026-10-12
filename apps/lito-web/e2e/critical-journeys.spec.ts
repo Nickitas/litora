@@ -418,7 +418,7 @@ test("свой CERC выбирает приватные файлы и необя
   }
   await dialog.locator("#scientific-sedimentSourcesInputId").click();
   await page.getByRole("option", { name: /Вход CERC 5/ }).click();
-  await dialog.getByLabel("Шаги волнового ряда (1–48)").fill("8");
+  await dialog.locator("#erosion-steps").fill("8");
   await dialog.getByRole("button", { name: "Параметры CERC и экспорт" }).click();
   await dialog.getByLabel("Поток через левую границу, м³/с").fill("0.02");
   await dialog.getByLabel("Поток через правую границу, м³/с").fill("-0.01");
@@ -435,6 +435,51 @@ test("свой CERC выбирает приватные файлы и необя
   expect(observed.pageErrors).toEqual([]);
 });
 
+test("свой CERC запускает весь ряд с ограниченной выборкой SVG и без GIF", async ({ page }) => {
+  const ownKind = [{ kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC по своим данным" }] satisfies CalculationKindDto[];
+  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json"] as const;
+  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
+  const inputs: ScientificInputDto[] = roles.map((role, index) => ({
+    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Вход полного ряда ${index + 1}`, filename: index === 1 ? "waves.csv" : "grid.json",
+  }));
+  const created = { ...job, kind: "erosion_file" as const,
+    input: { ...erosionFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
+      steps: 0, svgMaxFrames: 24, outputGif: false } };
+  let submitted: unknown;
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: ownKind };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      submitted = body;
+      return { status: 201, body: created };
+    }
+    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+  });
+  await openNewCalculation(page, "dark");
+  await chooseOption(page, "Что рассчитать", "Эрозия по своим данным");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  for (let index = 0; index < fields.length; index += 1) {
+    await dialog.locator(`#scientific-${fields[index]}`).click();
+    await page.getByRole("option", { name: new RegExp(`Вход полного ряда ${index + 1}`) }).click();
+  }
+  await dialog.getByRole("button", { name: "Параметры CERC и экспорт" }).click();
+  await dialog.getByLabel("Сохранить анимацию GIF").check();
+  await dialog.locator("#erosion-steps").fill("0");
+  await expect(dialog.getByLabel("Максимум SVG эрозии (2–128)")).toHaveValue("64");
+  await expect(dialog.getByLabel("Сохранить анимацию GIF")).toBeDisabled();
+  await expect(dialog.getByLabel("Сохранить анимацию GIF")).not.toBeChecked();
+  await dialog.getByLabel("Максимум SVG эрозии (2–128)").fill("24");
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  expect(submitted).toEqual({ kind: "erosion_file", input: created.input });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
 test("полный конвейер по своим файлам повторяет входы и параметры без подмены демо", async ({ page }) => {
   const ownKind = [{ kind: "all_file", title: "Полный конвейер по своим данным", description: "Свои входы" }] satisfies CalculationKindDto[];
   const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "longshore_structures_json"] as const;
@@ -446,7 +491,8 @@ test("полный конвейер по своим файлам повторя�
   const original = { ...job, kind: "all_file" as const, status: "succeeded" as const,
     input: { ...allFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
       structuresInputId: inputs[4].id,
-      steps: 12, modelMaxPoints: 0, noModelSimplify: true, leftBoundaryTransport: 0.04, rightBoundaryTransport: -0.03 } };
+      steps: 0, svgMaxFrames: 16, modelMaxPoints: 0, noModelSimplify: true,
+      leftBoundaryTransport: 0.04, rightBoundaryTransport: -0.03 } };
   const created = { ...original, id: "99999999-9999-4999-8999-999999999999", status: "queued" as const };
   let submitted: unknown;
   const observed = await mockApi(page, (path, method, body) => {
@@ -467,7 +513,9 @@ test("полный конвейер по своим файлам повторя�
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog.getByText("Демонстрационный сценарий")).toHaveCount(0);
-  await expect(dialog.getByLabel("Шаги волнового ряда (1–48)")).toHaveValue("12");
+  await expect(dialog.locator("#erosion-steps")).toHaveValue("0");
+  await expect(dialog.getByLabel("Максимум SVG эрозии (2–128)")).toHaveValue("16");
+  await expect(dialog.getByLabel("Сохранить анимацию GIF")).toBeDisabled();
   await expect(dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)")).toHaveValue("0");
   await expect(dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)")).toBeDisabled();
   await expect(dialog.getByLabel("Не упрощать базовую линию")).toBeChecked();
@@ -482,6 +530,8 @@ test("полный конвейер по своим файлам повторя�
   const download = await downloadPromise;
   const exported = JSON.parse(await readFile(await download.path(), "utf8")) as CalculationMetadataExportV1;
   expect(exported.calculation.input).toMatchObject({
+    steps: 0,
+    svgMaxFrames: 16,
     leftBoundaryTransport: 0.04,
     rightBoundaryTransport: -0.03,
     structuresInputId: inputs[4].id,

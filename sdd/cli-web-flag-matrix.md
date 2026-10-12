@@ -1,6 +1,6 @@
 # Матрица флагов CLI → Web/API
 
-Актуально на 11.10.2026 по `lito <команда> --help` и текущему коду. «Форма»
+Актуально на 12.10.2026 по `lito <команда> --help` и текущему коду. «Форма»
 означает параметр или выбор своего файла в ЛК; «worker» — фиксированное значение
 на сервере. «Нет» — паритета нет, даже если команда с таким именем уже доступна.
 Флаги перечислены без сокращения; опции, скрытые Cobra и не показанные `--help`,
@@ -24,9 +24,9 @@
 | `seabed check-full` | — | — | `--bathymetry`, `--bathymetry-metadata`, `--boundary-detail`, `--coast-transition`, `--coastline`, `--control-points`, `--generator`, `--isobaths`, `--max-source-distance`, `--mesh`, `--mesh-report`, `--target-edge`, `--vertical-exaggeration`, `--output`, `--manifest` |
 | `seabed expert-set` | — | — | `--comparison`, `--levels`, `--seed`, `--output`, `--manifest` |
 | `seabed assess-ml` | — | — | `--min-evaluation`, `--min-experts-per-card`, `--min-rmse-improvement`, `--min-training`, `--organizer-key`, `--ratings`, `--ridge-lambda`, `--output`, `--manifest` |
-| `erosion` | Демо Сочи и свои входы (`erosion_file`): `--input`, `--wave-input`, `--bathymetry`, `--steps` (1–48), `--breaking-index`, `--berm-height`, `--closure-depth`, `--porosity`, `--cerc-coefficient`, `--offshore-sample-distance`, `--max-shoreline-change`, `--max-bathymetry-gap`, `--left-boundary-transport`, `--right-boundary-transport`, `--output-csv`, `--csv-format`, `--output-gif`, `--gif-fps`, `--gif-skip`; по своим входам также `--sediment-sources`, `--structures` | Демо: `--black-sea-sochi`, `--offline`; свой ряд: `--wave-source` из паспорта загрузки; всем: `--output`, `--manifest` | `--steps=0` (весь ряд), `--bathymetry-resolution` без паспорта, профили для демо; `--source-url`, `--refresh` |
+| `erosion` | Демо Сочи и свои входы (`erosion_file`): `--input`, `--wave-input`, `--bathymetry`, `--steps` (1–48, для своих также 0 с лимитами), `--breaking-index`, `--berm-height`, `--closure-depth`, `--porosity`, `--cerc-coefficient`, `--offshore-sample-distance`, `--max-shoreline-change`, `--max-bathymetry-gap`, `--left-boundary-transport`, `--right-boundary-transport`, `--output-csv`, `--csv-format`, `--output-gif`, `--gif-fps`, `--gif-skip`; по своим входам также `--sediment-sources`, `--structures`, `--svg-max-frames` | Демо: `--black-sea-sochi`, `--offline`; свой ряд: `--wave-source` из паспорта загрузки; при `steps=0`: `--max-wave-conditions=10000`, `--max-coast-points=200`; всем: `--output`, `--manifest` | `--bathymetry-resolution` без паспорта, профили для демо; `--source-url`, `--refresh`; GIF и широкий CSV для полного ряда |
 | `calibrate-cerc` | `calibrate_cerc`: `--input`, `--wave-input`, `--bathymetry`, `--bathymetry-resolution`, `--observations`, `--cerc-coefficients`, `--max-observation-distance`, `--min-wave-hours` (не меньше 8766 ч), `--breaking-index`, `--berm-height`, `--closure-depth`, `--porosity`, `--offshore-sample-distance`, `--max-bathymetry-gap`, `--left-boundary-transport`, `--right-boundary-transport`, `--sediment-sources`, `--structures` | `--wave-source` из паспорта загрузки; `--output`, `--manifest` | короткий `--min-wave-hours` только CLI |
-| `all` | Демо Сочи (`all_demo`) и свои файлы (`all_file`): `--input`, `--wave-input`, `--bathymetry`, `--steps` (1–48 по своим входам), параметры CERC и граничные потоки, `--output-csv`, `--csv-format`, `--output-gif`, `--gif-fps`, `--gif-skip`, `--model-max-points`, `--no-model-simplify`; по своим входам без упрощения `--sediment-sources`, `--structures` | Демо: `--black-sea-sochi`, `--offline`; свой ряд: `--wave-source` из паспорта загрузки; всем: `--output`, `--manifest` | `--steps=0` (весь ряд), `--bathymetry-resolution` без паспорта, профили для демо и с упрощением; `--source-url`, `--refresh` |
+| `all` | Демо Сочи (`all_demo`) и свои файлы (`all_file`): `--input`, `--wave-input`, `--bathymetry`, `--steps` (1–48, для своих также 0 с лимитами), параметры CERC и граничные потоки, `--output-csv`, `--csv-format`, `--output-gif`, `--gif-fps`, `--gif-skip`, `--model-max-points`, `--no-model-simplify`; по своим входам без упрощения `--sediment-sources`, `--structures`; `--svg-max-frames` для своих | Демо: `--black-sea-sochi`, `--offline`; свой ряд: `--wave-source` из паспорта загрузки; при `steps=0`: `--max-wave-conditions=10000`, `--max-coast-points=200`; всем: `--output`, `--manifest` | `--bathymetry-resolution` без паспорта, профили для демо и с упрощением; `--source-url`, `--refresh`; GIF и широкий CSV для полного ряда |
 
 Для `all_demo` и `all_file` параметры CERC — `--breaking-index`, `--berm-height`,
 `--closure-depth`, `--porosity`, `--cerc-coefficient`,
@@ -37,10 +37,10 @@
 
 ## Приоритеты закрытия
 
-1. Расширить свои входы `erosion`/`all` и `calibrate-cerc`: роли
-   источников наносов и сооружений, паспорт времени/CRS/единиц/лицензии; Go-проверки
-   совместимости с неизменённым или упрощённым контуром и отрицательные owner-тесты. Без научно корректных входов
-   нельзя выдавать «полный CLI» через web.
+1. Довести научную приёмку своих входов `erosion`/`all` и `calibrate-cerc`:
+   проверить паспорт времени/CRS/единиц/лицензии, совместимость индексных профилей
+   с неизменённым контуром, отрицательные owner-тесты и ресурсный замер полного
+   ряда. Без этого нельзя объявлять «полный CLI» через web.
 2. `check-full`: отдельный тяжёлый профиль, лимиты памяти/временного диска,
    связка всех паспортов и независимый эталон результата.
 3. `expert-set`/`assess-ml`: модель ролей экспертов и организатора,

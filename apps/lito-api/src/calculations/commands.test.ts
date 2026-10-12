@@ -102,6 +102,39 @@ test("CERC по своим данным принимает только четы
   ]) assert.throws(() => validateCalculation({ kind: "erosion_file", input: bad }));
 });
 
+test("полный волновой ряд по своим входам ограничивает SVG и передаёт серверный бюджет Go", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const ids = { coastlineInputId: id, waveInputId: id, bathymetryInputId: id, bathymetryMetadataInputId: id };
+  const paths = {
+    coastlineInputId: "/job/coast.geojson", waveInputId: "/job/waves.csv",
+    bathymetryInputId: "/job/grid.json", bathymetryMetadataInputId: "/job/grid.metadata.json",
+  };
+  for (const kind of ["erosion_file", "all_file"] as const) {
+    const job = validateCalculation({ kind, input: {
+      ...ids, steps: 0, svgMaxFrames: 64, outputCsv: true, csvFormat: "long",
+    } });
+    const input = job.input;
+    assert.ok(input);
+    assert.equal(input.steps, 0);
+    assert.equal(input.svgMaxFrames, 64);
+    const args = commandArguments(job, "/job/output", undefined, paths, { waveInputId: "Наблюдения" });
+    assert.deepEqual(args.slice(args.indexOf("--svg-max-frames"), args.indexOf("--svg-max-frames") + 6), [
+      "--svg-max-frames", "64", "--max-wave-conditions", "10000", "--max-coast-points", "200",
+    ]);
+    assert.ok(!args.includes("--output-gif"));
+    for (const extra of [
+      { svgMaxFrames: 0 }, { svgMaxFrames: 1 }, { svgMaxFrames: 129 },
+      { svgMaxFrames: "64" }, { svgMaxFrames: 64, outputGif: true },
+      { svgMaxFrames: 64, outputCsv: true, csvFormat: "wide" },
+      { svgMaxFrames: 64, maxWaveConditions: 100000 },
+      { svgMaxFrames: 64, maxCoastPoints: 100000 },
+      { svgMaxFrames: 64, outputPath: "/tmp/foreign" },
+    ]) assert.throws(() => validateCalculation({ kind, input: { ...ids, steps: 0, ...extra } }));
+  }
+  assert.throws(() => validateCalculation({ kind: "erosion", input: { steps: 0, svgMaxFrames: 64 } }));
+  assert.throws(() => validateCalculation({ kind: "all_demo", input: { steps: 0, svgMaxFrames: 64 } }));
+});
+
 test("составной демо-конвейер принимает только числовые параметры и фиксированные экспорты", () => {
   const job = validateCalculation({ kind: "all_demo", input: {
     steps: 12, outputCsv: true, csvFormat: "wide", outputGif: true,

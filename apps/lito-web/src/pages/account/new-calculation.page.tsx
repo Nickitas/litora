@@ -190,6 +190,7 @@ export function NewCalculationDialog({
           if (typeof input.outputGif === "boolean") next.outputGif = input.outputGif;
           if (typeof input.gifFps === "number" && Number.isFinite(input.gifFps)) next.gifFps = input.gifFps;
           if (typeof input.gifSkip === "number" && Number.isFinite(input.gifSkip)) next.gifSkip = input.gifSkip;
+          if (typeof input.svgMaxFrames === "number" && Number.isFinite(input.svgMaxFrames)) next.svgMaxFrames = input.svgMaxFrames;
           return next;
         };
         if (original.kind === "erosion") setErosionOptions(restoreCerc);
@@ -690,18 +691,34 @@ export function NewCalculationDialog({
                   </h3>
                   <div className="mt-4 space-y-2">
                     <Label htmlFor="erosion-steps">
-                      Шаги волнового ряда (1–{kind === "all_demo" ? 24 : 48})
+                      Шаги волнового ряда ({isDemoKind ? "1" : "0"}–{kind === "all_demo" ? 24 : 48}{isDemoKind ? "" : "; 0 — весь ряд"})
                     </Label>
                     <Input
                       id="erosion-steps"
                       type="number"
-                      min={1}
+                      min={isDemoKind ? 1 : 0}
                       max={kind === "all_demo" ? 24 : 48}
                       required
                       value={cercOptions.steps}
-                      onChange={(event) => updateCercOptions({ steps: Number(event.target.value) })}
+                      onChange={(event) => {
+                        const steps = Number(event.target.value);
+                        updateCercOptions(isDemoKind ? { steps } : steps === 0
+                          ? { steps, svgMaxFrames: cercOptions.svgMaxFrames || 64, outputGif: false, csvFormat: "long" }
+                          : { steps, svgMaxFrames: 0 });
+                      }}
                     />
                   </div>
+                  {!isDemoKind && cercOptions.steps === 0 && (
+                    <div className="mt-4 space-y-2 rounded-xl border bg-muted/35 p-4">
+                      <Label htmlFor="erosion-svg-max-frames">Максимум SVG эрозии (2–128)</Label>
+                      <Input id="erosion-svg-max-frames" type="number" min={2} max={128} required
+                        value={cercOptions.svgMaxFrames ?? 64}
+                        onChange={(event) => updateCercOptions({ svgMaxFrames: Number(event.target.value) })} />
+                      <p className="text-xs text-muted-foreground">
+                        Go рассчитает все состояния загруженного ряда и сохранит полный численный JSON. SVG будут выбраны равномерно, включая первый и последний шаг. Лимит запуска — 10 000 состояний и 200 точек берега; GIF и широкий CSV недоступны. Длительный расчёт может превысить время или объём хранилища.
+                      </p>
+                    </div>
+                  )}
                   <Collapsible defaultOpen={Boolean(repeatJobId)} className="mt-5 space-y-3">
                     <CollapsibleTrigger asChild>
                       <Button type="button" variant="outline">Параметры CERC и экспорт</Button>
@@ -749,7 +766,7 @@ export function NewCalculationDialog({
                             <SelectTrigger id="erosion-csv-format"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="long">Long — одна строка на состояние</SelectItem>
-                              <SelectItem value="wide">Wide — столбцы по состояниям</SelectItem>
+                              <SelectItem value="wide" disabled={cercOptions.steps === 0}>Wide — столбцы по состояниям</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -757,7 +774,7 @@ export function NewCalculationDialog({
                       {isCercKind && (
                         <div className="space-y-4 border-t pt-4">
                           <label className="flex min-h-11 items-center gap-3 text-sm">
-                            <input type="checkbox" checked={cercOptions.outputGif}
+                            <input type="checkbox" checked={cercOptions.outputGif} disabled={cercOptions.steps === 0}
                               onChange={(event) => updateCercOptions({ outputGif: event.target.checked })} />
                             Сохранить анимацию GIF
                           </label>

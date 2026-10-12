@@ -220,6 +220,8 @@ type erosionSeriesArtifactMetrics struct {
 	DepthScaleMeters    float64                    `json:"depth_scale_meters,omitempty"`
 	ExposurePower       float64                    `json:"exposure_power,omitempty"`
 	YearsPerStep        float64                    `json:"years_per_step,omitempty"`
+	TotalSnapshots      int                        `json:"total_snapshots,omitempty"`
+	RenderedSVGCount    int                        `json:"rendered_svg_count,omitempty"`
 	Steps               []erosionStepMetrics       `json:"steps"`
 	Highlights          coastlineHighlightsMetrics `json:"highlights"`
 	Validation          validationMetrics          `json:"validation"`

@@ -103,7 +103,11 @@ func writeCoastlineSVG(points, renderPoints []geometry.LatLon, output, defaultNa
 	return nil
 }
 
-func writeErosionSVGSeries(originalBase, modelBase []geometry.LatLon, snapshots [][]geometry.LatLon, steps int, strength float64, seed int64, waveOptions geometry.WaveErosionOptions, output string, ctx exportContext, outputPathManager *OutputPathManager, sedimentResult *geometry.SedimentTransportResult) error {
+func writeErosionSVGSeries(originalBase, modelBase []geometry.LatLon, snapshots [][]geometry.LatLon, steps int, strength float64, seed int64, waveOptions geometry.WaveErosionOptions, output string, ctx exportContext, outputPathManager *OutputPathManager, sedimentResult *geometry.SedimentTransportResult, maxFrames int) error {
+	selectedSteps, err := selectErosionSVGSteps(len(snapshots), maxFrames)
+	if err != nil {
+		return err
+	}
 	ctx.Report = buildReportMetadata(ctx, originalBase, fmt.Sprintf("strength=%.6f|seed=%d|steps=%d|years=%.6f", strength, seed, steps, waveOptions.YearsPerStep))
 	reportKind := "Расчётный отчёт"
 	if ctx.Scenario.ScenarioStatus == geometry.ScenarioStatusDemo {
@@ -127,7 +131,8 @@ func writeErosionSVGSeries(originalBase, modelBase []geometry.LatLon, snapshots 
 	renderSnapshots := make([][]geometry.LatLon, len(snapshots))
 	lengths := make([]float64, len(snapshots))
 	areas := make([]float64, len(snapshots))
-	for i, snap := range snapshots {
+	for _, i := range selectedSteps {
+		snap := snapshots[i]
 		renderSnapshots[i] = simplifyForSeriesSVG(snap).Points
 		lengths[i] = geometry.PolylineLength(snap)
 		areas[i] = geometry.Area(snap)
@@ -142,7 +147,10 @@ func writeErosionSVGSeries(originalBase, modelBase []geometry.LatLon, snapshots 
 
 	erosionChanges := make([][]svgrender.ErosionChangePoint, len(snapshots))
 	maxAbsChange := 0.0
-	for step := 1; step < len(snapshots); step++ {
+	for _, step := range selectedSteps {
+		if step == 0 {
+			continue
+		}
 		erosionChanges[step] = erosionChangePoints(snapshots[step-1], snapshots[step], waveOptions.YearsPerStep)
 		for _, point := range erosionChanges[step] {
 			maxAbsChange = math.Max(maxAbsChange, math.Abs(point.ChangePerUnit))
@@ -156,9 +164,9 @@ func writeErosionSVGSeries(originalBase, modelBase []geometry.LatLon, snapshots 
 		fmt.Printf("🎨 Цветовая шкала эрозии: размыв — красный, накопление — синий, нейтральная зона — серая; максимум %.2f %s\n", maxAbsChange, changeUnit)
 	}
 
-	stepMetrics := make([]erosionStepMetrics, 0, len(snapshots))
+	stepMetrics := make([]erosionStepMetrics, 0, len(selectedSteps))
 
-	for step := 0; step < len(snapshots); step++ {
+	for _, step := range selectedSteps {
 		filename := filepath.Join(outputDir, fmt.Sprintf("%s_%d.svg", "erosion_step", step))
 		layers := makeErosionLayers(referenceRender, referenceSummary.LengthKM, renderSnapshots, lengths, step)
 
@@ -269,12 +277,35 @@ func writeErosionSVGSeries(originalBase, modelBase []geometry.LatLon, snapshots 
 		Validation:          validationMetricsFromData(ctx.Validation, validationSummary),
 		Reproducibility:     reproducibility,
 	}
+	if maxFrames > 0 {
+		seriesMetrics.TotalSnapshots = len(snapshots)
+		seriesMetrics.RenderedSVGCount = len(selectedSteps)
+	}
 
 	if err := writeMetricsJSON(metricsPath, seriesMetrics); err != nil {
 		return err
 	}
 	fmt.Printf("Метрики сохранены: %s\n", metricsPath)
 	return nil
+}
+
+func selectErosionSVGSteps(snapshotCount, maxFrames int) ([]int, error) {
+	if snapshotCount < 1 || maxFrames < 0 || maxFrames == 1 {
+		return nil, fmt.Errorf("число снимков или лимит SVG некорректны")
+	}
+	count := snapshotCount
+	if maxFrames > 0 && count > maxFrames {
+		count = maxFrames
+	}
+	selected := make([]int, count)
+	for index := range selected {
+		if count == 1 {
+			selected[index] = 0
+		} else {
+			selected[index] = index * (snapshotCount - 1) / (count - 1)
+		}
+	}
+	return selected, nil
 }
 
 // erosionChangePoints вычисляет подписанное смещение береговой линии по нормали.
@@ -880,6 +911,12 @@ func WriteDimensionSVG(points []geometry.LatLon, outputPathManager *OutputPathMa
 // WriteErosionSVGSeries создаёт SVG-файлы для каждого шага эрозии и переносит
 // необязательный статус сценария в подписи и JSON-метрики.
 func WriteErosionSVGSeries(originalBase []geometry.LatLon, snapshots [][]geometry.LatLon, steps int, strength float64, seed int64, waveOptions geometry.WaveErosionOptions, outputPathManager *OutputPathManager, dataset, source string, validation coastline.ValidationReport, classifications ...geometry.ScenarioClassification) error {
+	return WriteErosionSVGSeriesWithLimit(originalBase, snapshots, steps, strength, seed, waveOptions, outputPathManager, dataset, source, validation, 0, classifications...)
+}
+
+// WriteErosionSVGSeriesWithLimit сохраняет не более maxFrames SVG, включая
+// исходный и конечный шаги; ноль сохраняет все снимки, как обычный CLI.
+func WriteErosionSVGSeriesWithLimit(originalBase []geometry.LatLon, snapshots [][]geometry.LatLon, steps int, strength float64, seed int64, waveOptions geometry.WaveErosionOptions, outputPathManager *OutputPathManager, dataset, source string, validation coastline.ValidationReport, maxFrames int, classifications ...geometry.ScenarioClassification) error {
 	if len(originalBase) == 0 && len(snapshots) == 0 {
 		return fmt.Errorf("нет данных для рендеринга")
 	}
@@ -895,5 +932,5 @@ func WriteErosionSVGSeries(originalBase []geometry.LatLon, snapshots [][]geometr
 		ctx = withScenarioClassification(ctx, classifications[0])
 	}
 
-	return writeErosionSVGSeries(originalBase, nil, snapshots, steps, strength, seed, waveOptions, "", ctx, outputPathManager, nil)
+	return writeErosionSVGSeries(originalBase, nil, snapshots, steps, strength, seed, waveOptions, "", ctx, outputPathManager, nil, maxFrames)
 }

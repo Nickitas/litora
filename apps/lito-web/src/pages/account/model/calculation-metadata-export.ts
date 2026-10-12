@@ -31,7 +31,7 @@ function knownInput(job: CalculationJobDto) {
   if (job.kind === "dimension" || job.kind === "map") return {};
   if (job.kind === "erosion" || job.kind === "all_demo" || job.kind === "erosion_file" || job.kind === "all_file") {
     const steps = countOrNull(job.input.steps);
-    if (steps === null || steps === 0) return null;
+    if (steps === null || (steps === 0 && job.kind !== "erosion_file" && job.kind !== "all_file")) return null;
     const input: Record<string, string | number | boolean> = { steps };
     for (const key of [
       "breakingIndex", "bermHeight", "closureDepth", "porosity",
@@ -56,6 +56,9 @@ function knownInput(job: CalculationJobDto) {
       if (modelMaxPoints !== null) input.modelMaxPoints = modelMaxPoints;
     }
     if (job.kind === "erosion_file" || job.kind === "all_file") {
+      const svgMaxFrames = countOrNull(job.input.svgMaxFrames);
+      if (steps === 0 && (svgMaxFrames === null || svgMaxFrames < 2 || svgMaxFrames > 128)) return null;
+      if (svgMaxFrames !== null) input.svgMaxFrames = svgMaxFrames;
       for (const field of Object.keys(scientificInputRequirements[job.kind])) {
         const id = job.input[field];
         if (typeof id !== "string" || !uuidPattern.test(id)) return null;

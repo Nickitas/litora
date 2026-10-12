@@ -133,8 +133,23 @@ function validateCercOptions(
     throw new BadRequestException("Формат CSV должен быть long или wide");
   if (input.outputGif !== undefined && typeof input.outputGif !== "boolean")
     throw new BadRequestException("Недопустимый флаг экспорта GIF");
+  const ownFullSeries = defaults.svgMaxFrames !== undefined;
+  const steps = numberIn(input.steps ?? defaults.steps, "Шаги", ownFullSeries ? 0 : 1, maxSteps, true);
+  const svgMaxFrames = ownFullSeries
+    ? numberIn(input.svgMaxFrames ?? defaults.svgMaxFrames, "Число SVG", 0, 128, true)
+    : undefined;
+  if (steps === 0 && (svgMaxFrames === undefined || svgMaxFrames < 2))
+    throw new BadRequestException("Для полного волнового ряда укажите от 2 до 128 SVG");
+  const outputGif = input.outputGif ?? defaults.outputGif;
+  const outputCsv = input.outputCsv ?? defaults.outputCsv;
+  const csvFormat = input.csvFormat ?? defaults.csvFormat;
+  if (steps === 0 && outputGif)
+    throw new BadRequestException("GIF для полного волнового ряда недоступен из-за расхода памяти");
+  if (steps === 0 && outputCsv && csvFormat === "wide")
+    throw new BadRequestException("Для полного волнового ряда используйте длинный CSV");
   return {
-    steps: numberIn(input.steps ?? defaults.steps, "Шаги", 1, maxSteps, true),
+    steps,
+    ...(svgMaxFrames !== undefined ? { svgMaxFrames } : {}),
     breakingIndex: numberIn(input.breakingIndex ?? defaults.breakingIndex, "Индекс разрушения", 0.55, 1.2),
     bermHeight: numberIn(input.bermHeight ?? defaults.bermHeight, "Высота бермы", 0.001, 100),
     closureDepth: numberIn(input.closureDepth ?? defaults.closureDepth, "Глубина замыкания", 0.001, 1000),
@@ -145,9 +160,9 @@ function validateCercOptions(
     maxBathymetryGap: numberIn(input.maxBathymetryGap ?? defaults.maxBathymetryGap, "Радиус батиметрии", 1, 100000),
     leftBoundaryTransport: numberIn(input.leftBoundaryTransport ?? defaults.leftBoundaryTransport, "Левый граничный поток", -1_000_000, 1_000_000),
     rightBoundaryTransport: numberIn(input.rightBoundaryTransport ?? defaults.rightBoundaryTransport, "Правый граничный поток", -1_000_000, 1_000_000),
-    outputCsv: input.outputCsv ?? defaults.outputCsv,
-    csvFormat: input.csvFormat ?? defaults.csvFormat,
-    outputGif: input.outputGif ?? defaults.outputGif,
+    outputCsv,
+    csvFormat,
+    outputGif,
     gifFps: numberIn(input.gifFps ?? defaults.gifFps, "Частота GIF", 1, 30, true),
     gifSkip: numberIn(input.gifSkip ?? defaults.gifSkip, "Пропуск кадров", 1, maxGifSkip, true),
   };
@@ -155,6 +170,11 @@ function validateCercOptions(
 
 function cercArguments(input: Record<string, string | number | boolean | undefined>) {
   return ["--steps", String(input.steps),
+    ...(input.steps === 0 ? [
+      "--svg-max-frames", String(input.svgMaxFrames),
+      "--max-wave-conditions", "10000",
+      "--max-coast-points", "200",
+    ] : []),
     "--breaking-index", String(input.breakingIndex),
     "--berm-height", String(input.bermHeight),
     "--closure-depth", String(input.closureDepth),

@@ -64,11 +64,12 @@ export class CalculationsController {
           properties: {
             steps: {
               type: "integer",
-              minimum: 1,
+              minimum: 0,
               maximum: 48,
-              description: "Для erosion/erosion_file/all_file (1–48) и all_demo (1–24)",
+              description: "Для erosion/all_demo: 1–48/1–24; для erosion_file/all_file: 1–48 либо 0 (весь ряд с ограничениями)",
               default: 3,
             },
+            svgMaxFrames: { type: "integer", minimum: 0, maximum: 128, description: "Только erosion_file/all_file: 0 при обычном расчёте; при steps=0 — 2–128 SVG эрозии, включая первый и последний" },
             breakingIndex: { type: "number", minimum: 0.55, maximum: 1.2, description: "CERC и all: индекс разрушения волн, default 0.78" },
             bermHeight: { type: "number", minimum: 0.001, maximum: 100, description: "erosion: высота бермы, м; default 2" },
             closureDepth: { type: "number", minimum: 0.001, maximum: 1000, description: "erosion: глубина замыкания, м; default 8" },

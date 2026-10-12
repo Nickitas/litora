@@ -184,6 +184,8 @@ export interface CalculationKindDto {
 /** Управляемые параметры CERC; научный расчёт выполняет только Go. */
 export interface CercOptionsDto {
   steps: number;
+  /** Для собственных входов: 0 — все SVG при обычном расчёте. */
+  svgMaxFrames?: number;
   breakingIndex: number;
   bermHeight: number;
   closureDepth: number;
@@ -227,6 +229,7 @@ export const erosionDemoDefaults: CercOptionsDto = {
 export const erosionFileDefaults: CercOptionsDto = {
   ...erosionDemoDefaults,
   maxBathymetryGap: 1500,
+  svgMaxFrames: 0,
 };
 
 /** Общие параметры полного конвейера CLI для демо и собственных входов. */
@@ -250,6 +253,7 @@ export const allFileDefaults: AllOptionsDto = {
   ...allDemoDefaults,
   steps: 3,
   maxBathymetryGap: 1500,
+  svgMaxFrames: 0,
 };
 
 /** Ограниченные параметры физической калибровки; расчёт и научная проверка выполняются в Go. */

@@ -18,6 +18,9 @@ var (
 	allOutput                 string
 	allErosionStrength        float64
 	allSteps                  int
+	allMaxWaveConditions      int
+	allMaxCoastPoints         int
+	allMaxSVGFrames           int
 	allWaveDirection          float64
 	allWindSpeed              float64
 	allFetchSpread            float64
@@ -89,6 +92,9 @@ func init() {
 
 	// Erosion options
 	allCmd.Flags().IntVar(&allSteps, "steps", 0, "ограничить число первых состояний волнового ряда (0 — использовать все)")
+	allCmd.Flags().IntVar(&allMaxWaveConditions, "max-wave-conditions", 0, "предельное число состояний волн до расчёта (0 — без лимита)")
+	allCmd.Flags().IntVar(&allMaxCoastPoints, "max-coast-points", 0, "предельное число точек берега до расчёта (0 — без лимита)")
+	allCmd.Flags().IntVar(&allMaxSVGFrames, "svg-max-frames", 0, "сохранить не более N SVG, включая начальный и конечный шаги (0 — все)")
 	allCmd.Flags().StringVar(&allBathymetry, "bathymetry", "", "путь к JSON батиметрии")
 	allCmd.Flags().Float64Var(&allBathymetryResolution, "bathymetry-resolution", 0, "шаг регулярной батиметрической сетки Чёрного моря в градусах")
 	allCmd.Flags().StringVar(&allWaveInput, "wave-input", "", "путь к волновому ряду наблюдений, реанализа или прогноза в CSV/JSON (обязателен)")
@@ -225,6 +231,9 @@ func runAll(cmd *cobra.Command, args []string) error {
 	if allSteps > 0 && allSteps < len(climate.Conditions) {
 		climate.Conditions = climate.Conditions[:allSteps]
 	}
+	if err := validateCERCResourceLimits(len(climate.Conditions), len(result.Points), allMaxWaveConditions, allMaxCoastPoints, allMaxSVGFrames); err != nil {
+		return err
+	}
 	scenario := classifyLongshoreScenario(allBlackSeaSochi, climate, modelInputs)
 	model, err := geometry.RunLongshoreCERC(modelBase, climate, geometry.LongshoreModelConfig{
 		Scenario:                  scenario,
@@ -277,11 +286,15 @@ func runAll(cmd *cobra.Command, args []string) error {
 	if simulationSteps < 0 {
 		simulationSteps = 0
 	}
-	if err := cli.WriteErosionSVGSeries(result.Points, snapshots, simulationSteps, 0, 0,
-		waveOptions, outputMgr, result.DatasetName, result.Source, result.Validation, model.ScenarioClassification); err != nil {
+	if err := cli.WriteErosionSVGSeriesWithLimit(result.Points, snapshots, simulationSteps, 0, 0,
+		waveOptions, outputMgr, result.DatasetName, result.Source, result.Validation, allMaxSVGFrames, model.ScenarioClassification); err != nil {
 		fmt.Printf("Предупреждение: не удалось создать SVG для эрозии: %v\n", err)
 	}
-	if err := cli.WriteLongshoreModelJSON(model, outputMgr); err != nil {
+	writeModel := cli.WriteLongshoreModelJSON
+	if allSteps == 0 {
+		writeModel = cli.WriteLongshoreModelJSONStreaming
+	}
+	if err := writeModel(model, outputMgr); err != nil {
 		return fmt.Errorf("сохранение баланса наносов: %w", err)
 	}
 	if err := exportErosionArtifacts(outputMgr, snapshots, nil, allOutputCSV, allCSVFormat, allOutputGIF, allGIFFPS, allGIFSkip); err != nil {
