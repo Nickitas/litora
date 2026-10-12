@@ -1144,6 +1144,67 @@ test("пресет рисунков 6–7 задаёт архивный уров
   expect(observed.pageErrors).toEqual([]);
 });
 
+test("QA-03 запускается с пятью входами, сохраняет параметры и повторяется в тёмной мобильной теме", async ({ page }) => {
+  const fullRoles = [
+    "flat_mesh_msh", "mesh_comparison_report_json", "coastline_geojson",
+    "bathymetry_grid_json", "bathymetry_grid_metadata_json",
+  ] as const satisfies ScientificInputRole[];
+  const fullInputs = fullRoles.map((role, index) => ({ ...articleInputs[index], role }));
+  const submissions: { kind: string; input: Record<string, unknown> }[] = [];
+  const created = { ...job, kind: "seabed_check_full", input: {}, inputSchemaVersion: 10 };
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: [{ kind: "seabed_check_full", title: "Проверка полного контура", description: "QA-03" }] };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: fullInputs };
+    if (path === "/api/calculations" && method === "GET") return { body: submissions.length ? [created] : [] };
+    if (path === "/api/calculations" && method === "POST") {
+      submissions.push(body as { kind: string; input: Record<string, unknown> });
+      created.input = submissions.at(-1)?.input ?? {};
+      return { status: 201, body: created };
+    }
+    if (path === `/api/calculations/${job.id}` && method === "GET") return { body: created };
+  });
+  await page.setViewportSize({ width: 360, height: 780 });
+  await openNewCalculation(page, "dark");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await expect(dialog.getByText("Предел входной сетки в вебе — 256 МиБ", { exact: false })).toBeVisible();
+  for (const [index, field] of [
+    "flatMeshInputId", "meshReportInputId", "coastlineInputId",
+    "bathymetryInputId", "bathymetryMetadataInputId",
+  ].entries()) await selectArticleInput(page, field, index);
+  await dialog.locator("#full-targetEdge").fill("900");
+  await dialog.locator("#full-isobaths").fill("20,100,1000");
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  expect(submissions[0]).toEqual({
+    kind: "seabed_check_full",
+    input: {
+      flatMeshInputId: fullInputs[0].id, meshReportInputId: fullInputs[1].id,
+      coastlineInputId: fullInputs[2].id, bathymetryInputId: fullInputs[3].id,
+      bathymetryMetadataInputId: fullInputs[4].id,
+      generator: "frontal-quad", targetEdge: 900, boundaryDetail: 1000,
+      maxSourceDistance: 50000, coastTransition: 0,
+      isobaths: "20,100,1000", verticalExaggeration: 40, controlPoints: true,
+    },
+  });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
+  const passport = JSON.parse(await readFile(await (await downloadPromise).path(), "utf8")) as CalculationMetadataExportV1;
+  expect(passport.calculation.input).toEqual(submissions[0].input);
+  await page.getByRole("link", { name: "Создать на основе" }).click();
+  const repeat = page.getByRole("dialog", { name: "Расчёт на основе" });
+  await expect(repeat.locator("#full-targetEdge")).toHaveValue("900");
+  await expect(repeat.locator("#full-isobaths")).toHaveValue("20,100,1000");
+  await repeat.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect.poll(() => submissions.length).toBe(2);
+  expect(submissions[1]).toEqual(submissions[0]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
 test("форма запускает только сценарий, предложенный API", async ({ page }) => {
   const submissions: unknown[] = [];
   const observed = await mockApi(page, (path, method, body) => {

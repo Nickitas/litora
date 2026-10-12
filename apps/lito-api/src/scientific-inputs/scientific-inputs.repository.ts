@@ -163,7 +163,8 @@ export class ScientificInputsRepository {
          AND (
            (j.kind='source_file' AND
              (a.filename LIKE '%.geojson' OR a.filename LIKE '%.json')) OR
-           (j.kind='mesh' AND a.filename LIKE 'mesh/msh/%.msh') OR
+           (j.kind='mesh' AND (a.filename LIKE 'mesh/msh/%.msh' OR
+             a.filename='mesh/mesh-comparison.json')) OR
            (j.kind='seabed_generate_adaptive' AND
              a.filename='seabed/adaptive/gmsh/black-sea-adaptive.msh') OR
            (j.kind='seabed_build' AND a.filename IN

@@ -5,6 +5,8 @@ import type {
 } from "@litora/contracts";
 
 export const maxScientificInputBytes = 512 * 1024 * 1024;
+export const maxFullBlackSeaMeshBytes = 256 * 1024 * 1024;
+export const maxMeshComparisonReportBytes = 2 * 1024 * 1024;
 export const maxScientificInputsPerUser = 20;
 export const maxScientificInputTotalBytes = 2 * 1024 * 1024 * 1024;
 
@@ -23,6 +25,7 @@ const roles = new Set<ScientificInputRole>([
   "bathymetry_source_json",
   "adaptive_field_csv",
   "adaptive_field_report_json",
+  "mesh_comparison_report_json",
 ]);
 
 function boundedText(
@@ -78,6 +81,8 @@ export function validateScientificInput(body: unknown): CreateScientificInputDto
     if (Number(data.sizeBytes) > 1024 * 1024)
       throw new BadRequestException("Индексный профиль CERC не должен превышать 1 МиБ");
   }
+  if (data.role === "mesh_comparison_report_json" && (!/\.json$/i.test(filename) || Number(data.sizeBytes) > maxMeshComparisonReportBytes))
+    throw new BadRequestException("Отчёт генерации MSH должен быть JSON размером до 2 МиБ");
   const crs = boundedText(data.crs, "CRS", 80);
   const coordinateUnit = boundedText(data.coordinateUnit, "Единицы", 80);
   if (!["EPSG:4326", "LAEA", "not-applicable"].includes(crs))
@@ -91,6 +96,8 @@ export function validateScientificInput(body: unknown): CreateScientificInputDto
   if ((data.role === "longshore_sediment_sources_json" || data.role === "longshore_structures_json") &&
       (crs !== "not-applicable" || coordinateUnit !== "not-applicable"))
     throw new BadRequestException("Для индексного профиля CRS и единицы координат неприменимы");
+  if (data.role === "mesh_comparison_report_json" && (crs !== "not-applicable" || coordinateUnit !== "not-applicable"))
+    throw new BadRequestException("Для отчёта генерации MSH CRS и единицы координат неприменимы");
   return {
     name: boundedText(data.name, "Название", 100),
     role: data.role as ScientificInputRole,

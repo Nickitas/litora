@@ -462,3 +462,39 @@ test("проверка рельефа получает только свои м�
     { ...input, maxNearestDistance: -1 },
   ]) assert.throws(() => validateCalculation({ kind: "seabed_validate", input: bad }));
 });
+
+test("QA-03 получает только пять приватных входов и фиксированные параметры Go", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const input = {
+    flatMeshInputId: id, meshReportInputId: id, coastlineInputId: id,
+    bathymetryInputId: id, bathymetryMetadataInputId: id,
+  };
+  const job = validateCalculation({ kind: "seabed_check_full", input });
+  assert.equal(resourceProfileForKind(job.kind), "heavy");
+  assert.equal(scientificReferences(job).length, 5);
+  assert.equal(validateCalculation({ kind: "seabed_check_full", input: {
+    ...input, isobaths: "20.5,100.25,1000",
+  } }).input?.isobaths, "20.5,100.25,1000");
+  assert.deepEqual(commandArguments(job, "/job/output", undefined, {
+    flatMeshInputId: "/job/flat.msh", meshReportInputId: "/job/mesh.json",
+    coastlineInputId: "/job/contour.geojson", bathymetryInputId: "/job/grid.json",
+    bathymetryMetadataInputId: "/job/grid-metadata.json",
+  }), [
+    "seabed", "check-full", "--mesh", "/job/flat.msh",
+    "--mesh-report", "/job/mesh.json", "--coastline", "/job/contour.geojson",
+    "--bathymetry", "/job/grid.json", "--bathymetry-metadata", "/job/grid-metadata.json",
+    "--generator", "frontal-quad", "--target-edge", "1000", "--boundary-detail", "1000",
+    "--max-source-distance", "50000", "--coast-transition", "0",
+    "--isobaths", "20,50,100,200,500,1000,1500,2000",
+    "--vertical-exaggeration", "40", "--control-points=true",
+    "--max-mesh-mib", "256", "--output", "/job/output",
+  ]);
+  for (const bad of [
+    { ...input, meshReportInputId: "/tmp/report.json" },
+    { ...input, generator: "frontal-quad;sh" },
+    { ...input, targetEdge: -1 },
+    { ...input, isobaths: "20;curl" },
+    { ...input, controlPoints: "false" },
+    { ...input, maxMeshMiB: 8192 },
+  ]) assert.throws(() => validateCalculation({ kind: "seabed_check_full", input: bad }));
+});

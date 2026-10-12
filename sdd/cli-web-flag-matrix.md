@@ -21,7 +21,7 @@
 | `seabed generate-adaptive` | `--input`, `--metadata`, `--field`, `--field-report`, `--coastline`, `--boundary-detail`, `--generator`, `--max-cells`, `--allow-large`, `--generator-timeout` | `--gmsh`, `--output`, `--manifest` | — |
 | `seabed compare-adaptive` | `--input`, `--metadata`, `--field`, `--field-report`, `--coastline`, `--boundary-detail`, `--detail-preset`, `--generators`, `--levels`, `--max-cells`, `--allow-large`, `--generator-timeout` | `--gmsh`, `--output`, `--manifest` | — |
 | `seabed validate` | `--input`, `--metadata`, `--reference`, `--reference-metadata`, `--reference-passport`, `--size-field`, `--size-field-report`, `--isobaths`, `--worst-cells`, `--max-nearest-distance` | `--output`, `--manifest` | — |
-| `seabed check-full` | — | — | `--bathymetry`, `--bathymetry-metadata`, `--boundary-detail`, `--coast-transition`, `--coastline`, `--control-points`, `--generator`, `--isobaths`, `--max-source-distance`, `--mesh`, `--mesh-report`, `--target-edge`, `--vertical-exaggeration`, `--output`, `--manifest` |
+| `seabed check-full` | `--bathymetry`, `--bathymetry-metadata`, `--boundary-detail`, `--coast-transition`, `--coastline`, `--control-points`, `--generator`, `--isobaths`, `--max-source-distance`, `--mesh`, `--mesh-report`, `--target-edge`, `--vertical-exaggeration` | `--max-mesh-mib=256`, `--output`, `--manifest` | Безлимитная MSH (CLI допускает `--max-mesh-mib=0`); ресурсная и научная приёмка полного набора открыта |
 | `seabed expert-set` | — | — | `--comparison`, `--levels`, `--seed`, `--output`, `--manifest` |
 | `seabed assess-ml` | — | — | `--min-evaluation`, `--min-experts-per-card`, `--min-rmse-improvement`, `--min-training`, `--organizer-key`, `--ratings`, `--ridge-lambda`, `--output`, `--manifest` |
 | `erosion` | Демо Сочи и свои входы (`erosion_file`): `--input`, `--wave-input`, `--bathymetry`, `--steps` (1–48, для своих также 0 с лимитами), `--breaking-index`, `--berm-height`, `--closure-depth`, `--porosity`, `--cerc-coefficient`, `--offshore-sample-distance`, `--max-shoreline-change`, `--max-bathymetry-gap`, `--left-boundary-transport`, `--right-boundary-transport`, `--output-csv`, `--csv-format`, `--output-gif`, `--gif-fps`, `--gif-skip`; по своим входам также `--sediment-sources`, `--structures`, `--svg-max-frames` | Демо: `--black-sea-sochi`, `--offline`; свой ряд: `--wave-source` из паспорта загрузки; при `steps=0`: `--max-wave-conditions=10000`, `--max-coast-points=200`; всем: `--output`, `--manifest` | `--bathymetry-resolution` без паспорта, профили для демо; `--source-url`, `--refresh`; GIF и широкий CSV для полного ряда |
@@ -41,8 +41,8 @@
    проверить паспорт времени/CRS/единиц/лицензии, совместимость индексных профилей
    с неизменённым контуром, отрицательные owner-тесты и ресурсный замер полного
    ряда. Без этого нельзя объявлять «полный CLI» через web.
-2. `check-full`: отдельный тяжёлый профиль, лимиты памяти/временного диска,
-   связка всех паспортов и независимый эталон результата.
+2. `check-full`: после локального подключения сценария измерить RAM, время и
+   временный диск на полном наборе; сверить паспорта и независимый эталон.
 3. `expert-set`/`assess-ml`: модель ролей экспертов и организатора,
    приватный `organizer-key`, хранение оценок и отсутствие утечки в артефактах.
 4. `source-url`/`refresh` и `full-black-sea`: отдельная политика сетевых

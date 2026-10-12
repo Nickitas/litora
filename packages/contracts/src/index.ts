@@ -170,7 +170,8 @@ export type CalculationKind =
   | "seabed_adapt"
   | "seabed_generate_adaptive"
   | "seabed_validate"
-  | "seabed_compare_adaptive";
+  | "seabed_compare_adaptive"
+  | "seabed_check_full";
 export interface CreateCalculationDto {
   kind: CalculationKind;
   input?: Record<string, string | number | boolean | undefined>;
@@ -330,7 +331,8 @@ export type ScientificInputRole =
   | "export_metadata_json"
   | "bathymetry_source_json"
   | "adaptive_field_csv"
-  | "adaptive_field_report_json";
+  | "adaptive_field_report_json"
+  | "mesh_comparison_report_json";
 
 const ownCercInputRequirements = {
   coastlineInputId: "coastline_geojson",
@@ -387,6 +389,13 @@ export const scientificInputRequirements = {
     fieldCsvInputId: "adaptive_field_csv",
     fieldReportInputId: "adaptive_field_report_json",
     coastlineInputId: "coastline_geojson",
+  },
+  seabed_check_full: {
+    flatMeshInputId: "flat_mesh_msh",
+    meshReportInputId: "mesh_comparison_report_json",
+    coastlineInputId: "coastline_geojson",
+    bathymetryInputId: "bathymetry_grid_json",
+    bathymetryMetadataInputId: "bathymetry_grid_metadata_json",
   },
 } as const satisfies Partial<Record<CalculationKind, Record<string, ScientificInputRole>>>;
 

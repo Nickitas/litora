@@ -24,6 +24,7 @@ const expected = {
   seabed_generate_adaptive: { command: "lito seabed generate-adaptive", id: null },
   seabed_validate: { command: "lito seabed validate", id: null },
   seabed_compare_adaptive: { command: "lito seabed compare-adaptive", id: null },
+  seabed_check_full: { command: "lito seabed check-full", id: null },
 } satisfies Record<CalculationKind, { command: string; id: string | null }>;
 
 export function resultMethodFromManifest(

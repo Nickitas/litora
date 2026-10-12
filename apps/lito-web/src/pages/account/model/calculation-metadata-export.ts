@@ -113,6 +113,7 @@ function knownInput(job: CalculationJobDto) {
       ],
       seabed_generate_adaptive: ["generator", "boundaryDetail", "maxCells", "allowLarge", "generatorTimeoutMinutes"],
       seabed_validate: ["isobaths", "worstCells", "maxNearestDistance"],
+      seabed_check_full: ["generator", "targetEdge", "boundaryDetail", "maxSourceDistance", "coastTransition", "isobaths", "verticalExaggeration", "controlPoints"],
       seabed_compare_adaptive: [
         "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "detailPreset",
         "maxCells", "allowLarge", "generatorTimeoutMinutes",

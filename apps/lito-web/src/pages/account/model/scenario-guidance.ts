@@ -121,6 +121,11 @@ export const scenarioGuidance = {
     limitation: "Межпродуктовый контроль не равен независимой научной аттестации; вывод зависит от разрешения и вертикальной неопределённости эталона.",
     reference: { label: "О проверке рельефа", href: "/docs/reference/seabed-scientific-guide.md" },
   },
+  seabed_check_full: {
+    source: "Плоская MSH полного Чёрного моря и отчёт того же запуска mesh с SHA-256; тот же полный GeoJSON-контур, проверенный JSON батиметрии и его паспорт.",
+    limitation: "Go выполняет QA-03, экспортирует модель и строит карты. Для переноса между заданиями старый отчёт mesh без SHA-256 непригоден. Принятие QA-03 не означает независимую научную аттестацию; веб ограничивает входную MSH 256 МиБ.",
+    reference: { label: "О проверке полного контура", href: "/docs/reference/full-black-sea-quality.md" },
+  },
   seabed_compare_adaptive: {
     source: "Модель дна, паспорт экспорта, CSV/JSON поля ADAPT-01 и полный GeoJSON-контур.",
     limitation: "Расчёт может занять часы и создать несколько гигабайт MSH. Запуск требует выделенного worker с Gmsh.",

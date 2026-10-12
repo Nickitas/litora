@@ -122,7 +122,7 @@ export class DatasetResponse implements DatasetDto {
 export class ScientificInputResponse implements ScientificInputDto {
   @ApiProperty({ type: String, format: "uuid" }) id!: string;
   @ApiProperty({ type: String }) name!: string;
-  @ApiProperty({ type: String, enum: ["coastline_geojson", "wave_climate", "shoreline_observations_json", "longshore_sediment_sources_json", "longshore_structures_json", "flat_mesh_msh", "seabed_msh", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "relief_reference_passport_json", "export_metadata_json", "bathymetry_source_json", "adaptive_field_csv", "adaptive_field_report_json"] })
+  @ApiProperty({ type: String, enum: ["coastline_geojson", "wave_climate", "shoreline_observations_json", "longshore_sediment_sources_json", "longshore_structures_json", "flat_mesh_msh", "seabed_msh", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "relief_reference_passport_json", "export_metadata_json", "bathymetry_source_json", "adaptive_field_csv", "adaptive_field_report_json", "mesh_comparison_report_json"] })
   role!: ScientificInputRole;
   @ApiProperty({ type: String }) filename!: string;
   @ApiProperty({ type: Number }) sizeBytes!: number;

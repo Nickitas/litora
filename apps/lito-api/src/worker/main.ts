@@ -45,6 +45,7 @@ import { cleanupPartialArtifacts } from "./partial-artifacts.js";
 import { isScientificRejection } from "./scientific-rejection.js";
 import { stageErosionBathymetry } from "./erosion-inputs.js";
 import { auditableCommandLine, redactExecutionLog } from "./command-line.js";
+import { assertFullBlackSeaStagingLimit } from "./full-black-sea-inputs.js";
 
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
@@ -175,6 +176,7 @@ async function run(job: JobRow) {
       const file = await scientificInputs.resolveOwnedSource(
         reference.id, job.user_id, reference.role, storage.bucket,
       );
+      assertFullBlackSeaStagingLimit(job.kind, reference.field, reference.role, Number(file.size_bytes));
       scientificInputBytes += Number(file.size_bytes);
       if (scientificInputBytes > maxReusableArtifactTotalBytes)
         throw new Error("Суммарный размер научных входов превышает 4 ГиБ");

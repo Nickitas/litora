@@ -12,6 +12,7 @@ test("worker принимает опубликованные версии схе
   assert.doesNotThrow(() => assertSupportedInputSchemaVersion(7));
   assert.doesNotThrow(() => assertSupportedInputSchemaVersion(8));
   assert.doesNotThrow(() => assertSupportedInputSchemaVersion(9));
-  for (const version of [null, 0, 10, -1])
+  assert.doesNotThrow(() => assertSupportedInputSchemaVersion(10));
+  for (const version of [null, 0, 11, -1])
     assert.throws(() => assertSupportedInputSchemaVersion(version));
 });

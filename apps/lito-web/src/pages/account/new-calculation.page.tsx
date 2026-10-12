@@ -106,6 +106,12 @@ export function NewCalculationDialog({
   const [validationIsobaths, setValidationIsobaths] = useState("20,200,1000,2000");
   const [worstCells, setWorstCells] = useState(20);
   const [maxNearestDistance, setMaxNearestDistance] = useState(0);
+  const [fullOptions, setFullOptions] = useState({
+    generator: "frontal-quad", targetEdge: 1000, boundaryDetail: 1000,
+    maxSourceDistance: 50000, coastTransition: 0,
+    isobaths: "20,50,100,200,500,1000,1500,2000",
+    verticalExaggeration: 40, controlPoints: true,
+  });
   const [compareLevels, setCompareLevels] = useState("detailed:125:250");
   const [boundaryDetail, setBoundaryDetail] = useState(50);
   const [generators, setGenerators] = useState("delaunay,frontal-quad");
@@ -272,6 +278,19 @@ export function NewCalculationDialog({
         number("worstCells", setWorstCells);
         number("maxNearestDistance", setMaxNearestDistance);
         break;
+      case "seabed_check_full":
+        setFullOptions((current) => {
+          const next = { ...current };
+          for (const key of ["targetEdge", "boundaryDetail", "maxSourceDistance", "coastTransition", "verticalExaggeration"] as const) {
+            const value = input[key];
+            if (typeof value === "number" && Number.isFinite(value)) next[key] = value;
+          }
+          if (input.generator === "delaunay" || input.generator === "frontal-quad" || input.generator === "parallelograms") next.generator = input.generator;
+          if (typeof input.isobaths === "string") next.isobaths = input.isobaths;
+          if (typeof input.controlPoints === "boolean") next.controlPoints = input.controlPoints;
+          return next;
+        });
+        break;
       case "seabed_compare_adaptive":
         string("levels", setCompareLevels);
         number("boundaryDetail", setBoundaryDetail);
@@ -424,6 +443,7 @@ export function NewCalculationDialog({
           ...(kind === "seabed_validate" ? {
             isobaths: validationIsobaths, worstCells, maxNearestDistance,
           } : {}),
+          ...(kind === "seabed_check_full" ? fullOptions : {}),
           ...(kind === "seabed_compare_adaptive" ? {
             boundaryDetail, generators, levels: compareLevels, detailPreset,
             maxCells, allowLarge, generatorTimeoutMinutes,
@@ -1212,6 +1232,51 @@ export function NewCalculationDialog({
                         value={maxNearestDistance} onChange={(event) => setMaxNearestDistance(Number(event.target.value))} />
                     </div>
                   </div>
+                </section>
+              )}
+              {kind === "seabed_check_full" && (
+                <section className="space-y-4 border-t pt-6" aria-label="Параметры проверки полного контура">
+                  <h3 className="text-lg font-semibold">3. Проверка полного контура и рисунки</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Выберите MSH и отчёт одного запуска «Построить плоскую сетку». Отчёт должен содержать SHA-256 этой MSH; старый отчёт без контрольной суммы не переносится между заданиями. Предел входной сетки в вебе — 256 МиБ.
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="full-generator">Генератор контрольной сетки</Label>
+                    <Select value={fullOptions.generator} onValueChange={(value) => setFullOptions((current) => ({ ...current, generator: value }))}>
+                      <SelectTrigger id="full-generator"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="delaunay">Delaunay</SelectItem>
+                        <SelectItem value="frontal-quad">Frontal-Delaunay for Quads</SelectItem>
+                        <SelectItem value="parallelograms">Упаковка параллелограммов</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {([
+                      ["targetEdge", "Контрольное ребро, м", 10, 10000],
+                      ["boundaryDetail", "Детализация берега, м", 10, 10000],
+                      ["maxSourceDistance", "Предел поиска глубины, м", 100, 100000],
+                      ["coastTransition", "Переход к береговому нулю, м (0 — автоматически)", 0, 100000],
+                      ["verticalExaggeration", "Вертикальное преувеличение 3D", 1, 200],
+                    ] as const).map(([key, label, min, max]) => (
+                      <div key={key} className="space-y-2">
+                        <Label htmlFor={`full-${key}`}>{label}</Label>
+                        <Input id={`full-${key}`} type="number" min={min} max={max} step="any" required
+                          value={fullOptions[key]}
+                          onChange={(event) => setFullOptions((current) => ({ ...current, [key]: Number(event.target.value) }))} />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="full-isobaths">Глубины изобат, м (через запятую)</Label>
+                    <Input id="full-isobaths" value={fullOptions.isobaths} required
+                      onChange={(event) => setFullOptions((current) => ({ ...current, isobaths: event.target.value }))} />
+                  </div>
+                  <label className="flex min-h-11 items-center gap-3 text-sm">
+                    <input type="checkbox" checked={fullOptions.controlPoints}
+                      onChange={(event) => setFullOptions((current) => ({ ...current, controlPoints: event.target.checked }))} />
+                    Показывать контрольные точки на 3D-поверхности
+                  </label>
                 </section>
               )}
               {kind === "seabed_compare_adaptive" && (

@@ -29,6 +29,7 @@ export const calculationKinds: CalculationKindDto[] = [
   { kind: "seabed_generate_adaptive", title: "Построить адаптивную сетку", description: "Gmsh создаёт фактическую full-quad MSH из поля размера ADAPT-01." },
   { kind: "seabed_validate", title: "Проверить модель дна", description: "Сравнение с отдельной опорной моделью: глубины, изобаты, уклоны и размеры." },
   { kind: "seabed_compare_adaptive", title: "Сравнение генераторов сетки", description: "Сравнение Gmsh на общем поле и контуре; MSH, SVG и отчёты. Тяжёлый расчёт." },
+  { kind: "seabed_check_full", title: "Проверка полного контура Чёрного моря", description: "QA-03 по проверенной плоской MSH, отчёту генерации, контуру и батиметрии; не публикационная аттестация." },
 ];
 
 export const scientificInputFields = scientificInputRequirements;
@@ -118,6 +119,13 @@ function comparisonLevels(value: unknown) {
       throw new BadRequestException("Уровни: уникальные id:min:max, 10–10000 м и min < max");
     ids.add(parts[1]);
   }
+  return value;
+}
+
+function isobathList(value: unknown): string {
+  if (typeof value !== "string" || !/^[0-9]{1,5}(\.[0-9]{1,3})?(,[0-9]{1,5}(\.[0-9]{1,3})?){0,15}$/.test(value) ||
+      value.split(",").some((item) => Number(item) <= 0 || Number(item) > 10000))
+    throw new BadRequestException("Изобаты: до 16 глубин больше 0 и не более 10000 м через запятую");
   return value;
 }
 
@@ -344,11 +352,7 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
     case "seabed_render": {
       const fields = scientificInputFields.seabed_render;
       rejectUnknown(p, [...Object.keys(fields), "isobaths", "verticalExaggeration", "controlPoints"]);
-      const isobaths = p.isobaths ?? "20,50,100,200,500,1000,1500,2000";
-      if (typeof isobaths !== "string" || !/^[0-9]{1,4}(,[0-9]{1,4}){0,15}$/.test(isobaths))
-        throw new BadRequestException("Изобаты: до 16 положительных глубин через запятую");
-      if (isobaths.split(",").some((value) => Number(value) <= 0))
-        throw new BadRequestException("Глубины изобат должны быть положительными");
+      const isobaths = isobathList(p.isobaths ?? "20,50,100,200,500,1000,1500,2000");
       if (p.controlPoints !== undefined && typeof p.controlPoints !== "boolean")
         throw new BadRequestException("Недопустимый параметр контрольных точек");
       return { kind: "seabed_render", input: {
@@ -398,10 +402,7 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
     case "seabed_validate": {
       const fields = scientificInputFields.seabed_validate;
       rejectUnknown(p, [...Object.keys(fields), "isobaths", "worstCells", "maxNearestDistance"]);
-      const isobaths = p.isobaths ?? "20,200,1000,2000";
-      if (typeof isobaths !== "string" || !/^[0-9]{1,4}(,[0-9]{1,4}){0,15}$/.test(isobaths) ||
-          isobaths.split(",").some((value) => Number(value) <= 0))
-        throw new BadRequestException("Изобаты: до 16 положительных глубин через запятую");
+      const isobaths = isobathList(p.isobaths ?? "20,200,1000,2000");
       return { kind: "seabed_validate", input: {
         ...references(p, fields), isobaths,
         worstCells: numberIn(p.worstCells ?? 20, "Число худших ячеек", 1, 1000, true),
@@ -428,6 +429,25 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
         maxCells: numberIn(p.maxCells ?? 25_000_000, "Лимит ячеек", 1000, 25_000_000, true),
         allowLarge: p.allowLarge ?? false,
         generatorTimeoutMinutes: numberIn(p.generatorTimeoutMinutes ?? 20, "Время Gmsh", 1, 120, true),
+      } };
+    }
+    case "seabed_check_full": {
+      const fields = scientificInputFields.seabed_check_full;
+      rejectUnknown(p, [...Object.keys(fields), "generator", "targetEdge", "boundaryDetail", "maxSourceDistance", "coastTransition", "isobaths", "verticalExaggeration", "controlPoints"]);
+      const generator = p.generator ?? "frontal-quad";
+      if (generator !== "delaunay" && generator !== "frontal-quad" && generator !== "parallelograms")
+        throw new BadRequestException("Недопустимый генератор контрольной сетки");
+      if (p.controlPoints !== undefined && typeof p.controlPoints !== "boolean")
+        throw new BadRequestException("Недопустимый параметр контрольных точек");
+      return { kind: "seabed_check_full", input: {
+        ...references(p, fields), generator,
+        targetEdge: numberIn(p.targetEdge ?? 1000, "Контрольное ребро", 10, 10000),
+        boundaryDetail: numberIn(p.boundaryDetail ?? 1000, "Детализация берега", 10, 10000),
+        maxSourceDistance: numberIn(p.maxSourceDistance ?? 50000, "Поиск батиметрии", 100, 100000),
+        coastTransition: numberIn(p.coastTransition ?? 0, "Переход у берега", 0, 100000),
+        isobaths: isobathList(p.isobaths ?? "20,50,100,200,500,1000,1500,2000"),
+        verticalExaggeration: numberIn(p.verticalExaggeration ?? 40, "Вертикальное преувеличение", 1, 200),
+        controlPoints: p.controlPoints ?? true,
       } };
     }
   }
@@ -586,5 +606,20 @@ export function commandArguments(
         "--generator-timeout", `${input.generatorTimeoutMinutes}m`,
         "--detail-preset", String(input.detailPreset),
         "--output", output];
+    case "seabed_check_full":
+      return ["seabed", "check-full", "--mesh", required("flatMeshInputId"),
+        "--mesh-report", required("meshReportInputId"),
+        "--coastline", required("coastlineInputId"),
+        "--bathymetry", required("bathymetryInputId"),
+        "--bathymetry-metadata", required("bathymetryMetadataInputId"),
+        "--generator", String(input.generator),
+        "--target-edge", String(input.targetEdge),
+        "--boundary-detail", String(input.boundaryDetail),
+        "--max-source-distance", String(input.maxSourceDistance),
+        "--coast-transition", String(input.coastTransition),
+        "--isobaths", String(input.isobaths),
+        "--vertical-exaggeration", String(input.verticalExaggeration),
+        `--control-points=${String(input.controlPoints)}`,
+        "--max-mesh-mib", "256", "--output", output];
   }
 }

@@ -6,6 +6,7 @@ import { reusableArtifactRole } from "./reusable-artifacts.js";
 
 test("только известные результаты Go становятся входами подходящей роли", () => {
   assert.equal(reusableArtifactRole("mesh", "mesh/msh/black-sea-edge-1000-detail-1000-frontal-quad.msh"), "flat_mesh_msh");
+  assert.equal(reusableArtifactRole("mesh", "mesh/mesh-comparison.json"), "mesh_comparison_report_json");
   assert.equal(reusableArtifactRole("seabed_generate_adaptive", "seabed/adaptive/gmsh/black-sea-adaptive.msh"), "flat_mesh_msh");
   assert.equal(reusableArtifactRole("seabed_build", "seabed/black-sea-depth.msh"), "seabed_msh");
   assert.equal(reusableArtifactRole("seabed_build", "seabed/export-metadata.json"), "export_metadata_json");
@@ -15,6 +16,7 @@ test("только известные результаты Go становятс
   assert.equal(reusableArtifactRole("source_file", "black-sea-20261006-030000.json"), "coastline_geojson");
   for (const [kind, path] of [
     ["mesh", "mesh/msh/../../secret.msh"],
+    ["seabed_compare_adaptive", "mesh/mesh-comparison.json"],
     ["seabed_generate_adaptive", "seabed/adaptive/gmsh/../black-sea-adaptive.msh"],
     ["seabed_compare_adaptive", "seabed/adaptive/gmsh/black-sea-adaptive.msh"],
     ["seabed_build", "seabed/build-report.json"],

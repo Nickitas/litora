@@ -26,7 +26,7 @@ func TestSeabedFullCommandExposesReproducibleInputs(t *testing.T) {
 	for _, flag := range []string{
 		"mesh", "mesh-report", "coastline", "bathymetry", "bathymetry-metadata", "output",
 		"generator", "target-edge", "boundary-detail", "max-source-distance", "coast-transition",
-		"isobaths", "vertical-exaggeration", "control-points",
+		"isobaths", "vertical-exaggeration", "control-points", "max-mesh-mib",
 	} {
 		if command.Flags().Lookup(flag) == nil {
 			t.Fatalf("команда seabed check-full не содержит флаг --%s", flag)
@@ -150,6 +150,63 @@ func TestExecuteFullBlackSeaRunCreatesAuditableBundle(t *testing.T) {
 	}
 	if len(report.Resources.Stages) < 6 || report.Resources.DurationSeconds <= 0 || len(report.Inputs) != 5 {
 		t.Fatalf("ресурсный журнал или входы неполны: resources=%+v inputs=%+v", report.Resources, report.Inputs)
+	}
+}
+
+func TestFullMeshPassportAcceptsRelocationOnlyWithMatchingSHA256(t *testing.T) {
+	directory := t.TempDir()
+	original := filepath.Join(directory, "original.msh")
+	staged := filepath.Join(directory, "staged.msh")
+	if err := os.WriteFile(original, []byte("проверяемая MSH"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staged, []byte("проверяемая MSH"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	checksum, err := fileSHA256(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportPath := filepath.Join(directory, "mesh-comparison.json")
+	report := meshComparisonReport{
+		SchemaVersion: "lito-mesh-comparison/v1", DatasetName: "Black Sea",
+		Levels: []meshLevelReport{{TargetEdgeMeters: 100, BoundaryDetailMeters: 100,
+			Results: []meshRunReport{{Algorithm: mesh2d.AlgorithmFrontalQuad, MeshFile: original, MeshSHA256: checksum}}}},
+	}
+	writeTestJSON(t, reportPath, report)
+	options := fullRunOptions{MeshPath: staged, MeshReportPath: reportPath,
+		Generator: mesh2d.AlgorithmFrontalQuad, TargetEdgeM: 100, BoundaryDetailM: 100}
+	if _, _, err := readFullMeshPassport(options); err != nil {
+		t.Fatalf("переносимая MSH отклонена: %v", err)
+	}
+	if err := os.WriteFile(staged, []byte("изменённая MSH"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readFullMeshPassport(options); err == nil || !strings.Contains(err.Error(), "SHA-256 MSH") {
+		t.Fatalf("изменённая MSH должна быть отклонена: %v", err)
+	}
+	report.Levels[0].Results[0].MeshSHA256 = ""
+	writeTestJSON(t, reportPath, report)
+	if _, _, err := readFullMeshPassport(options); err == nil || !strings.Contains(err.Error(), "не допускает перенос") {
+		t.Fatalf("старый отчёт без SHA не должен переноситься: %v", err)
+	}
+}
+
+func TestFullRunRejectsOversizedMeshBeforeReading(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "oversized.msh")
+	if err := os.WriteFile(path, make([]byte, 1024*1024+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := executeFullBlackSeaRun(fullRunOptions{
+		MeshPath: path, MeshReportPath: "missing.json", CoastlinePath: "missing.geojson",
+		BathymetryPath: "missing-bathymetry.json", BathymetryMetadata: "missing-metadata.json",
+		OutputDirectory: filepath.Join(directory, "output"), Generator: mesh2d.AlgorithmFrontalQuad,
+		TargetEdgeM: 100, BoundaryDetailM: 100, MaxSourceDistanceM: 500,
+		IsobathsM: []float64{5}, VerticalScale: 10, MaxMeshMiB: 1,
+	})
+	if err == nil || !strings.Contains(err.Error(), "превышает лимит 1 МиБ") {
+		t.Fatalf("ожидался отказ до разбора MSH: %v", err)
 	}
 }
 

@@ -7,6 +7,7 @@ export const scientificRoleLabels: Record<ScientificInputRole, string> = {
   longshore_sediment_sources_json: "Источники и стоки наносов по точкам (JSON)",
   longshore_structures_json: "Сооружения между соседними точками (JSON)",
   flat_mesh_msh: "Плоская расчётная сетка MSH",
+  mesh_comparison_report_json: "Отчёт генерации плоской сетки (JSON)",
   seabed_msh: "Батиметрическая модель MSH",
   bathymetry_grid_json: "Проверенный набор батиметрии (JSON)",
   bathymetry_grid_metadata_json: "Паспорт набора батиметрии (JSON)",

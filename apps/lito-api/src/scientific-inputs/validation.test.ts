@@ -64,3 +64,14 @@ test("индексные профили CERC принимают только JSO
     ]) assert.throws(() => validateScientificInput(bad));
   }
 });
+
+test("отчёт генерации MSH принимает только JSON до 2 МиБ без CRS", () => {
+  const report = { ...valid, role: "mesh_comparison_report_json", filename: "mesh-comparison.json",
+    crs: "not-applicable", coordinateUnit: "not-applicable" };
+  assert.deepEqual(validateScientificInput(report), report);
+  for (const bad of [
+    { ...report, filename: "mesh-comparison.csv" },
+    { ...report, sizeBytes: 2 * 1024 * 1024 + 1 },
+    { ...report, crs: "LAEA" },
+  ]) assert.throws(() => validateScientificInput(bad));
+});

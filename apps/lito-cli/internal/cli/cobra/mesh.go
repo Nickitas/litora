@@ -101,6 +101,7 @@ type meshRunReport struct {
 	Metrics         mesh2d.QualityMetrics `json:"metrics"`
 	GeoFile         string                `json:"geo_file"`
 	MeshFile        string                `json:"mesh_file,omitempty"`
+	MeshSHA256      string                `json:"mesh_sha256,omitempty"`
 	SVGFile         string                `json:"svg_file,omitempty"`
 	LogFile         string                `json:"log_file"`
 }
@@ -215,6 +216,10 @@ func runMesh(_ *cobra.Command, _ []string) error {
 				continue
 			}
 			metrics := mesh2d.EvaluateQuality(prepared, generated, edgeMeters)
+			meshSHA256, checksumErr := fileSHA256(mshPath)
+			if checksumErr != nil {
+				return checksumErr
+			}
 			if err := svgrender.DrawMeshReportSVG(prepared, generated, metrics, svgrender.MeshReportOptions{
 				DatasetName: polygon.DatasetName, Source: polygon.Source, Algorithm: algorithm,
 				TargetEdgeMeters: edgeMeters, BoundaryDetailMeters: detailMeters, EffectiveBoundaryDetailMeters: prepared.EffectiveBoundaryToleranceMeters, FullMeshPath: mshPath,
@@ -222,7 +227,7 @@ func runMesh(_ *cobra.Command, _ []string) error {
 			}, svgPath); err != nil {
 				return fmt.Errorf("SVG сетки %s: %w", algorithm, err)
 			}
-			level.Results = append(level.Results, meshRunReport{Algorithm: algorithm, DurationSeconds: durationSeconds, Metrics: metrics, GeoFile: geoPath, MeshFile: mshPath, SVGFile: svgPath, LogFile: logPath})
+			level.Results = append(level.Results, meshRunReport{Algorithm: algorithm, DurationSeconds: durationSeconds, Metrics: metrics, GeoFile: geoPath, MeshFile: mshPath, MeshSHA256: meshSHA256, SVGFile: svgPath, LogFile: logPath})
 			fmt.Printf("    %d ячеек; четырёхугольники %.2f%%; Σ|ΔS| %.3f км²; оценка %.2f/100\n", metrics.CellCount, metrics.QuadSharePercent, metrics.CumulativeFeatureAreaDeviationKM2, metrics.CompositeScore)
 		}
 		sort.SliceStable(level.Results, func(left, right int) bool {

@@ -36,6 +36,7 @@ var (
 	seabedFullIsobaths           string
 	seabedFullVerticalScale      float64
 	seabedFullControlPoints      bool
+	seabedFullMaxMeshMiB         int
 )
 
 var seabedFullCmd = &cobra.Command{
@@ -73,6 +74,7 @@ func init() {
 	seabedFullCmd.Flags().StringVar(&seabedFullIsobaths, "isobaths", "20,50,100,200,500,1000,1500,2000", "глубины изобат в метрах через запятую")
 	seabedFullCmd.Flags().Float64Var(&seabedFullVerticalScale, "vertical-exaggeration", 40, "вертикальное преувеличение 3D-вида")
 	seabedFullCmd.Flags().BoolVar(&seabedFullControlPoints, "control-points", true, "показывать узловые выборки на 3D-виде")
+	seabedFullCmd.Flags().IntVar(&seabedFullMaxMeshMiB, "max-mesh-mib", 0, "предельный размер входной MSH до чтения, МиБ (0 — без лимита)")
 }
 
 type fullRunOptions struct {
@@ -92,6 +94,7 @@ type fullRunOptions struct {
 	ControlPoints      bool
 	QualityConfig      *seabed.FullBlackSeaQualityConfig
 	SkipVisualizations bool
+	MaxMeshMiB         int
 }
 
 func runSeabedFull(_ *cobra.Command, _ []string) error {
@@ -110,6 +113,7 @@ func runSeabedFull(_ *cobra.Command, _ []string) error {
 		Generator: generator, TargetEdgeM: seabedFullTargetEdge, BoundaryDetailM: seabedFullBoundaryDetail,
 		MaxSourceDistanceM: seabedFullMaxSourceDistance, CoastTransitionM: seabedFullCoastTransition,
 		IsobathsM: isobaths, VerticalScale: seabedFullVerticalScale, ControlPoints: seabedFullControlPoints,
+		MaxMeshMiB: seabedFullMaxMeshMiB,
 	}
 	report, err := executeFullBlackSeaRun(options)
 	if report.SchemaVersion != "" && !quiet {
@@ -121,6 +125,15 @@ func runSeabedFull(_ *cobra.Command, _ []string) error {
 func executeFullBlackSeaRun(options fullRunOptions) (seabed.FullBlackSeaQualityReport, error) {
 	if err := validateFullRunOptions(options); err != nil {
 		return seabed.FullBlackSeaQualityReport{}, err
+	}
+	if options.MaxMeshMiB > 0 {
+		info, err := os.Stat(options.MeshPath)
+		if err != nil {
+			return seabed.FullBlackSeaQualityReport{}, fmt.Errorf("размер входной MSH: %w", err)
+		}
+		if info.Size() > int64(options.MaxMeshMiB)*1024*1024 {
+			return seabed.FullBlackSeaQualityReport{}, fmt.Errorf("входная MSH превышает лимит %d МиБ", options.MaxMeshMiB)
+		}
 	}
 	tracker := newFullRunResourceTracker()
 	defer tracker.closeIfRunning()
@@ -310,6 +323,9 @@ func validateFullRunOptions(options fullRunOptions) error {
 	if len(options.IsobathsM) == 0 && !options.SkipVisualizations {
 		return fmt.Errorf("нужно задать хотя бы одну изобату")
 	}
+	if options.MaxMeshMiB < 0 || options.MaxMeshMiB > 8192 {
+		return fmt.Errorf("--max-mesh-mib должен быть от 0 до 8192")
+	}
 	return nil
 }
 
@@ -340,8 +356,21 @@ func readFullMeshPassport(options fullRunOptions) (meshComparisonReport, meshRun
 			if err != nil {
 				return meshComparisonReport{}, meshRunReport{}, err
 			}
-			if !same {
-				return meshComparisonReport{}, meshRunReport{}, fmt.Errorf("--mesh не совпадает с MSH выбранного запуска в mesh-report")
+			if run.MeshSHA256 == "" {
+				if !same {
+					return meshComparisonReport{}, meshRunReport{}, fmt.Errorf("mesh-report без SHA-256 не допускает перенос MSH в другой каталог")
+				}
+			} else {
+				if len(run.MeshSHA256) != 64 {
+					return meshComparisonReport{}, meshRunReport{}, fmt.Errorf("mesh-report содержит некорректный SHA-256 MSH")
+				}
+				actual, hashErr := fileSHA256(options.MeshPath)
+				if hashErr != nil {
+					return meshComparisonReport{}, meshRunReport{}, hashErr
+				}
+				if !strings.EqualFold(actual, run.MeshSHA256) {
+					return meshComparisonReport{}, meshRunReport{}, fmt.Errorf("SHA-256 MSH не совпадает с mesh-report")
+				}
 			}
 			return report, run, nil
 		}

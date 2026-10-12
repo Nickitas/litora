@@ -26,13 +26,15 @@ test("PostgreSQL: повторный научный вход принадлеж�
     const succeededJob = randomUUID();
     const failedJob = randomUUID();
     const adaptiveJob = randomUUID();
+    const meshJob = randomUUID();
     await database.query(
-      "INSERT INTO calculation_jobs(id,user_id,kind,status) VALUES($1,$2,'seabed_build','succeeded'),($3,$2,'seabed_build','failed'),($4,$2,'seabed_generate_adaptive','succeeded')",
-      [succeededJob, users[0], failedJob, adaptiveJob],
+      "INSERT INTO calculation_jobs(id,user_id,kind,status) VALUES($1,$2,'seabed_build','succeeded'),($3,$2,'seabed_build','failed'),($4,$2,'seabed_generate_adaptive','succeeded'),($5,$2,'mesh','succeeded')",
+      [succeededJob, users[0], failedJob, adaptiveJob, meshJob],
     );
     const ownArtifact = randomUUID();
     const failedArtifact = randomUUID();
     const adaptiveArtifact = randomUUID();
+    const meshReportArtifact = randomUUID();
     await database.query(
       `INSERT INTO calculation_artifacts(id,job_id,filename,bucket,object_key,size_bytes,sha256)
        VALUES($1,$2,'seabed/black-sea-depth.msh','private-test-bucket',$3,210000000,$4),
@@ -43,6 +45,11 @@ test("PostgreSQL: повторный научный вход принадлеж�
         `users/${failedJob}/seabed/black-sea-depth.msh`,
         adaptiveArtifact, adaptiveJob, `users/${adaptiveJob}/seabed/adaptive/gmsh/black-sea-adaptive.msh`],
     );
+    await database.query(
+      `INSERT INTO calculation_artifacts(id,job_id,filename,bucket,object_key,size_bytes,sha256)
+       VALUES($1,$2,'mesh/mesh-comparison.json','private-test-bucket',$3,2048,$4)`,
+      [meshReportArtifact, meshJob, `users/${meshJob}/mesh/mesh-comparison.json`, "b".repeat(64)],
+    );
     const source = await repository.resolveOwnedSource(
       ownArtifact, users[0], "seabed_msh", "private-test-bucket",
     );
@@ -52,8 +59,12 @@ test("PostgreSQL: повторный научный вход принадлеж�
       adaptiveArtifact, users[0], "flat_mesh_msh", "private-test-bucket",
     );
     assert.equal(adaptiveSource.source_job_id, adaptiveJob);
+    const meshReportSource = await repository.resolveOwnedSource(
+      meshReportArtifact, users[0], "mesh_comparison_report_json", "private-test-bucket",
+    );
+    assert.equal(meshReportSource.source_job_id, meshJob);
     const available = await repository.listReusableArtifacts(users[0], "private-test-bucket");
-    assert.deepEqual(available.map((item) => item.id).sort(), [ownArtifact, adaptiveArtifact].sort());
+    assert.deepEqual(available.map((item) => item.id).sort(), [ownArtifact, adaptiveArtifact, meshReportArtifact].sort());
     assert.deepEqual(await repository.listReusableArtifacts(users[1], "private-test-bucket"), []);
     for (const [id, owner, role, bucket] of [
       [ownArtifact, users[1], "seabed_msh", "private-test-bucket"],
@@ -62,6 +73,8 @@ test("PostgreSQL: повторный научный вход принадлеж�
       [adaptiveArtifact, users[1], "flat_mesh_msh", "private-test-bucket"],
       [adaptiveArtifact, users[0], "seabed_msh", "private-test-bucket"],
       [ownArtifact, users[0], "seabed_msh", "other-bucket"],
+      [meshReportArtifact, users[1], "mesh_comparison_report_json", "private-test-bucket"],
+      [meshReportArtifact, users[0], "flat_mesh_msh", "private-test-bucket"],
     ] as const) {
       await assert.rejects(repository.resolveOwnedSource(id, owner, role, bucket));
     }
