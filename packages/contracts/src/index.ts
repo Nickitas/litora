@@ -287,6 +287,19 @@ export const cercCalibrationDefaults: Omit<CercCalibrationOptionsDto, "bathymetr
   rightBoundaryTransport: 0,
 };
 
+/** Дополнительный экспертный набор AI-01 для принятого сравнения ADAPT-03. */
+export interface ExpertSetOptionsDto {
+  generateExpertSet: boolean;
+  expertLevels: string;
+  expertSeed: string;
+}
+
+export const expertSetDefaults: ExpertSetOptionsDto = {
+  generateExpertSet: false,
+  expertLevels: "",
+  expertSeed: "ai-01-black-sea-2026",
+};
+
 export interface GeoJsonLineStringDto {
   type: "LineString";
   coordinates: [number, number][];

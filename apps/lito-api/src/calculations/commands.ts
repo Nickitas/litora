@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
 import type {
   CalculationKind,
   CalculationKindDto,
@@ -120,6 +120,29 @@ function comparisonLevels(value: unknown) {
     ids.add(parts[1]);
   }
   return value;
+}
+
+function expertOptions(input: Record<string, unknown>, levels: string, generators: string) {
+  if (input.generateExpertSet !== undefined && typeof input.generateExpertSet !== "boolean")
+    throw new BadRequestException("Недопустимый флаг экспертных карточек");
+  if (input.generateExpertSet !== true) {
+    if (input.expertLevels !== undefined || input.expertSeed !== undefined)
+      throw new BadRequestException("Параметры AI-01 требуют включить экспертные карточки");
+    return { generateExpertSet: false };
+  }
+  if (generators.split(",").length < 2)
+    throw new BadRequestException("Для экспертных карточек нужны минимум два генератора");
+  const selected = input.expertLevels ?? expertSetDefaults.expertLevels;
+  if (typeof selected !== "string" || (selected !== "" && !/^[a-z][a-z0-9_-]{0,31}(,[a-z][a-z0-9_-]{0,31}){0,3}$/.test(selected)))
+    throw new BadRequestException("Недопустимый список уровней AI-01");
+  const available = new Set(levels.split(",").map((level) => level.split(":")[0]));
+  const selectedIds = selected === "" ? [] : selected.split(",");
+  if (new Set(selectedIds).size !== selectedIds.length || selectedIds.some((id) => !available.has(id)))
+    throw new BadRequestException("Уровни AI-01 должны быть уникальными уровнями сравнения");
+  const seed = input.expertSeed ?? expertSetDefaults.expertSeed;
+  if (typeof seed !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(seed))
+    throw new BadRequestException("Строка анонимизации AI-01: 1–80 латинских букв, цифр, - или _");
+  return { generateExpertSet: true, expertLevels: selected, expertSeed: seed };
 }
 
 function isobathList(value: unknown): string {
@@ -411,7 +434,7 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
     }
     case "seabed_compare_adaptive": {
       const fields = scientificInputFields.seabed_compare_adaptive;
-      rejectUnknown(p, [...Object.keys(fields), "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "maxCells", "allowLarge", "generatorTimeoutMinutes", "detailPreset"]);
+      rejectUnknown(p, [...Object.keys(fields), "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "maxCells", "allowLarge", "generatorTimeoutMinutes", "detailPreset", "generateExpertSet", "expertLevels", "expertSeed"]);
       const generators = generatorList(p.generators ?? "delaunay,frontal-quad");
       const detailPreset = p.detailPreset ?? "kizilirmak";
       if (detailPreset !== "none" && detailPreset !== "kizilirmak")
@@ -422,10 +445,11 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
         throw new BadRequestException("Укажите либо список уровней, либо один диапазон");
       const levels = comparisonLevels(p.levels ??
         `detailed:${numberIn(p.levelMin ?? 125, "Минимальный размер", 10, 10000)}:${numberIn(p.levelMax ?? 250, "Максимальный размер", 10, 10000)}`);
+      const expert = expertOptions(p, levels, generators);
       return { kind: "seabed_compare_adaptive", input: {
         ...references(p, fields),
         boundaryDetail: numberIn(p.boundaryDetail ?? 50, "Детализация берега", 10, 10000),
-        generators, levels, detailPreset,
+        generators, levels, detailPreset, ...expert,
         maxCells: numberIn(p.maxCells ?? 25_000_000, "Лимит ячеек", 1000, 25_000_000, true),
         allowLarge: p.allowLarge ?? false,
         generatorTimeoutMinutes: numberIn(p.generatorTimeoutMinutes ?? 20, "Время Gmsh", 1, 120, true),
@@ -605,6 +629,7 @@ export function commandArguments(
         ...(input.allowLarge ? ["--allow-large"] : []),
         "--generator-timeout", `${input.generatorTimeoutMinutes}m`,
         "--detail-preset", String(input.detailPreset),
+        ...(input.generateExpertSet ? ["--expert-set", "--expert-levels", String(input.expertLevels), "--expert-seed", String(input.expertSeed)] : []),
         "--output", output];
     case "seabed_check_full":
       return ["seabed", "check-full", "--mesh", required("flatMeshInputId"),

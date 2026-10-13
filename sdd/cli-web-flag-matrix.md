@@ -1,6 +1,6 @@
 # Матрица флагов CLI → Web/API
 
-Актуально на 12.10.2026 по `lito <команда> --help` и текущему коду. «Форма»
+Актуально на 13.10.2026 по `lito <команда> --help` и текущему коду. «Форма»
 означает параметр или выбор своего файла в ЛК; «worker» — фиксированное значение
 на сервере. «Нет» — паритета нет, даже если команда с таким именем уже доступна.
 Флаги перечислены без сокращения; опции, скрытые Cobra и не показанные `--help`,
@@ -19,10 +19,10 @@
 | `seabed render` | `--input`, `--metadata`, `--source-metadata`, `--isobaths`, `--vertical-exaggeration`, `--control-points` | `--output`, `--manifest` | `--source` |
 | `seabed adapt` | `--input`, `--source-metadata`, `--min-size`, `--coast-size`, `--shelf-size`, `--deep-size`, `--coast-influence`, `--curvature-reference`, `--slope-reference`, `--flat-deep-slope`, `--max-neighbour-ratio`, `--max-size-gradient` | `--output`, `--manifest` | `--source` |
 | `seabed generate-adaptive` | `--input`, `--metadata`, `--field`, `--field-report`, `--coastline`, `--boundary-detail`, `--generator`, `--max-cells`, `--allow-large`, `--generator-timeout` | `--gmsh`, `--output`, `--manifest` | — |
-| `seabed compare-adaptive` | `--input`, `--metadata`, `--field`, `--field-report`, `--coastline`, `--boundary-detail`, `--detail-preset`, `--generators`, `--levels`, `--max-cells`, `--allow-large`, `--generator-timeout` | `--gmsh`, `--output`, `--manifest` | — |
+| `seabed compare-adaptive` | `--input`, `--metadata`, `--field`, `--field-report`, `--coastline`, `--boundary-detail`, `--detail-preset`, `--generators`, `--levels`, `--max-cells`, `--allow-large`, `--generator-timeout`, `--expert-set`, `--expert-levels`, `--expert-seed` | `--gmsh`, `--output`, `--manifest` | — |
 | `seabed validate` | `--input`, `--metadata`, `--reference`, `--reference-metadata`, `--reference-passport`, `--size-field`, `--size-field-report`, `--isobaths`, `--worst-cells`, `--max-nearest-distance` | `--output`, `--manifest` | — |
 | `seabed check-full` | `--bathymetry`, `--bathymetry-metadata`, `--boundary-detail`, `--coast-transition`, `--coastline`, `--control-points`, `--generator`, `--isobaths`, `--max-source-distance`, `--mesh`, `--mesh-report`, `--target-edge`, `--vertical-exaggeration` | `--max-mesh-mib=256`, `--output`, `--manifest` | Безлимитная MSH (CLI допускает `--max-mesh-mib=0`); ресурсная и научная приёмка полного набора открыта |
-| `seabed expert-set` | — | — | `--comparison`, `--levels`, `--seed`, `--output`, `--manifest` |
+| `seabed expert-set` | Карточки через опцию AI-01 в `seabed_compare_adaptive`; уровни и seed | Отчёт сравнения и пути из того же задания | Отдельный запуск по старому отчёту (`--comparison`, `--levels`, `--seed`, `--output`, `--manifest`) |
 | `seabed assess-ml` | — | — | `--min-evaluation`, `--min-experts-per-card`, `--min-rmse-improvement`, `--min-training`, `--organizer-key`, `--ratings`, `--ridge-lambda`, `--output`, `--manifest` |
 | `erosion` | Демо Сочи и свои входы (`erosion_file`): `--input`, `--wave-input`, `--bathymetry`, `--steps` (1–48, для своих также 0 с лимитами), `--breaking-index`, `--berm-height`, `--closure-depth`, `--porosity`, `--cerc-coefficient`, `--offshore-sample-distance`, `--max-shoreline-change`, `--max-bathymetry-gap`, `--left-boundary-transport`, `--right-boundary-transport`, `--output-csv`, `--csv-format`, `--output-gif`, `--gif-fps`, `--gif-skip`; по своим входам также `--sediment-sources`, `--structures`, `--svg-max-frames` | Демо: `--black-sea-sochi`, `--offline`; свой ряд: `--wave-source` из паспорта загрузки; при `steps=0`: `--max-wave-conditions=10000`, `--max-coast-points=200`; всем: `--output`, `--manifest` | `--bathymetry-resolution` без паспорта, профили для демо; `--source-url`, `--refresh`; GIF и широкий CSV для полного ряда |
 | `calibrate-cerc` | `calibrate_cerc`: `--input`, `--wave-input`, `--bathymetry`, `--bathymetry-resolution`, `--observations`, `--cerc-coefficients`, `--max-observation-distance`, `--min-wave-hours` (не меньше 8766 ч), `--breaking-index`, `--berm-height`, `--closure-depth`, `--porosity`, `--offshore-sample-distance`, `--max-bathymetry-gap`, `--left-boundary-transport`, `--right-boundary-transport`, `--sediment-sources`, `--structures` | `--wave-source` из паспорта загрузки; `--output`, `--manifest` | короткий `--min-wave-hours` только CLI |
@@ -43,8 +43,10 @@
    ряда. Без этого нельзя объявлять «полный CLI» через web.
 2. `check-full`: после локального подключения сценария измерить RAM, время и
    временный диск на полном наборе; сверить паспорта и независимый эталон.
-3. `expert-set`/`assess-ml`: модель ролей экспертов и организатора,
-   приватный `organizer-key`, хранение оценок и отсутствие утечки в артефактах.
+3. `expert-set`/`assess-ml`: карточки AI-01 уже создаются внутри того же
+   `seabed_compare_adaptive`; отдельный запуск по старому отчёту, модель ролей
+   экспертов и организатора, импорт/хранение оценок и AI-02 пока отсутствуют.
+   `organizer-key` доступен только владельцу задания и не должен передаваться экспертам.
 4. `source-url`/`refresh` и `full-black-sea`: отдельная политика сетевых
    источников с защитой DNS/IP/redirect и лицензий либо заранее одобренные
    версии данных; не прокидывать URL из формы в CLI.

@@ -46,6 +46,7 @@ import { isScientificRejection } from "./scientific-rejection.js";
 import { stageErosionBathymetry } from "./erosion-inputs.js";
 import { auditableCommandLine, redactExecutionLog } from "./command-line.js";
 import { assertFullBlackSeaStagingLimit } from "./full-black-sea-inputs.js";
+import { includeJsonMetric } from "./output-metrics.js";
 
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
@@ -321,7 +322,7 @@ async function run(job: JobRow) {
         sha256: digest,
       });
       totalBytes += info.size;
-      if (path.endsWith(".json") && info.size <= 128_000) {
+      if (includeJsonMetric(filename, info.size)) {
         try {
           metrics[basename(path)] = JSON.parse(await readFile(path, "utf8"));
         } catch {

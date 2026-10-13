@@ -1115,6 +1115,10 @@ test("пресет рисунков 6–7 задаёт архивный уров
   await expect(dialog.getByRole("status")).toContainText("Большой расчёт не разрешён автоматически");
   await expect(dialog.getByText("значительных ресурсов", { exact: false })).toBeVisible();
   await expect(dialog.locator("#compare-levels")).toHaveValue("coarse:125:250");
+  await dialog.getByRole("checkbox", { name: "Подготовить экспертные SVG-карточки AI-01" }).check();
+  await expect(dialog.getByText("Закрытый ключ организатора", { exact: false })).toBeVisible();
+  await dialog.locator("#expert-levels").fill("coarse");
+  await dialog.locator("#expert-seed").fill("article_2026");
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
   await selectArticleInput(page, "modelInputId", 0);
   await selectArticleInput(page, "exportMetadataInputId", 2);
@@ -1138,8 +1142,55 @@ test("пресет рисунков 6–7 задаёт архивный уров
       maxCells: 25_000_000,
       allowLarge: false,
       generatorTimeoutMinutes: 20,
+      generateExpertSet: true,
+      expertLevels: "coarse",
+      expertSeed: "article_2026",
     },
   });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("AI-01 сохраняется в паспорте и восстанавливается при повторе сравнения", async ({ page }) => {
+  const storedInput = {
+    modelInputId: articleInputs[0].id, exportMetadataInputId: articleInputs[2].id,
+    fieldCsvInputId: articleInputs[3].id, fieldReportInputId: articleInputs[4].id,
+    coastlineInputId: articleInputs[5].id, boundaryDetail: 50,
+    generators: "delaunay,frontal-quad", levels: "coarse:125:250",
+    detailPreset: "kizilirmak", maxCells: 25_000_000, allowLarge: false,
+    generatorTimeoutMinutes: 20, generateExpertSet: true,
+    expertLevels: "coarse", expertSeed: "study_2026",
+  };
+  const stored = { ...job, kind: "seabed_compare_adaptive", status: "succeeded" as const,
+    input: storedInput, inputSchemaVersion: 11 };
+  const submissions: unknown[] = [];
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: [{ kind: "seabed_compare_adaptive", title: "Сравнение сеток", description: "ADAPT-03" }] };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: articleInputs };
+    if (path === "/api/calculations" && method === "GET") return { body: [stored] };
+    if (path === `/api/calculations/${job.id}` && method === "GET") return { body: stored };
+    if (path === "/api/calculations" && method === "POST") {
+      submissions.push(body);
+      return { status: 201, body: stored };
+    }
+  });
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto(`/account/calculations/${job.id}`);
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
+  const passport = JSON.parse(await readFile(await (await downloadPromise).path(), "utf8")) as CalculationMetadataExportV1;
+  expect(passport.calculation.input).toEqual(storedInput);
+  await page.getByRole("link", { name: "Создать на основе" }).click();
+  const repeat = page.getByRole("dialog", { name: "Расчёт на основе" });
+  await expect(repeat.getByRole("checkbox", { name: "Подготовить экспертные SVG-карточки AI-01" })).toBeChecked();
+  await expect(repeat.locator("#expert-levels")).toHaveValue("coarse");
+  await expect(repeat.locator("#expert-seed")).toHaveValue("study_2026");
+  await repeat.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  expect(submissions[0]).toEqual({ kind: "seabed_compare_adaptive", input: storedInput });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });

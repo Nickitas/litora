@@ -35,6 +35,9 @@ var (
 	seabedAdaptiveCompareAllowLarge     bool
 	seabedAdaptiveCompareTimeout        time.Duration
 	seabedAdaptiveCompareDetailPreset   string
+	seabedAdaptiveCompareExpertSet      bool
+	seabedAdaptiveCompareExpertLevels   string
+	seabedAdaptiveCompareExpertSeed     string
 )
 
 var seabedAdaptiveCompareCmd = &cobra.Command{
@@ -64,6 +67,9 @@ func init() {
 	seabedAdaptiveCompareCmd.Flags().BoolVar(&seabedAdaptiveCompareAllowLarge, "allow-large", false, "разрешить уровень сверх --max-cells после проверки ресурсов")
 	seabedAdaptiveCompareCmd.Flags().DurationVar(&seabedAdaptiveCompareTimeout, "generator-timeout", 10*time.Minute, "лимит времени одного запуска Gmsh")
 	seabedAdaptiveCompareCmd.Flags().StringVar(&seabedAdaptiveCompareDetailPreset, "detail-preset", "none", "подробное окно SVG: none или kizilirmak")
+	seabedAdaptiveCompareCmd.Flags().BoolVar(&seabedAdaptiveCompareExpertSet, "expert-set", false, "после принятого сравнения подготовить карточки AI-01")
+	seabedAdaptiveCompareCmd.Flags().StringVar(&seabedAdaptiveCompareExpertLevels, "expert-levels", "", "уровни для AI-01 через запятую; пусто — все")
+	seabedAdaptiveCompareCmd.Flags().StringVar(&seabedAdaptiveCompareExpertSeed, "expert-seed", "ai-01-black-sea-2026", "строка анонимизации карточек AI-01")
 }
 
 func runSeabedAdaptiveCompare(_ *cobra.Command, _ []string) error {
@@ -301,6 +307,21 @@ func runSeabedAdaptiveCompare(_ *cobra.Command, _ []string) error {
 	}
 	if !report.Accepted {
 		return fmt.Errorf("ADAPT-03 завершён с непринятыми уровнями; причины сохранены в %s", jsonPath)
+	}
+	if seabedAdaptiveCompareExpertSet {
+		result, err := executeSeabedExpertSet(expertSetOptions{
+			ComparisonPath: jsonPath,
+			OutputRoot:     seabedAdaptiveCompareOutput,
+			Levels:         seabedAdaptiveCompareExpertLevels,
+			Seed:           seabedAdaptiveCompareExpertSeed,
+			Fragments:      adaptivemodel.DefaultExpertFragments(),
+		})
+		if err != nil {
+			return fmt.Errorf("подготовка экспертных карточек AI-01: %w", err)
+		}
+		if !quiet {
+			fmt.Printf("Экспертный набор AI-01: %d карточек; каталог %s\n", len(result.manifest.Cards), result.directory)
+		}
 	}
 	return nil
 }

@@ -116,7 +116,7 @@ function knownInput(job: CalculationJobDto) {
       seabed_check_full: ["generator", "targetEdge", "boundaryDetail", "maxSourceDistance", "coastTransition", "isobaths", "verticalExaggeration", "controlPoints"],
       seabed_compare_adaptive: [
         "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "detailPreset",
-        "maxCells", "allowLarge", "generatorTimeoutMinutes",
+        "maxCells", "allowLarge", "generatorTimeoutMinutes", "generateExpertSet", "expertLevels", "expertSeed",
       ],
       calibrate_cerc: [
         "bathymetryResolution", "cercCoefficients", "maxObservationDistance", "minWaveHours",

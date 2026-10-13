@@ -433,6 +433,42 @@ test("сравнение Gmsh ограничивает алгоритмы, ра�
   assert.throws(() => validateCalculation({ kind: "seabed_generate_adaptive", input: { ...input, generator: "../bin/sh" } }));
 });
 
+test("AI-01 добавляется только к сравнению и получает ограниченные уровни и seed", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const ids = {
+    modelInputId: id, exportMetadataInputId: id, fieldCsvInputId: id,
+    fieldReportInputId: id, coastlineInputId: id,
+  };
+  const job = validateCalculation({ kind: "seabed_compare_adaptive", input: {
+    ...ids, levels: "detailed:125:250,coarse:500:1000", generateExpertSet: true,
+    expertLevels: "coarse", expertSeed: "study_2026-01",
+  } });
+  assert.equal(job.input?.generateExpertSet, true);
+  assert.equal(job.input?.expertLevels, "coarse");
+  const paths = {
+    modelInputId: "/job/model.msh", exportMetadataInputId: "/job/export.json",
+    fieldCsvInputId: "/job/field.csv", fieldReportInputId: "/job/field.json",
+    coastlineInputId: "/job/coast.geojson",
+  };
+  const args = commandArguments(job, "/job/output", undefined, paths);
+  assert.deepEqual(args.slice(args.indexOf("--expert-set"), args.indexOf("--output")), [
+    "--expert-set", "--expert-levels", "coarse", "--expert-seed", "study_2026-01",
+  ]);
+  const ordinary = validateCalculation({ kind: "seabed_compare_adaptive", input: ids });
+  assert.equal(ordinary.input?.generateExpertSet, false);
+  assert.ok(!commandArguments(ordinary, "/job/output", undefined, paths).includes("--expert-set"));
+  for (const invalid of [
+    { expertLevels: "coarse" },
+    { generateExpertSet: "true" },
+    { generateExpertSet: true, expertLevels: "unknown" },
+    { generateExpertSet: true, expertLevels: "detailed,detailed" },
+    { generateExpertSet: true, expertLevels: "../../etc" },
+    { generateExpertSet: true, expertSeed: "../secret" },
+    { generateExpertSet: true, expertSeed: "" },
+    { generateExpertSet: true, generators: "delaunay" },
+  ]) assert.throws(() => validateCalculation({ kind: "seabed_compare_adaptive", input: { ...ids, ...invalid } }));
+});
+
 test("проверка рельефа получает только свои модели и опорный паспорт", () => {
   const id = "33333333-3333-4333-8333-333333333333";
   const input = {

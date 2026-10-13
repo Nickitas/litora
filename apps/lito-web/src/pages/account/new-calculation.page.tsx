@@ -8,11 +8,12 @@ import type {
   DatasetDto,
   CercOptionsDto,
   CercCalibrationOptionsDto,
+  ExpertSetOptionsDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
+import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 import { ArrowUpRight, Database, FilePlus2, X } from "lucide-react";
 import { api } from "@/shared/api/client";
@@ -119,6 +120,7 @@ export function NewCalculationDialog({
   const [maxCells, setMaxCells] = useState(25_000_000);
   const [generatorTimeoutMinutes, setGeneratorTimeoutMinutes] = useState(20);
   const [allowLarge, setAllowLarge] = useState(false);
+  const [expertOptions, setExpertOptions] = useState<ExpertSetOptionsDto>(expertSetDefaults);
   const [articlePresetApplied, setArticlePresetApplied] = useState<"adapt" | "compare" | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -299,6 +301,11 @@ export function NewCalculationDialog({
         number("maxCells", setMaxCells);
         number("generatorTimeoutMinutes", setGeneratorTimeoutMinutes);
         boolean("allowLarge", setAllowLarge);
+        setExpertOptions({
+          generateExpertSet: input.generateExpertSet === true,
+          expertLevels: typeof input.expertLevels === "string" ? input.expertLevels : expertSetDefaults.expertLevels,
+          expertSeed: typeof input.expertSeed === "string" ? input.expertSeed : expertSetDefaults.expertSeed,
+        });
         break;
     }
   }, []);
@@ -447,6 +454,11 @@ export function NewCalculationDialog({
           ...(kind === "seabed_compare_adaptive" ? {
             boundaryDetail, generators, levels: compareLevels, detailPreset,
             maxCells, allowLarge, generatorTimeoutMinutes,
+            generateExpertSet: expertOptions.generateExpertSet,
+            ...(expertOptions.generateExpertSet ? {
+              expertLevels: expertOptions.expertLevels,
+              expertSeed: expertOptions.expertSeed,
+            } : {}),
           } : {}),
         },
       });
@@ -1364,6 +1376,32 @@ export function NewCalculationDialog({
                       }} />
                     Разрешить расчёт сверх лимита оценки ячеек после проверки ресурсов
                   </label>
+                  <div className="space-y-3 rounded-xl border bg-muted/35 p-4">
+                    <label className="flex min-h-11 items-center gap-3 text-sm">
+                      <input type="checkbox" checked={expertOptions.generateExpertSet}
+                        onChange={(event) => setExpertOptions((current) => ({ ...current, generateExpertSet: event.target.checked }))} />
+                      Подготовить экспертные SVG-карточки AI-01
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      После принятого сравнения Go создаст слепые карточки, лист оценивания и инструкции. Нужны минимум два успешно завершившихся генератора на каждом выбранном уровне.
+                    </p>
+                    {expertOptions.generateExpertSet && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="expert-levels">Уровни для карточек (ID через запятую)</Label>
+                          <Input id="expert-levels" value={expertOptions.expertLevels} placeholder="Все уровни сравнения"
+                            onChange={(event) => setExpertOptions((current) => ({ ...current, expertLevels: event.target.value }))} />
+                          <p className="text-xs text-muted-foreground">Пусто — все уровни. Используйте ID из списка выше, например detailed.</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="expert-seed">Строка анонимизации карточек</Label>
+                          <Input id="expert-seed" value={expertOptions.expertSeed} required maxLength={80}
+                            onChange={(event) => setExpertOptions((current) => ({ ...current, expertSeed: event.target.value }))} />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Закрытый ключ организатора попадёт только в ваши приватные результаты. Не передавайте его экспертам вместе с карточками.</p>
+                      </div>
+                    )}
+                  </div>
                 </section>
               )}
             </>
