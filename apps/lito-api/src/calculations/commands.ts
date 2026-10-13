@@ -146,6 +146,31 @@ function expertOptions(input: Record<string, unknown>, levels: string, generator
   return { generateExpertSet: true, expertLevels: selected, expertSeed: seed };
 }
 
+function figureFiveOptions(
+  input: Record<string, unknown>, levels: string, generators: string,
+  expert: ReturnType<typeof expertOptions>,
+) {
+  if (input.generateFigureFive !== undefined && typeof input.generateFigureFive !== "boolean")
+    throw new BadRequestException("Недопустимый флаг рисунка 5");
+  if (input.generateFigureFive !== true) {
+    if (input.figureFiveLevel !== undefined || input.figureFiveGenerator !== undefined)
+      throw new BadRequestException("Уровень и генератор рисунка 5 требуют включить его сборку");
+    return { generateFigureFive: false };
+  }
+  if (!expert.generateExpertSet)
+    throw new BadRequestException("Для рисунка 5 нужны экспертные карточки AI-01");
+  const level = input.figureFiveLevel;
+  const generator = input.figureFiveGenerator;
+  const availableLevels = levels.split(",").map((item) => item.split(":")[0]);
+  const selectedExpertLevels = expert.expertLevels ?? "";
+  const expertLevels = selectedExpertLevels === "" ? availableLevels : selectedExpertLevels.split(",");
+  if (typeof level !== "string" || !expertLevels.includes(level))
+    throw new BadRequestException("Уровень рисунка 5 должен входить в уровни AI-01");
+  if (typeof generator !== "string" || !generators.split(",").includes(generator))
+    throw new BadRequestException("Генератор рисунка 5 должен входить в сравнение ADAPT-03");
+  return { generateFigureFive: true, figureFiveLevel: level, figureFiveGenerator: generator };
+}
+
 function isobathList(value: unknown): string {
   if (typeof value !== "string" || !/^[0-9]{1,5}(\.[0-9]{1,3})?(,[0-9]{1,5}(\.[0-9]{1,3})?){0,15}$/.test(value) ||
       value.split(",").some((item) => Number(item) <= 0 || Number(item) > 10000))
@@ -435,7 +460,7 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
     }
     case "seabed_compare_adaptive": {
       const fields = scientificInputFields.seabed_compare_adaptive;
-      rejectUnknown(p, [...Object.keys(fields), "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "maxCells", "allowLarge", "generatorTimeoutMinutes", "detailPreset", "generateExpertSet", "expertLevels", "expertSeed"]);
+      rejectUnknown(p, [...Object.keys(fields), "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "maxCells", "allowLarge", "generatorTimeoutMinutes", "detailPreset", "generateExpertSet", "expertLevels", "expertSeed", "generateFigureFive", "figureFiveLevel", "figureFiveGenerator"]);
       const generators = generatorList(p.generators ?? "delaunay,frontal-quad");
       const detailPreset = p.detailPreset ?? "kizilirmak";
       if (detailPreset !== "none" && detailPreset !== "kizilirmak")
@@ -447,10 +472,11 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
       const levels = comparisonLevels(p.levels ??
         `detailed:${numberIn(p.levelMin ?? 125, "Минимальный размер", 10, 10000)}:${numberIn(p.levelMax ?? 250, "Максимальный размер", 10, 10000)}`);
       const expert = expertOptions(p, levels, generators);
+      const figureFive = figureFiveOptions(p, levels, generators, expert);
       return { kind: "seabed_compare_adaptive", input: {
         ...references(p, fields),
         boundaryDetail: numberIn(p.boundaryDetail ?? 50, "Детализация берега", 10, 10000),
-        generators, levels, detailPreset, ...expert,
+        generators, levels, detailPreset, ...expert, ...figureFive,
         maxCells: numberIn(p.maxCells ?? 25_000_000, "Лимит ячеек", 1000, 25_000_000, true),
         allowLarge: p.allowLarge ?? false,
         generatorTimeoutMinutes: numberIn(p.generatorTimeoutMinutes ?? 20, "Время Gmsh", 1, 120, true),
@@ -643,6 +669,7 @@ export function commandArguments(
         "--generator-timeout", `${input.generatorTimeoutMinutes}m`,
         "--detail-preset", String(input.detailPreset),
         ...(input.generateExpertSet ? ["--expert-set", "--expert-levels", String(input.expertLevels), "--expert-seed", String(input.expertSeed)] : []),
+        ...(input.generateFigureFive ? ["--figure-five", "--figure-five-level", String(input.figureFiveLevel), "--figure-five-generator", String(input.figureFiveGenerator)] : []),
         "--output", output];
     case "seabed_assess_ml":
       return ["seabed", "assess-ml",

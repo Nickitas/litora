@@ -469,6 +469,39 @@ test("AI-01 добавляется только к сравнению и пол�
   ]) assert.throws(() => validateCalculation({ kind: "seabed_compare_adaptive", input: { ...ids, ...invalid } }));
 });
 
+test("рисунок 5 требует AI-01 и карточки выбранных уровня и генератора", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const ids = {
+    modelInputId: id, exportMetadataInputId: id, fieldCsvInputId: id,
+    fieldReportInputId: id, coastlineInputId: id,
+  };
+  const input = {
+    ...ids, levels: "coarse:125:250", generators: "delaunay,frontal-quad",
+    generateExpertSet: true, expertLevels: "coarse", expertSeed: "article_2026",
+    generateFigureFive: true, figureFiveLevel: "coarse", figureFiveGenerator: "delaunay",
+  };
+  const job = validateCalculation({ kind: "seabed_compare_adaptive", input });
+  const paths = {
+    modelInputId: "/job/model.msh", exportMetadataInputId: "/job/export.json",
+    fieldCsvInputId: "/job/field.csv", fieldReportInputId: "/job/field.json",
+    coastlineInputId: "/job/coast.geojson",
+  };
+  const args = commandArguments(job, "/job/output", undefined, paths);
+  assert.deepEqual(args.slice(args.indexOf("--figure-five"), args.indexOf("--output")), [
+    "--figure-five", "--figure-five-level", "coarse", "--figure-five-generator", "delaunay",
+  ]);
+  for (const invalid of [
+    { ...input, generateExpertSet: false, expertLevels: undefined, expertSeed: undefined },
+    { ...input, figureFiveLevel: "unknown" },
+    { ...input, figureFiveGenerator: "parallelograms" },
+    { ...input, figureFiveLevel: "../coarse" },
+    { ...input, figureFiveGenerator: "https://example.test" },
+    { ...input, generateFigureFive: false },
+    { ...input, generateFigureFive: "true" },
+    { ...input, expertLevels: "detailed", levels: "detailed:200:400,coarse:125:250" },
+  ]) assert.throws(() => validateCalculation({ kind: "seabed_compare_adaptive", input: invalid }));
+});
+
 test("AI-02 использует только свои шесть UUID и ограниченные пороги Go", () => {
   const id = "33333333-3333-4333-8333-333333333333";
   const ids = {

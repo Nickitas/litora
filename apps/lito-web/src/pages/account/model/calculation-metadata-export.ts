@@ -117,6 +117,7 @@ function knownInput(job: CalculationJobDto) {
       seabed_compare_adaptive: [
         "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "detailPreset",
         "maxCells", "allowLarge", "generatorTimeoutMinutes", "generateExpertSet", "expertLevels", "expertSeed",
+        "generateFigureFive", "figureFiveLevel", "figureFiveGenerator",
       ],
       seabed_assess_ml: [
         "minExpertsPerCard", "minTraining", "minEvaluation", "ridgeLambda", "minRmseImprovement",

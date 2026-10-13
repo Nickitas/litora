@@ -301,6 +301,19 @@ export const expertSetDefaults: ExpertSetOptionsDto = {
   expertSeed: "ai-01-black-sea-2026",
 };
 
+/** Компоновка рисунка 5 из трёх фактических карточек одного запуска AI-01. */
+export interface FigureFiveOptionsDto {
+  generateFigureFive: boolean;
+  figureFiveLevel: string;
+  figureFiveGenerator: "delaunay" | "frontal-quad" | "parallelograms";
+}
+
+export const figureFiveDefaults: FigureFiveOptionsDto = {
+  generateFigureFive: false,
+  figureFiveLevel: "",
+  figureFiveGenerator: "delaunay",
+};
+
 /** Пороговые параметры проверки необходимости ML; математическая модель остаётся в Go. */
 export interface AINecessityOptionsDto {
   minExpertsPerCard: number;

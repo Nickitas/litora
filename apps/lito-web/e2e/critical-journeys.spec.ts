@@ -1151,6 +1151,74 @@ test("пресет рисунков 6–7 задаёт архивный уров
   expect(observed.pageErrors).toEqual([]);
 });
 
+test("рисунок 5 собирается из AI-01 с выбранными уровнем и генератором", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const observed = await mockArticleCalculations(page, submissions);
+  await page.setViewportSize({ width: 360, height: 780 });
+  await openNewCalculation(page, "dark");
+  await chooseOption(page, "Что рассчитать", "Сравнение сеток");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await dialog.getByRole("button", { name: "Заполнить как рисунок 5: три фрагмента 125–250 м" }).click();
+  await expect(dialog.getByRole("status")).toContainText("Для рисунка 5 выбраны уровень coarse, Delaunay и карточки AI-01");
+  await expect(dialog.getByRole("checkbox", { name: "Подготовить экспертные SVG-карточки AI-01" })).toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: "Собрать рисунок 5 из трёх фактических карточек" })).toBeChecked();
+  await expect(dialog.locator("#figure-five-level")).toHaveValue("coarse");
+  await expect(dialog.locator("#figure-five-generator")).toContainText("delaunay");
+  await expect(dialog.getByRole("checkbox", { name: "Разрешить расчёт сверх лимита оценки ячеек после проверки ресурсов" })).not.toBeChecked();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  for (const [field, index] of [
+    ["modelInputId", 0], ["exportMetadataInputId", 2], ["fieldCsvInputId", 3],
+    ["fieldReportInputId", 4], ["coastlineInputId", 5],
+  ] as const) await selectArticleInput(page, field, index);
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  const submitted = submissions[0] as { kind: string; input: Record<string, unknown> };
+  expect(submitted.kind).toBe("seabed_compare_adaptive");
+  expect(submitted.input).toMatchObject({
+    levels: "coarse:125:250", generators: "delaunay,frontal-quad",
+    generateExpertSet: true, expertLevels: "coarse", generateFigureFive: true,
+    figureFiveLevel: "coarse", figureFiveGenerator: "delaunay", allowLarge: false,
+  });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("рисунок 5 отображается как приватный SVG-артефакт расчёта", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  const filename = "fig_05_actual_mesh_fragments.svg";
+  const figureJob = {
+    ...job,
+    kind: "seabed_compare_adaptive",
+    status: "succeeded" as const,
+    artifacts: [{
+      id: "77777777-7777-4777-8777-777777777777",
+      category: "output" as const,
+      filename,
+      contentType: "image/svg+xml",
+      sizeBytes: 256,
+      sha256: "e".repeat(64),
+      downloadUrl: `/private/${filename}`,
+    }],
+  } satisfies CalculationJobDto;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
+    if (path === `/api/calculations/${figureJob.id}` && method === "GET") return { body: figureJob };
+  });
+  const card = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="teal"/></svg>').toString("base64");
+  await page.route(`**/private/${filename}`, (route) => route.fulfill({
+    contentType: "image/svg+xml",
+    body: `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1800" height="760"><image xlink:href="data:image/svg+xml;base64,${card}" width="600" height="600"/></svg>`,
+  }));
+  await page.goto(`/account/calculations/${figureJob.id}`);
+  const preview = page.getByRole("img", { name: `Отчёт: ${filename}` });
+  await expect(preview).toBeVisible();
+  await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(1800);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
 test("AI-01 сохраняется в паспорте и восстанавливается при повторе сравнения", async ({ page }) => {
   const storedInput = {
     modelInputId: articleInputs[0].id, exportMetadataInputId: articleInputs[2].id,
@@ -1160,6 +1228,7 @@ test("AI-01 сохраняется в паспорте и восстанавли
     detailPreset: "kizilirmak", maxCells: 25_000_000, allowLarge: false,
     generatorTimeoutMinutes: 20, generateExpertSet: true,
     expertLevels: "coarse", expertSeed: "study_2026",
+    generateFigureFive: true, figureFiveLevel: "coarse", figureFiveGenerator: "delaunay",
   };
   const stored = { ...job, kind: "seabed_compare_adaptive", status: "succeeded" as const,
     input: storedInput, inputSchemaVersion: 11 };
@@ -1188,6 +1257,8 @@ test("AI-01 сохраняется в паспорте и восстанавли
   await expect(repeat.getByRole("checkbox", { name: "Подготовить экспертные SVG-карточки AI-01" })).toBeChecked();
   await expect(repeat.locator("#expert-levels")).toHaveValue("coarse");
   await expect(repeat.locator("#expert-seed")).toHaveValue("study_2026");
+  await expect(repeat.getByRole("checkbox", { name: "Собрать рисунок 5 из трёх фактических карточек" })).toBeChecked();
+  await expect(repeat.locator("#figure-five-level")).toHaveValue("coarse");
   await repeat.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect.poll(() => submissions.length).toBe(1);
   expect(submissions[0]).toEqual({ kind: "seabed_compare_adaptive", input: storedInput });

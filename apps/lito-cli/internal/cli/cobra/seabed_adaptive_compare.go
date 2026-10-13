@@ -21,23 +21,26 @@ import (
 )
 
 var (
-	seabedAdaptiveCompareInput          string
-	seabedAdaptiveCompareMetadata       string
-	seabedAdaptiveCompareField          string
-	seabedAdaptiveCompareFieldReport    string
-	seabedAdaptiveCompareCoastline      string
-	seabedAdaptiveCompareOutput         string
-	seabedAdaptiveCompareBoundaryDetail float64
-	seabedAdaptiveCompareGenerators     string
-	seabedAdaptiveCompareLevels         string
-	seabedAdaptiveCompareGmshPath       string
-	seabedAdaptiveCompareMaxCells       int64
-	seabedAdaptiveCompareAllowLarge     bool
-	seabedAdaptiveCompareTimeout        time.Duration
-	seabedAdaptiveCompareDetailPreset   string
-	seabedAdaptiveCompareExpertSet      bool
-	seabedAdaptiveCompareExpertLevels   string
-	seabedAdaptiveCompareExpertSeed     string
+	seabedAdaptiveCompareInput           string
+	seabedAdaptiveCompareMetadata        string
+	seabedAdaptiveCompareField           string
+	seabedAdaptiveCompareFieldReport     string
+	seabedAdaptiveCompareCoastline       string
+	seabedAdaptiveCompareOutput          string
+	seabedAdaptiveCompareBoundaryDetail  float64
+	seabedAdaptiveCompareGenerators      string
+	seabedAdaptiveCompareLevels          string
+	seabedAdaptiveCompareGmshPath        string
+	seabedAdaptiveCompareMaxCells        int64
+	seabedAdaptiveCompareAllowLarge      bool
+	seabedAdaptiveCompareTimeout         time.Duration
+	seabedAdaptiveCompareDetailPreset    string
+	seabedAdaptiveCompareExpertSet       bool
+	seabedAdaptiveCompareExpertLevels    string
+	seabedAdaptiveCompareExpertSeed      string
+	seabedAdaptiveCompareFigureFive      bool
+	seabedAdaptiveCompareFigureLevel     string
+	seabedAdaptiveCompareFigureGenerator string
 )
 
 var seabedAdaptiveCompareCmd = &cobra.Command{
@@ -70,9 +73,18 @@ func init() {
 	seabedAdaptiveCompareCmd.Flags().BoolVar(&seabedAdaptiveCompareExpertSet, "expert-set", false, "после принятого сравнения подготовить карточки AI-01")
 	seabedAdaptiveCompareCmd.Flags().StringVar(&seabedAdaptiveCompareExpertLevels, "expert-levels", "", "уровни для AI-01 через запятую; пусто — все")
 	seabedAdaptiveCompareCmd.Flags().StringVar(&seabedAdaptiveCompareExpertSeed, "expert-seed", "ai-01-black-sea-2026", "строка анонимизации карточек AI-01")
+	seabedAdaptiveCompareCmd.Flags().BoolVar(&seabedAdaptiveCompareFigureFive, "figure-five", false, "после AI-01 собрать рисунок 5 из трёх фактических карточек")
+	seabedAdaptiveCompareCmd.Flags().StringVar(&seabedAdaptiveCompareFigureLevel, "figure-five-level", "", "ID уровня для рисунка 5; требуется вместе с --figure-five")
+	seabedAdaptiveCompareCmd.Flags().StringVar(&seabedAdaptiveCompareFigureGenerator, "figure-five-generator", "", "генератор для рисунка 5; требуется вместе с --figure-five")
 }
 
 func runSeabedAdaptiveCompare(_ *cobra.Command, _ []string) error {
+	if err := validateFigureFiveFlags(seabedAdaptiveCompareFigureFive, seabedAdaptiveCompareFigureLevel, seabedAdaptiveCompareFigureGenerator); err != nil {
+		return err
+	}
+	if seabedAdaptiveCompareFigureFive && !seabedAdaptiveCompareExpertSet {
+		return fmt.Errorf("--figure-five требует --expert-set")
+	}
 	if seabedAdaptiveCompareDetailPreset != "none" && seabedAdaptiveCompareDetailPreset != "kizilirmak" {
 		return fmt.Errorf("--detail-preset: допустимы none или kizilirmak")
 	}
@@ -83,6 +95,27 @@ func runSeabedAdaptiveCompare(_ *cobra.Command, _ []string) error {
 	algorithms, err := parseMeshAlgorithms(seabedAdaptiveCompareGenerators)
 	if err != nil {
 		return err
+	}
+	if seabedAdaptiveCompareFigureFive {
+		levelFound, generatorFound := false, false
+		for _, level := range levels {
+			levelFound = levelFound || level.ID == seabedAdaptiveCompareFigureLevel
+		}
+		for _, algorithm := range algorithms {
+			generatorFound = generatorFound || string(algorithm) == seabedAdaptiveCompareFigureGenerator
+		}
+		if !levelFound || !generatorFound {
+			return fmt.Errorf("уровень и генератор рисунка 5 должны входить в выбранное сравнение")
+		}
+		if seabedAdaptiveCompareExpertLevels != "" {
+			selected := false
+			for _, levelID := range strings.Split(seabedAdaptiveCompareExpertLevels, ",") {
+				selected = selected || strings.TrimSpace(levelID) == seabedAdaptiveCompareFigureLevel
+			}
+			if !selected {
+				return fmt.Errorf("уровень рисунка 5 должен входить в уровни AI-01")
+			}
+		}
 	}
 	paths := resolveAdaptiveCompareInputPaths()
 	document, err := seabed.ReadMSH2(paths.inputMSH)
@@ -319,8 +352,16 @@ func runSeabedAdaptiveCompare(_ *cobra.Command, _ []string) error {
 		if err != nil {
 			return fmt.Errorf("подготовка экспертных карточек AI-01: %w", err)
 		}
+		if seabedAdaptiveCompareFigureFive {
+			if _, err := writeFigureFiveForExpertSet(result, seabedAdaptiveCompareFigureLevel, seabedAdaptiveCompareFigureGenerator); err != nil {
+				return err
+			}
+		}
 		if !quiet {
 			fmt.Printf("Экспертный набор AI-01: %d карточек; каталог %s\n", len(result.manifest.Cards), result.directory)
+			if seabedAdaptiveCompareFigureFive {
+				fmt.Printf("Рисунок 5: %s\n", filepath.Join(result.directory, figureFiveFilename))
+			}
 		}
 	}
 	return nil

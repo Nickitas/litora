@@ -25,10 +25,13 @@ import (
 )
 
 var (
-	seabedExpertSetComparison string
-	seabedExpertSetOutput     string
-	seabedExpertSetLevels     string
-	seabedExpertSetSeed       string
+	seabedExpertSetComparison      string
+	seabedExpertSetOutput          string
+	seabedExpertSetLevels          string
+	seabedExpertSetSeed            string
+	seabedExpertSetFigureFive      bool
+	seabedExpertSetFigureLevel     string
+	seabedExpertSetFigureGenerator string
 )
 
 var seabedExpertSetCmd = &cobra.Command{
@@ -51,6 +54,9 @@ func init() {
 	seabedExpertSetCmd.Flags().StringVar(&seabedExpertSetOutput, "output", "output", "корневой каталог результатов")
 	seabedExpertSetCmd.Flags().StringVar(&seabedExpertSetLevels, "levels", "", "идентификаторы уровней ADAPT-03 через запятую; пусто — все принятые уровни")
 	seabedExpertSetCmd.Flags().StringVar(&seabedExpertSetSeed, "seed", "ai-01-black-sea-2026", "фиксированная строка анонимизации порядка карточек")
+	seabedExpertSetCmd.Flags().BoolVar(&seabedExpertSetFigureFive, "figure-five", false, "собрать рисунок 5 из трёх фактических карточек выбранного генератора")
+	seabedExpertSetCmd.Flags().StringVar(&seabedExpertSetFigureLevel, "figure-five-level", "", "ID уровня для рисунка 5; требуется вместе с --figure-five")
+	seabedExpertSetCmd.Flags().StringVar(&seabedExpertSetFigureGenerator, "figure-five-generator", "", "генератор для рисунка 5; требуется вместе с --figure-five")
 }
 
 type expertSetOptions struct {
@@ -73,6 +79,9 @@ type expertSetJob struct {
 }
 
 func runSeabedExpertSet(_ *cobra.Command, _ []string) error {
+	if err := validateFigureFiveFlags(seabedExpertSetFigureFive, seabedExpertSetFigureLevel, seabedExpertSetFigureGenerator); err != nil {
+		return err
+	}
 	result, err := executeSeabedExpertSet(expertSetOptions{
 		ComparisonPath: seabedExpertSetComparison,
 		OutputRoot:     seabedExpertSetOutput,
@@ -82,6 +91,11 @@ func runSeabedExpertSet(_ *cobra.Command, _ []string) error {
 	})
 	if err != nil {
 		return err
+	}
+	if seabedExpertSetFigureFive {
+		if _, err := writeFigureFiveForExpertSet(result, seabedExpertSetFigureLevel, seabedExpertSetFigureGenerator); err != nil {
+			return err
+		}
 	}
 	if quiet {
 		return nil
@@ -95,6 +109,9 @@ func runSeabedExpertSet(_ *cobra.Command, _ []string) error {
 	fmt.Fprintf(writer, "Инструкция участнику\t%s\n", result.instructions)
 	fmt.Fprintf(writer, "Закрытый ключ\t%s\n", result.organizerKey)
 	fmt.Fprintf(writer, "Журнал\t%s\n", result.log)
+	if seabedExpertSetFigureFive {
+		fmt.Fprintf(writer, "Рисунок 5\t%s\n", filepath.Join(result.directory, figureFiveFilename))
+	}
 	return writer.Flush()
 }
 
@@ -105,6 +122,7 @@ type expertSetResult struct {
 	organizerKey   string
 	log            string
 	manifest       adaptivemodel.ExpertSetManifest
+	comparison     adaptivemodel.AdaptiveComparisonReport
 }
 
 func executeSeabedExpertSet(options expertSetOptions) (expertSetResult, error) {
@@ -242,7 +260,7 @@ func executeSeabedExpertSet(options expertSetOptions) (expertSetResult, error) {
 	if err := writeExpertSetLog(logPath, manifest); err != nil {
 		return expertSetResult{}, err
 	}
-	return expertSetResult{directory: directory, ratingTemplate: ratingTemplate, instructions: instructions, organizerKey: organizerKey, log: logPath, manifest: manifest}, nil
+	return expertSetResult{directory: directory, ratingTemplate: ratingTemplate, instructions: instructions, organizerKey: organizerKey, log: logPath, manifest: manifest, comparison: report}, nil
 }
 
 func readExpertComparison(path string) (adaptivemodel.AdaptiveComparisonReport, error) {

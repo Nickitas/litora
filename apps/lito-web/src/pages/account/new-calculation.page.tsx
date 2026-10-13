@@ -10,11 +10,12 @@ import type {
   CercCalibrationOptionsDto,
   AINecessityOptionsDto,
   ExpertSetOptionsDto,
+  FigureFiveOptionsDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { aiNecessityDefaults, allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
+import { aiNecessityDefaults, allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, figureFiveDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 import { ArrowUpRight, Database, FilePlus2, X } from "lucide-react";
 import { api } from "@/shared/api/client";
@@ -122,8 +123,9 @@ export function NewCalculationDialog({
   const [generatorTimeoutMinutes, setGeneratorTimeoutMinutes] = useState(20);
   const [allowLarge, setAllowLarge] = useState(false);
   const [expertOptions, setExpertOptions] = useState<ExpertSetOptionsDto>(expertSetDefaults);
+  const [figureFiveOptions, setFigureFiveOptions] = useState<FigureFiveOptionsDto>(figureFiveDefaults);
   const [aiOptions, setAIOptions] = useState<AINecessityOptionsDto>(aiNecessityDefaults);
-  const [articlePresetApplied, setArticlePresetApplied] = useState<"adapt" | "compare" | null>(null);
+  const [articlePresetApplied, setArticlePresetApplied] = useState<"adapt" | "compare" | "figure-five" | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [deletingInputId, setDeletingInputId] = useState<string | null>(null);
@@ -308,6 +310,12 @@ export function NewCalculationDialog({
           expertLevels: typeof input.expertLevels === "string" ? input.expertLevels : expertSetDefaults.expertLevels,
           expertSeed: typeof input.expertSeed === "string" ? input.expertSeed : expertSetDefaults.expertSeed,
         });
+        setFigureFiveOptions({
+          generateFigureFive: input.generateFigureFive === true,
+          figureFiveLevel: typeof input.figureFiveLevel === "string" ? input.figureFiveLevel : figureFiveDefaults.figureFiveLevel,
+          figureFiveGenerator: input.figureFiveGenerator === "delaunay" || input.figureFiveGenerator === "frontal-quad" || input.figureFiveGenerator === "parallelograms"
+            ? input.figureFiveGenerator : figureFiveDefaults.figureFiveGenerator,
+        });
         break;
       case "seabed_assess_ml":
         setAIOptions((current) => {
@@ -470,6 +478,11 @@ export function NewCalculationDialog({
             ...(expertOptions.generateExpertSet ? {
               expertLevels: expertOptions.expertLevels,
               expertSeed: expertOptions.expertSeed,
+              ...(figureFiveOptions.generateFigureFive ? {
+                generateFigureFive: true,
+                figureFiveLevel: figureFiveOptions.figureFiveLevel,
+                figureFiveGenerator: figureFiveOptions.figureFiveGenerator,
+              } : {}),
             } : {}),
           } : {}),
           ...(kind === "seabed_assess_ml" ? aiOptions : {}),
@@ -482,6 +495,21 @@ export function NewCalculationDialog({
     } finally {
       setBusy(false);
     }
+  }
+
+  function applyArticleComparisonPreset(withFigureFive: boolean) {
+    setCompareLevels("coarse:125:250");
+    setBoundaryDetail(50);
+    setGenerators("delaunay,frontal-quad");
+    setDetailPreset("kizilirmak");
+    setMaxCells(25_000_000);
+    setGeneratorTimeoutMinutes(20);
+    setAllowLarge(false);
+    if (withFigureFive) {
+      setExpertOptions((current) => ({ ...current, generateExpertSet: true, expertLevels: "coarse" }));
+      setFigureFiveOptions({ generateFigureFive: true, figureFiveLevel: "coarse", figureFiveGenerator: "delaunay" });
+    }
+    setArticlePresetApplied(withFigureFive ? "figure-five" : "compare");
   }
 
   const scenario = kinds.find((item) => item.kind === kind);
@@ -1313,23 +1341,20 @@ export function NewCalculationDialog({
                 <section className="space-y-4 border-t pt-6" aria-label="Параметры сравнения Gmsh">
                   <h3 className="text-lg font-semibold">3. Сравнение генераторов</h3>
                   <div className="space-y-2 rounded-xl border bg-muted/35 p-4 text-sm">
-                    <Button type="button" variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal text-left" onClick={() => {
-                      setCompareLevels("coarse:125:250");
-                      setBoundaryDetail(50);
-                      setGenerators("delaunay,frontal-quad");
-                      setDetailPreset("kizilirmak");
-                      setMaxCells(25_000_000);
-                      setGeneratorTimeoutMinutes(20);
-                      setAllowLarge(false);
-                      setArticlePresetApplied("compare");
-                    }}>
+                    <Button type="button" variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal text-left" onClick={() => applyArticleComparisonPreset(false)}>
                       Заполнить как рисунки 6–7: сетки 125–250 м
+                    </Button>
+                    <Button type="button" variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal text-left" onClick={() => applyArticleComparisonPreset(true)}>
+                      Заполнить как рисунок 5: три фрагмента 125–250 м
                     </Button>
                     <p className="text-muted-foreground">
                       Нужны совместимые модель дна, поле размера, контур и паспорта. Расчёт требует Gmsh и значительных ресурсов; совпадение с архивными SVG зависит от входов и версии генератора.
                     </p>
                     {articlePresetApplied === "compare" && (
                       <p role="status">Параметры рисунков 6–7 заполнены. Большой расчёт не разрешён автоматически.</p>
+                    )}
+                    {articlePresetApplied === "figure-five" && (
+                      <p role="status">Для рисунка 5 выбраны уровень coarse, Delaunay и карточки AI-01. Входные файлы не выбраны; большой расчёт не разрешён автоматически.</p>
                     )}
                   </div>
                   <div className="space-y-2">
@@ -1397,7 +1422,10 @@ export function NewCalculationDialog({
                   <div className="space-y-3 rounded-xl border bg-muted/35 p-4">
                     <label className="flex min-h-11 items-center gap-3 text-sm">
                       <input type="checkbox" checked={expertOptions.generateExpertSet}
-                        onChange={(event) => setExpertOptions((current) => ({ ...current, generateExpertSet: event.target.checked }))} />
+                        onChange={(event) => {
+                          setExpertOptions((current) => ({ ...current, generateExpertSet: event.target.checked }));
+                          if (!event.target.checked) setFigureFiveOptions((current) => ({ ...current, generateFigureFive: false }));
+                        }} />
                       Подготовить экспертные SVG-карточки AI-01
                     </label>
                     <p className="text-xs text-muted-foreground">
@@ -1417,6 +1445,39 @@ export function NewCalculationDialog({
                             onChange={(event) => setExpertOptions((current) => ({ ...current, expertSeed: event.target.value }))} />
                         </div>
                         <p className="text-xs text-muted-foreground">Закрытый ключ организатора попадёт только в ваши приватные результаты. Не передавайте его экспертам вместе с карточками.</p>
+                        <div className="space-y-3 rounded-lg border bg-card p-3">
+                          <label className="flex min-h-11 items-center gap-3 text-sm">
+                            <input type="checkbox" checked={figureFiveOptions.generateFigureFive}
+                              onChange={(event) => setFigureFiveOptions((current) => ({
+                                ...current, generateFigureFive: event.target.checked,
+                                figureFiveLevel: event.target.checked && !current.figureFiveLevel
+                                  ? compareLevels.split(",")[0]?.split(":")[0] ?? "" : current.figureFiveLevel,
+                              }))} />
+                            Собрать рисунок 5 из трёх фактических карточек
+                          </label>
+                          {figureFiveOptions.generateFigureFive && (
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              <div className="space-y-2">
+                                <Label htmlFor="figure-five-level">Уровень рисунка 5</Label>
+                                <Input id="figure-five-level" value={figureFiveOptions.figureFiveLevel} required
+                                  onChange={(event) => setFigureFiveOptions((current) => ({ ...current, figureFiveLevel: event.target.value }))} />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="figure-five-generator">Генератор рисунка 5</Label>
+                                <Select value={figureFiveOptions.figureFiveGenerator}
+                                  onValueChange={(value) => setFigureFiveOptions((current) => ({ ...current, figureFiveGenerator: value as FigureFiveOptionsDto["figureFiveGenerator"] }))}>
+                                  <SelectTrigger id="figure-five-generator"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {(["delaunay", "frontal-quad", "parallelograms"] as const)
+                                      .filter((value) => generators.split(",").includes(value))
+                                      .map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground">Рисунок раскрывает связь карточек с генератором и остаётся приватным файлом владельца. Не передавайте его экспертам до завершения оценивания. Совпадение с архивом зависит от исходных SHA-256 и версии Gmsh.</p>
+                        </div>
                       </div>
                     )}
                   </div>
