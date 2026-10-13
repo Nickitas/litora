@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
+import { aiNecessityDefaults, allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
 import type {
   CalculationKind,
   CalculationKindDto,
@@ -29,6 +29,7 @@ export const calculationKinds: CalculationKindDto[] = [
   { kind: "seabed_generate_adaptive", title: "Построить адаптивную сетку", description: "Gmsh создаёт фактическую full-quad MSH из поля размера ADAPT-01." },
   { kind: "seabed_validate", title: "Проверить модель дна", description: "Сравнение с отдельной опорной моделью: глубины, изобаты, уклоны и размеры." },
   { kind: "seabed_compare_adaptive", title: "Сравнение генераторов сетки", description: "Сравнение Gmsh на общем поле и контуре; MSH, SVG и отчёты. Тяжёлый расчёт." },
+  { kind: "seabed_assess_ml", title: "Оценить необходимость ML", description: "AI-02 сопоставляет приватные экспертные оценки с ADAPT-03; формирует проверяемый отчёт, не обучает аттестованную модель." },
   { kind: "seabed_check_full", title: "Проверка полного контура Чёрного моря", description: "QA-03 по проверенной плоской MSH, отчёту генерации, контуру и батиметрии; не публикационная аттестация." },
 ];
 
@@ -455,6 +456,18 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
         generatorTimeoutMinutes: numberIn(p.generatorTimeoutMinutes ?? 20, "Время Gmsh", 1, 120, true),
       } };
     }
+    case "seabed_assess_ml": {
+      const fields = scientificInputFields.seabed_assess_ml;
+      rejectUnknown(p, [...Object.keys(fields), ...Object.keys(aiNecessityDefaults)]);
+      return { kind: "seabed_assess_ml", input: {
+        ...references(p, fields),
+        minExpertsPerCard: numberIn(p.minExpertsPerCard ?? aiNecessityDefaults.minExpertsPerCard, "Эксперты на карточку", 2, 10, true),
+        minTraining: numberIn(p.minTraining ?? aiNecessityDefaults.minTraining, "Карточки обучения", 2, 96, true),
+        minEvaluation: numberIn(p.minEvaluation ?? aiNecessityDefaults.minEvaluation, "Карточки проверки", 2, 96, true),
+        ridgeLambda: numberIn(p.ridgeLambda ?? aiNecessityDefaults.ridgeLambda, "Ridge-регуляризация", 0.000001, 1000),
+        minRmseImprovement: numberIn(p.minRmseImprovement ?? aiNecessityDefaults.minRmseImprovement, "Улучшение RMSE", 0.001, 0.99),
+      } };
+    }
     case "seabed_check_full": {
       const fields = scientificInputFields.seabed_check_full;
       rejectUnknown(p, [...Object.keys(fields), "generator", "targetEdge", "boundaryDetail", "maxSourceDistance", "coastTransition", "isobaths", "verticalExaggeration", "controlPoints"]);
@@ -630,6 +643,20 @@ export function commandArguments(
         "--generator-timeout", `${input.generatorTimeoutMinutes}m`,
         "--detail-preset", String(input.detailPreset),
         ...(input.generateExpertSet ? ["--expert-set", "--expert-levels", String(input.expertLevels), "--expert-seed", String(input.expertSeed)] : []),
+        "--output", output];
+    case "seabed_assess_ml":
+      return ["seabed", "assess-ml",
+        "--ratings", required("ratingsInputId"),
+        "--organizer-key", required("organizerKeyInputId"),
+        "--comparison", required("comparisonReportInputId"),
+        "--input", required("modelInputId"),
+        "--metadata", required("exportMetadataInputId"),
+        "--coastline", required("coastlineInputId"),
+        "--min-experts-per-card", String(input.minExpertsPerCard),
+        "--min-training", String(input.minTraining),
+        "--min-evaluation", String(input.minEvaluation),
+        "--ridge-lambda", String(input.ridgeLambda),
+        "--min-rmse-improvement", String(input.minRmseImprovement),
         "--output", output];
     case "seabed_check_full":
       return ["seabed", "check-full", "--mesh", required("flatMeshInputId"),

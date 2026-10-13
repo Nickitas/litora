@@ -469,6 +469,48 @@ test("AI-01 добавляется только к сравнению и пол�
   ]) assert.throws(() => validateCalculation({ kind: "seabed_compare_adaptive", input: { ...ids, ...invalid } }));
 });
 
+test("AI-02 использует только свои шесть UUID и ограниченные пороги Go", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const ids = {
+    ratingsInputId: id, organizerKeyInputId: id, comparisonReportInputId: id,
+    modelInputId: id, exportMetadataInputId: id, coastlineInputId: id,
+  };
+  const job = validateCalculation({ kind: "seabed_assess_ml", input: {
+    ...ids, minExpertsPerCard: 3, minTraining: 16, minEvaluation: 14,
+    ridgeLambda: 0.5, minRmseImprovement: 0.15,
+  } });
+  assert.equal(resourceProfileForKind(job.kind), "heavy");
+  assert.deepEqual(scientificReferences(job).map(({ role }) => role), [
+    "expert_ratings_tsv", "expert_organizer_key_json", "adaptive_comparison_report_json",
+    "seabed_msh", "export_metadata_json", "coastline_geojson",
+  ]);
+  const paths = {
+    ratingsInputId: "/job/ratings.tsv", organizerKeyInputId: "/job/organizer-key.json",
+    comparisonReportInputId: "/job/comparison.json", modelInputId: "/job/model.msh",
+    exportMetadataInputId: "/job/export.json", coastlineInputId: "/job/coast.geojson",
+  };
+  assert.deepEqual(commandArguments(job, "/job/output", undefined, paths), [
+    "seabed", "assess-ml", "--ratings", paths.ratingsInputId,
+    "--organizer-key", paths.organizerKeyInputId,
+    "--comparison", paths.comparisonReportInputId,
+    "--input", paths.modelInputId, "--metadata", paths.exportMetadataInputId,
+    "--coastline", paths.coastlineInputId, "--min-experts-per-card", "3",
+    "--min-training", "16", "--min-evaluation", "14",
+    "--ridge-lambda", "0.5", "--min-rmse-improvement", "0.15",
+    "--output", "/job/output",
+  ]);
+  for (const invalid of [
+    { ...ids, ratingsInputId: "/etc/passwd" },
+    { ...ids, organizerKeyInputId: "https://internal" },
+    { ...ids, minExpertsPerCard: 1 },
+    { ...ids, minTraining: 97 },
+    { ...ids, minEvaluation: 1 },
+    { ...ids, ridgeLambda: 0 },
+    { ...ids, minRmseImprovement: 1 },
+    { ...ids, comparisonPath: "/tmp/report.json" },
+  ]) assert.throws(() => validateCalculation({ kind: "seabed_assess_ml", input: invalid }));
+});
+
 test("проверка рельефа получает только свои модели и опорный паспорт", () => {
   const id = "33333333-3333-4333-8333-333333333333";
   const input = {

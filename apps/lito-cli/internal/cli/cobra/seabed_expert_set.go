@@ -264,14 +264,35 @@ func readExpertComparison(path string) (adaptivemodel.AdaptiveComparisonReport, 
 }
 
 func verifyExpertComparisonInputs(report adaptivemodel.AdaptiveComparisonReport) error {
+	return verifyExpertComparisonInputsAtPaths(report, expertComparisonPaths{})
+}
+
+type expertComparisonPaths struct {
+	inputMSH       string
+	exportMetadata string
+	coastline      string
+}
+
+// verifyExpertComparisonInputsAtPaths разрешает перенос входов только при
+// совпадении их байтов с SHA-256 исходного отчёта ADAPT-03.
+func verifyExpertComparisonInputsAtPaths(report adaptivemodel.AdaptiveComparisonReport, paths expertComparisonPaths) error {
+	if paths.inputMSH == "" {
+		paths.inputMSH = report.Inputs.InputMSH
+	}
+	if paths.exportMetadata == "" {
+		paths.exportMetadata = report.Inputs.ExportMetadata
+	}
+	if paths.coastline == "" {
+		paths.coastline = report.Inputs.Coastline
+	}
 	inputs := []struct {
 		path     string
 		expected string
 		name     string
 	}{
-		{path: report.Inputs.InputMSH, expected: report.Inputs.InputMSHSHA256, name: "модель дна"},
-		{path: report.Inputs.ExportMetadata, expected: report.Inputs.ExportMetadataSHA256, name: "паспорт EXPORT-02"},
-		{path: report.Inputs.Coastline, expected: report.Inputs.CoastlineSHA256, name: "исходный берег"},
+		{path: paths.inputMSH, expected: report.Inputs.InputMSHSHA256, name: "модель дна"},
+		{path: paths.exportMetadata, expected: report.Inputs.ExportMetadataSHA256, name: "паспорт EXPORT-02"},
+		{path: paths.coastline, expected: report.Inputs.CoastlineSHA256, name: "исходный берег"},
 	}
 	for _, input := range inputs {
 		if !adaptivemodelSHA256(input.expected) {

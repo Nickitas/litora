@@ -75,3 +75,20 @@ test("отчёт генерации MSH принимает только JSON д�
     { ...report, crs: "LAEA" },
   ]) assert.throws(() => validateScientificInput(bad));
 });
+
+test("входы AI-02 ограничены ролью, расширением, размером и отсутствием CRS", () => {
+  for (const [role, filename] of [
+    ["adaptive_comparison_report_json", "adaptive-generator-comparison.json"],
+    ["expert_organizer_key_json", "organizer-key.json"],
+    ["expert_ratings_tsv", "ratings.tsv"],
+  ]) {
+    const input = { ...valid, role, filename, crs: "not-applicable", coordinateUnit: "not-applicable" };
+    assert.deepEqual(validateScientificInput(input), input);
+    for (const bad of [
+      { ...input, filename: "wrong.txt" },
+      { ...input, sizeBytes: 2 * 1024 * 1024 + 1 },
+      { ...input, crs: "EPSG:4326" },
+      { ...input, coordinateUnit: "degrees" },
+    ]) assert.throws(() => validateScientificInput(bad));
+  }
+});

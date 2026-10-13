@@ -12,6 +12,8 @@ test("только известные результаты Go становятс
   assert.equal(reusableArtifactRole("seabed_build", "seabed/export-metadata.json"), "export_metadata_json");
   assert.equal(reusableArtifactRole("seabed_adapt", "seabed/adaptive/size-field.csv"), "adaptive_field_csv");
   assert.equal(reusableArtifactRole("seabed_adapt", "seabed/adaptive/size-field.json"), "adaptive_field_report_json");
+  assert.equal(reusableArtifactRole("seabed_compare_adaptive", "seabed/adaptive/comparison/adaptive-generator-comparison.json"), "adaptive_comparison_report_json");
+  assert.equal(reusableArtifactRole("seabed_compare_adaptive", "seabed/expert-set/organizer-key.json"), "expert_organizer_key_json");
   assert.equal(reusableArtifactRole("source_file", "black-sea-20261006-030000.geojson"), "coastline_geojson");
   assert.equal(reusableArtifactRole("source_file", "black-sea-20261006-030000.json"), "coastline_geojson");
   for (const [kind, path] of [
@@ -19,6 +21,7 @@ test("только известные результаты Go становятс
     ["seabed_compare_adaptive", "mesh/mesh-comparison.json"],
     ["seabed_generate_adaptive", "seabed/adaptive/gmsh/../black-sea-adaptive.msh"],
     ["seabed_compare_adaptive", "seabed/adaptive/gmsh/black-sea-adaptive.msh"],
+    ["seabed_assess_ml", "seabed/expert-set/organizer-key.json"],
     ["seabed_build", "seabed/build-report.json"],
     ["seabed_compare_adaptive", "seabed/adaptive/comparison/level/gmsh/black-sea-adaptive.msh"],
     ["source_file", "manifest.json"],

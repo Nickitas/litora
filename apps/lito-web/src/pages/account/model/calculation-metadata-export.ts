@@ -118,6 +118,9 @@ function knownInput(job: CalculationJobDto) {
         "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "detailPreset",
         "maxCells", "allowLarge", "generatorTimeoutMinutes", "generateExpertSet", "expertLevels", "expertSeed",
       ],
+      seabed_assess_ml: [
+        "minExpertsPerCard", "minTraining", "minEvaluation", "ridgeLambda", "minRmseImprovement",
+      ],
       calibrate_cerc: [
         "bathymetryResolution", "cercCoefficients", "maxObservationDistance", "minWaveHours",
         "breakingIndex", "bermHeight", "closureDepth", "porosity", "offshoreSampleDistance",

@@ -171,6 +171,7 @@ export type CalculationKind =
   | "seabed_generate_adaptive"
   | "seabed_validate"
   | "seabed_compare_adaptive"
+  | "seabed_assess_ml"
   | "seabed_check_full";
 export interface CreateCalculationDto {
   kind: CalculationKind;
@@ -300,6 +301,23 @@ export const expertSetDefaults: ExpertSetOptionsDto = {
   expertSeed: "ai-01-black-sea-2026",
 };
 
+/** Пороговые параметры проверки необходимости ML; математическая модель остаётся в Go. */
+export interface AINecessityOptionsDto {
+  minExpertsPerCard: number;
+  minTraining: number;
+  minEvaluation: number;
+  ridgeLambda: number;
+  minRmseImprovement: number;
+}
+
+export const aiNecessityDefaults: AINecessityOptionsDto = {
+  minExpertsPerCard: 2,
+  minTraining: 12,
+  minEvaluation: 12,
+  ridgeLambda: 1,
+  minRmseImprovement: 0.1,
+};
+
 export interface GeoJsonLineStringDto {
   type: "LineString";
   coordinates: [number, number][];
@@ -345,7 +363,10 @@ export type ScientificInputRole =
   | "bathymetry_source_json"
   | "adaptive_field_csv"
   | "adaptive_field_report_json"
-  | "mesh_comparison_report_json";
+  | "mesh_comparison_report_json"
+  | "adaptive_comparison_report_json"
+  | "expert_organizer_key_json"
+  | "expert_ratings_tsv";
 
 const ownCercInputRequirements = {
   coastlineInputId: "coastline_geojson",
@@ -401,6 +422,14 @@ export const scientificInputRequirements = {
     exportMetadataInputId: "export_metadata_json",
     fieldCsvInputId: "adaptive_field_csv",
     fieldReportInputId: "adaptive_field_report_json",
+    coastlineInputId: "coastline_geojson",
+  },
+  seabed_assess_ml: {
+    ratingsInputId: "expert_ratings_tsv",
+    organizerKeyInputId: "expert_organizer_key_json",
+    comparisonReportInputId: "adaptive_comparison_report_json",
+    modelInputId: "seabed_msh",
+    exportMetadataInputId: "export_metadata_json",
     coastlineInputId: "coastline_geojson",
   },
   seabed_check_full: {

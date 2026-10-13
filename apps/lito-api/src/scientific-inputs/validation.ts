@@ -7,6 +7,7 @@ import type {
 export const maxScientificInputBytes = 512 * 1024 * 1024;
 export const maxFullBlackSeaMeshBytes = 256 * 1024 * 1024;
 export const maxMeshComparisonReportBytes = 2 * 1024 * 1024;
+export const maxAIInputBytes = 2 * 1024 * 1024;
 export const maxScientificInputsPerUser = 20;
 export const maxScientificInputTotalBytes = 2 * 1024 * 1024 * 1024;
 
@@ -26,6 +27,13 @@ const roles = new Set<ScientificInputRole>([
   "adaptive_field_csv",
   "adaptive_field_report_json",
   "mesh_comparison_report_json",
+  "adaptive_comparison_report_json",
+  "expert_organizer_key_json",
+  "expert_ratings_tsv",
+]);
+
+const aiInputRoles = new Set<ScientificInputRole>([
+  "adaptive_comparison_report_json", "expert_organizer_key_json", "expert_ratings_tsv",
 ]);
 
 function boundedText(
@@ -83,6 +91,10 @@ export function validateScientificInput(body: unknown): CreateScientificInputDto
   }
   if (data.role === "mesh_comparison_report_json" && (!/\.json$/i.test(filename) || Number(data.sizeBytes) > maxMeshComparisonReportBytes))
     throw new BadRequestException("Отчёт генерации MSH должен быть JSON размером до 2 МиБ");
+  const aiFileExtensionValid = data.role === "expert_ratings_tsv" ? /\.tsv$/i.test(filename) : /\.json$/i.test(filename);
+  if (aiInputRoles.has(data.role as ScientificInputRole) &&
+      (!aiFileExtensionValid || Number(data.sizeBytes) > maxAIInputBytes))
+    throw new BadRequestException("Вход AI-02 должен быть TSV/JSON соответствующей роли размером до 2 МиБ");
   const crs = boundedText(data.crs, "CRS", 80);
   const coordinateUnit = boundedText(data.coordinateUnit, "Единицы", 80);
   if (!["EPSG:4326", "LAEA", "not-applicable"].includes(crs))
@@ -98,6 +110,8 @@ export function validateScientificInput(body: unknown): CreateScientificInputDto
     throw new BadRequestException("Для индексного профиля CRS и единицы координат неприменимы");
   if (data.role === "mesh_comparison_report_json" && (crs !== "not-applicable" || coordinateUnit !== "not-applicable"))
     throw new BadRequestException("Для отчёта генерации MSH CRS и единицы координат неприменимы");
+  if (aiInputRoles.has(data.role as ScientificInputRole) && (crs !== "not-applicable" || coordinateUnit !== "not-applicable"))
+    throw new BadRequestException("Для экспертных оценок и отчётов AI-02 CRS и единицы координат неприменимы");
   return {
     name: boundedText(data.name, "Название", 100),
     role: data.role as ScientificInputRole,

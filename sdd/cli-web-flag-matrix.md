@@ -23,7 +23,7 @@
 | `seabed validate` | `--input`, `--metadata`, `--reference`, `--reference-metadata`, `--reference-passport`, `--size-field`, `--size-field-report`, `--isobaths`, `--worst-cells`, `--max-nearest-distance` | `--output`, `--manifest` | — |
 | `seabed check-full` | `--bathymetry`, `--bathymetry-metadata`, `--boundary-detail`, `--coast-transition`, `--coastline`, `--control-points`, `--generator`, `--isobaths`, `--max-source-distance`, `--mesh`, `--mesh-report`, `--target-edge`, `--vertical-exaggeration` | `--max-mesh-mib=256`, `--output`, `--manifest` | Безлимитная MSH (CLI допускает `--max-mesh-mib=0`); ресурсная и научная приёмка полного набора открыта |
 | `seabed expert-set` | Карточки через опцию AI-01 в `seabed_compare_adaptive`; уровни и seed | Отчёт сравнения и пути из того же задания | Отдельный запуск по старому отчёту (`--comparison`, `--levels`, `--seed`, `--output`, `--manifest`) |
-| `seabed assess-ml` | — | — | `--min-evaluation`, `--min-experts-per-card`, `--min-rmse-improvement`, `--min-training`, `--organizer-key`, `--ratings`, `--ridge-lambda`, `--output`, `--manifest` |
+| `seabed assess-ml` | Шесть приватных файлов: `--ratings`, `--organizer-key`, `--comparison`, `--input`, `--metadata`, `--coastline`; пороги `--min-evaluation`, `--min-experts-per-card`, `--min-rmse-improvement`, `--min-training`, `--ridge-lambda` | Пути только из staging владельца; `--output`, `--manifest` | Сбор оценок экспертами на сайте и их роли; standalone CLI по старым путям остаётся отдельным режимом |
 | `erosion` | Демо Сочи и свои входы (`erosion_file`): `--input`, `--wave-input`, `--bathymetry`, `--steps` (1–48, для своих также 0 с лимитами), `--breaking-index`, `--berm-height`, `--closure-depth`, `--porosity`, `--cerc-coefficient`, `--offshore-sample-distance`, `--max-shoreline-change`, `--max-bathymetry-gap`, `--left-boundary-transport`, `--right-boundary-transport`, `--output-csv`, `--csv-format`, `--output-gif`, `--gif-fps`, `--gif-skip`; по своим входам также `--sediment-sources`, `--structures`, `--svg-max-frames` | Демо: `--black-sea-sochi`, `--offline`; свой ряд: `--wave-source` из паспорта загрузки; при `steps=0`: `--max-wave-conditions=10000`, `--max-coast-points=200`; всем: `--output`, `--manifest` | `--bathymetry-resolution` без паспорта, профили для демо; `--source-url`, `--refresh`; GIF и широкий CSV для полного ряда |
 | `calibrate-cerc` | `calibrate_cerc`: `--input`, `--wave-input`, `--bathymetry`, `--bathymetry-resolution`, `--observations`, `--cerc-coefficients`, `--max-observation-distance`, `--min-wave-hours` (не меньше 8766 ч), `--breaking-index`, `--berm-height`, `--closure-depth`, `--porosity`, `--offshore-sample-distance`, `--max-bathymetry-gap`, `--left-boundary-transport`, `--right-boundary-transport`, `--sediment-sources`, `--structures` | `--wave-source` из паспорта загрузки; `--output`, `--manifest` | короткий `--min-wave-hours` только CLI |
 | `all` | Демо Сочи (`all_demo`) и свои файлы (`all_file`): `--input`, `--wave-input`, `--bathymetry`, `--steps` (1–48, для своих также 0 с лимитами), параметры CERC и граничные потоки, `--output-csv`, `--csv-format`, `--output-gif`, `--gif-fps`, `--gif-skip`, `--model-max-points`, `--no-model-simplify`; по своим входам без упрощения `--sediment-sources`, `--structures`; `--svg-max-frames` для своих | Демо: `--black-sea-sochi`, `--offline`; свой ряд: `--wave-source` из паспорта загрузки; при `steps=0`: `--max-wave-conditions=10000`, `--max-coast-points=200`; всем: `--output`, `--manifest` | `--bathymetry-resolution` без паспорта, профили для демо и с упрощением; `--source-url`, `--refresh`; GIF и широкий CSV для полного ряда |
@@ -43,10 +43,11 @@
    ряда. Без этого нельзя объявлять «полный CLI» через web.
 2. `check-full`: после локального подключения сценария измерить RAM, время и
    временный диск на полном наборе; сверить паспорта и независимый эталон.
-3. `expert-set`/`assess-ml`: карточки AI-01 уже создаются внутри того же
-   `seabed_compare_adaptive`; отдельный запуск по старому отчёту, модель ролей
-   экспертов и организатора, импорт/хранение оценок и AI-02 пока отсутствуют.
-   `organizer-key` доступен только владельцу задания и не должен передаваться экспертам.
+3. `expert-set`/`assess-ml`: карточки AI-01 создаются внутри
+   `seabed_compare_adaptive`, а AI-02 запускается отдельным заданием по шести
+   приватным файлам. Отдельный запуск генерации карточек по старому отчёту,
+   модель ролей экспертов и организатора и сбор оценок на сайте отсутствуют.
+   `organizer-key` доступен только владельцу и не должен передаваться экспертам.
 4. `source-url`/`refresh` и `full-black-sea`: отдельная политика сетевых
    источников с защитой DNS/IP/redirect и лицензий либо заранее одобренные
    версии данных; не прокидывать URL из формы в CLI.

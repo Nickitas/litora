@@ -19,6 +19,7 @@ import {
 } from "./model/use-calculations";
 import { CancelCalculationDialog } from "./ui/cancel-calculation-dialog";
 import { CercCalibrationResults } from "./ui/cerc-calibration-results";
+import { AINecessityResults } from "./ui/ai-necessity-results";
 import { CalculationImagePreview } from "./ui/calculation-image-preview";
 import { isPreviewableImage } from "./ui/calculation-image-preview.utils";
 import { CalculationMetadataDownload } from "./ui/calculation-metadata-download";
@@ -419,6 +420,9 @@ function CalculationDetail({ jobId }: { jobId: string }) {
 
           {job.kind === "calibrate_cerc" && job.status === "succeeded" && (
             <CercCalibrationResults summary={summary ?? null} />
+          )}
+          {job.kind === "seabed_assess_ml" && job.status === "succeeded" && (
+            <AINecessityResults summary={summary ?? null} />
           )}
 
           {images && images.length > 0 && (

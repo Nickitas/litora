@@ -16,4 +16,7 @@ export const scientificRoleLabels: Record<ScientificInputRole, string> = {
   bathymetry_source_json: "Паспорт источника батиметрии (JSON)",
   adaptive_field_csv: "Поле размера ADAPT-01 (CSV)",
   adaptive_field_report_json: "Отчёт поля ADAPT-01 (JSON)",
+  adaptive_comparison_report_json: "Отчёт сравнения ADAPT-03 (JSON)",
+  expert_organizer_key_json: "Закрытый ключ организатора AI-01 (JSON)",
+  expert_ratings_tsv: "Заполненные оценки экспертов AI-02 (TSV)",
 };

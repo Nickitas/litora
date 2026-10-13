@@ -16,6 +16,10 @@ import (
 var (
 	seabedAINecessityOrganizerKey   string
 	seabedAINecessityRatings        string
+	seabedAINecessityComparison     string
+	seabedAINecessityInputMSH       string
+	seabedAINecessityMetadata       string
+	seabedAINecessityCoastline      string
 	seabedAINecessityOutput         string
 	seabedAINecessityMinExperts     int
 	seabedAINecessityMinTraining    int
@@ -42,6 +46,10 @@ func init() {
 	seabedCmd.AddCommand(seabedAINecessityCmd)
 	seabedAINecessityCmd.Flags().StringVar(&seabedAINecessityOrganizerKey, "organizer-key", "output/seabed/expert-set/organizer-key.json", "закрытый ключ набора AI-01")
 	seabedAINecessityCmd.Flags().StringVar(&seabedAINecessityRatings, "ratings", "output/seabed/expert-set/expert-rating-template.tsv", "заполненный TSV-лист экспертных оценок")
+	seabedAINecessityCmd.Flags().StringVar(&seabedAINecessityComparison, "comparison", "", "перенесённый JSON ADAPT-03; по умолчанию путь из закрытого ключа")
+	seabedAINecessityCmd.Flags().StringVar(&seabedAINecessityInputMSH, "input", "", "перенесённая модель дна MSH; сверяется с SHA-256 ADAPT-03")
+	seabedAINecessityCmd.Flags().StringVar(&seabedAINecessityMetadata, "metadata", "", "перенесённый паспорт EXPORT-02; сверяется с SHA-256 ADAPT-03")
+	seabedAINecessityCmd.Flags().StringVar(&seabedAINecessityCoastline, "coastline", "", "перенесённый исходный берег; сверяется с SHA-256 ADAPT-03")
 	seabedAINecessityCmd.Flags().StringVar(&seabedAINecessityOutput, "output", "output", "корневой каталог результатов")
 	seabedAINecessityCmd.Flags().IntVar(&seabedAINecessityMinExperts, "min-experts-per-card", 2, "минимум независимых экспертов на карточку")
 	seabedAINecessityCmd.Flags().IntVar(&seabedAINecessityMinTraining, "min-training", 12, "минимум размеченных карточек training")
@@ -53,6 +61,8 @@ func init() {
 type aiNecessityOptions struct {
 	OrganizerKeyPath string
 	RatingsPath      string
+	ComparisonPath   string
+	ComparisonInputs expertComparisonPaths
 	OutputRoot       string
 	Config           adaptivemodel.AINecessityConfig
 }
@@ -70,7 +80,11 @@ func runSeabedAINecessity(_ *cobra.Command, _ []string) error {
 	result, err := executeSeabedAINecessity(aiNecessityOptions{
 		OrganizerKeyPath: seabedAINecessityOrganizerKey,
 		RatingsPath:      seabedAINecessityRatings,
-		OutputRoot:       seabedAINecessityOutput,
+		ComparisonPath:   seabedAINecessityComparison,
+		ComparisonInputs: expertComparisonPaths{
+			inputMSH: seabedAINecessityInputMSH, exportMetadata: seabedAINecessityMetadata, coastline: seabedAINecessityCoastline,
+		},
+		OutputRoot: seabedAINecessityOutput,
 		Config: adaptivemodel.AINecessityConfig{
 			MinimumExpertsPerCard:  seabedAINecessityMinExperts,
 			MinimumTrainingCards:   seabedAINecessityMinTraining,
@@ -118,18 +132,22 @@ func executeSeabedAINecessity(options aiNecessityOptions) (aiNecessityResult, er
 	if err != nil {
 		return aiNecessityResult{}, err
 	}
-	comparisonSHA, err := expertFileSHA256(manifest.ComparisonReport)
+	comparisonPath := strings.TrimSpace(options.ComparisonPath)
+	if comparisonPath == "" {
+		comparisonPath = manifest.ComparisonReport
+	}
+	comparisonSHA, err := expertFileSHA256(comparisonPath)
 	if err != nil {
 		return aiNecessityResult{}, err
 	}
 	if comparisonSHA != manifest.ComparisonReportSHA256 {
 		return aiNecessityResult{}, fmt.Errorf("SHA-256 отчёта ADAPT-03 не совпадает с закрытым ключом AI-01")
 	}
-	comparison, err := readExpertComparison(manifest.ComparisonReport)
+	comparison, err := readExpertComparison(comparisonPath)
 	if err != nil {
 		return aiNecessityResult{}, err
 	}
-	if err := verifyExpertComparisonInputs(comparison); err != nil {
+	if err := verifyExpertComparisonInputsAtPaths(comparison, options.ComparisonInputs); err != nil {
 		return aiNecessityResult{}, err
 	}
 	ratingsSHA, err := expertFileSHA256(options.RatingsPath)
@@ -158,7 +176,7 @@ func executeSeabedAINecessity(options aiNecessityOptions) (aiNecessityResult, er
 		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 		Inputs: adaptivemodel.AINecessityInputs{
 			OrganizerKey: options.OrganizerKeyPath, OrganizerKeySHA256: organizerSHA,
-			ComparisonReport: manifest.ComparisonReport, ComparisonSHA256: comparisonSHA,
+			ComparisonReport: comparisonPath, ComparisonSHA256: comparisonSHA,
 			Ratings: options.RatingsPath, RatingsSHA256: ratingsSHA,
 		},
 		Config:              config,

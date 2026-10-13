@@ -8,12 +8,13 @@ import type {
   DatasetDto,
   CercOptionsDto,
   CercCalibrationOptionsDto,
+  AINecessityOptionsDto,
   ExpertSetOptionsDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
+import { aiNecessityDefaults, allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
 import { defaultCoastlineDataset } from "@litora/generated-data";
 import { ArrowUpRight, Database, FilePlus2, X } from "lucide-react";
 import { api } from "@/shared/api/client";
@@ -121,6 +122,7 @@ export function NewCalculationDialog({
   const [generatorTimeoutMinutes, setGeneratorTimeoutMinutes] = useState(20);
   const [allowLarge, setAllowLarge] = useState(false);
   const [expertOptions, setExpertOptions] = useState<ExpertSetOptionsDto>(expertSetDefaults);
+  const [aiOptions, setAIOptions] = useState<AINecessityOptionsDto>(aiNecessityDefaults);
   const [articlePresetApplied, setArticlePresetApplied] = useState<"adapt" | "compare" | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -307,6 +309,16 @@ export function NewCalculationDialog({
           expertSeed: typeof input.expertSeed === "string" ? input.expertSeed : expertSetDefaults.expertSeed,
         });
         break;
+      case "seabed_assess_ml":
+        setAIOptions((current) => {
+          const next = { ...current };
+          for (const key of Object.keys(aiNecessityDefaults) as (keyof AINecessityOptionsDto)[]) {
+            const value = input[key];
+            if (typeof value === "number" && Number.isFinite(value)) next[key] = value;
+          }
+          return next;
+        });
+        break;
     }
   }, []);
 
@@ -460,6 +472,7 @@ export function NewCalculationDialog({
               expertSeed: expertOptions.expertSeed,
             } : {}),
           } : {}),
+          ...(kind === "seabed_assess_ml" ? aiOptions : {}),
         },
       });
       onOpenChange(false);
@@ -962,6 +975,11 @@ export function NewCalculationDialog({
                         Наблюдения — массив JSON или объект с полем observations: lat, lon и shoreline_change_rate_m_per_year (м/год); положительное значение означает размыв. Укажите независимый источник и лицензию.
                       </p>
                     )}
+                    {kind === "seabed_assess_ml" && (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Выберите закрытый ключ и отчёт того же AI-01/ADAPT-03, исходные модель, паспорт и контур, а также заполненный TSV оценок. Go сверит SHA-256; пути из старого задания не используются. Ключ не передавайте экспертам.
+                      </p>
+                    )}
                     {optionalScientificRequirements && (
                       <p className="mt-2 text-sm text-muted-foreground">
                         Дополнительные профили CERC необязательны. Их индексы относятся к точкам после нормализации контура в Go: для источника point_index, для сооружения left_point_index. Проверьте порядок и число точек на том же входном GeoJSON. Положительный source_rate_m3_s добавляет наносы, отрицательный удаляет; transmission_coefficient сооружения задаётся от 0 до 1. Каждый элемент требует data_source.
@@ -1402,6 +1420,30 @@ export function NewCalculationDialog({
                       </div>
                     )}
                   </div>
+                </section>
+              )}
+              {kind === "seabed_assess_ml" && (
+                <section className="space-y-4 border-t pt-6" aria-label="Пороги оценки AI-02">
+                  <h3 className="text-lg font-semibold">3. Пороги проверки необходимости ML</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Go сравнит оценки с детерминированным рейтингом на географически разделённых карточках обучения и проверки. Результат — рекомендация для следующего исследования, не аттестованная ML-модель.
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {([
+                      ["minExpertsPerCard", "Экспертов на карточку", 2, 10, 1],
+                      ["minTraining", "Минимум карточек обучения", 2, 96, 1],
+                      ["minEvaluation", "Минимум карточек проверки", 2, 96, 1],
+                      ["ridgeLambda", "Ridge-регуляризация", 0.000001, 1000, "any"],
+                      ["minRmseImprovement", "Минимальное улучшение RMSE", 0.001, 0.99, "any"],
+                    ] as const).map(([key, label, min, max, step]) => (
+                      <div key={key} className="space-y-2">
+                        <Label htmlFor={`ai-${key}`}>{label}</Label>
+                        <Input id={`ai-${key}`} type="number" min={min} max={max} step={step} required
+                          value={aiOptions[key]} onChange={(event) => setAIOptions((current) => ({ ...current, [key]: Number(event.target.value) }))} />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Улучшение RMSE задаётся долей: 0,10 означает 10%. Пустой или неполный лист оценок может закончиться выводом «ML не рекомендуется».</p>
                 </section>
               )}
             </>

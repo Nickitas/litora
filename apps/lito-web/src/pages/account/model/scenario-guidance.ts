@@ -134,4 +134,9 @@ export const scenarioGuidance = {
       href: "/docs/reference/seabed-scientific-guide.md",
     },
   },
+  seabed_assess_ml: {
+    source: "Закрытый ключ и отчёт одного AI-01/ADAPT-03, заполненный TSV оценок, а также исходные модель дна, паспорт экспорта и контур с теми же SHA-256.",
+    limitation: "Go проверяет связность и контрольные суммы шести файлов. Экспертные оценки собираются вне кабинета; вывод AI-02 о целесообразности ML зависит от объёма и качества этих оценок и не является научной аттестацией.",
+    reference: { label: "О проверке необходимости ML", href: "/docs/reference/ml-necessity-assessment.md" },
+  },
 } satisfies Record<CalculationKind, ScenarioGuidance>;

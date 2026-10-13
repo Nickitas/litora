@@ -1195,6 +1195,82 @@ test("AI-01 сохраняется в паспорте и восстанавли
   expect(observed.pageErrors).toEqual([]);
 });
 
+test("AI-02 принимает шесть приватных входов, показывает решение Go и повторяет параметры", async ({ page }) => {
+  const aiRoles = [
+    "expert_ratings_tsv", "expert_organizer_key_json", "adaptive_comparison_report_json",
+    "seabed_msh", "export_metadata_json", "coastline_geojson",
+  ] as const satisfies ScientificInputRole[];
+  const aiInputs = aiRoles.map((role, index) => ({
+    ...articleInputs[index], role, name: `AI вход ${index + 1}`,
+  }));
+  const storedInput = {
+    ratingsInputId: aiInputs[0].id, organizerKeyInputId: aiInputs[1].id,
+    comparisonReportInputId: aiInputs[2].id, modelInputId: aiInputs[3].id,
+    exportMetadataInputId: aiInputs[4].id, coastlineInputId: aiInputs[5].id,
+    minExpertsPerCard: 3, minTraining: 14, minEvaluation: 15,
+    ridgeLambda: 0.5, minRmseImprovement: 0.2,
+  };
+  const stored = { ...job, kind: "seabed_assess_ml" as const, status: "succeeded" as const,
+    input: storedInput, inputSchemaVersion: 12,
+    resultSummary: { fileCount: 4, totalBytes: 2048, metrics: {
+      "ai-necessity.json": { rating_row_count: 42, decision: {
+        ml_recommended: false, training_record_count: 14, evaluation_record_count: 15,
+        baseline_evaluation: { available: true, rmse: 1.2 }, candidate_evaluation: { available: true, rmse: 1.1 },
+        rmse_improvement: 0.0833, reasons: ["Улучшение недостаточно"],
+      } },
+    } },
+  } satisfies CalculationJobDto;
+  const submissions: unknown[] = [];
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: [{ kind: "seabed_assess_ml", title: "Оценка необходимости ML", description: "AI-02" }] };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: aiInputs };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      submissions.push(body);
+      return { status: 201, body: stored };
+    }
+    if (path === `/api/calculations/${job.id}` && method === "GET") return { body: stored };
+  });
+  await page.setViewportSize({ width: 360, height: 780 });
+  await openNewCalculation(page, "dark");
+  await chooseOption(page, "Что рассчитать", "Оценка необходимости ML");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  const fields = ["ratingsInputId", "organizerKeyInputId", "comparisonReportInputId",
+    "modelInputId", "exportMetadataInputId", "coastlineInputId"];
+  for (const [index, field] of fields.entries()) {
+    await dialog.locator(`#scientific-${field}`).click();
+    await page.getByRole("option", { name: new RegExp(`AI вход ${index + 1}`) }).click();
+  }
+  await dialog.locator("#ai-minExpertsPerCard").fill("3");
+  await dialog.locator("#ai-minTraining").fill("14");
+  await dialog.locator("#ai-minEvaluation").fill("15");
+  await dialog.locator("#ai-ridgeLambda").fill("0.5");
+  await dialog.locator("#ai-minRmseImprovement").fill("0.2");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  expect(submissions[0]).toEqual({ kind: "seabed_assess_ml", input: storedInput });
+  await expect(page.getByRole("heading", { name: "Оценка необходимости ML · AI-02" })).toBeVisible();
+  await expect(page.getByText("ML не рекомендуется по заданным критериям")).toBeVisible();
+  await expect(page.getByText("Улучшение недостаточно", { exact: true })).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
+  const passport = JSON.parse(await readFile(await (await downloadPromise).path(), "utf8")) as CalculationMetadataExportV1;
+  expect(passport.calculation.input).toEqual(storedInput);
+  await page.getByRole("link", { name: "Создать на основе" }).click();
+  const repeat = page.getByRole("dialog", { name: "Расчёт на основе" });
+  await expect(repeat.locator("#ai-minExpertsPerCard")).toHaveValue("3");
+  await expect(repeat.locator("#ai-minRmseImprovement")).toHaveValue("0.2");
+  await repeat.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect.poll(() => submissions.length).toBe(2);
+  expect(submissions[1]).toEqual({ kind: "seabed_assess_ml", input: storedInput });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
 test("QA-03 запускается с пятью входами, сохраняет параметры и повторяется в тёмной мобильной теме", async ({ page }) => {
   const fullRoles = [
     "flat_mesh_msh", "mesh_comparison_report_json", "coastline_geojson",

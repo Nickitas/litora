@@ -78,7 +78,7 @@ export class ScientificInputsController {
       additionalProperties: false,
       properties: {
         name: { type: "string", maxLength: 100 },
-        role: { type: "string", enum: ["coastline_geojson", "wave_climate", "shoreline_observations_json", "longshore_sediment_sources_json", "longshore_structures_json", "flat_mesh_msh", "seabed_msh", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "relief_reference_passport_json", "export_metadata_json", "bathymetry_source_json", "adaptive_field_csv", "adaptive_field_report_json", "mesh_comparison_report_json"] },
+        role: { type: "string", enum: ["coastline_geojson", "wave_climate", "shoreline_observations_json", "longshore_sediment_sources_json", "longshore_structures_json", "flat_mesh_msh", "seabed_msh", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "relief_reference_passport_json", "export_metadata_json", "bathymetry_source_json", "adaptive_field_csv", "adaptive_field_report_json", "mesh_comparison_report_json", "adaptive_comparison_report_json", "expert_organizer_key_json", "expert_ratings_tsv"] },
         filename: { type: "string", maxLength: 160 },
         sizeBytes: { type: "integer", minimum: 1, maximum: 536870912 },
         source: { type: "string", maxLength: 200 },
@@ -143,7 +143,9 @@ export class ScientificInputsController {
         if (!prefix.startsWith("{") && !prefix.startsWith("["))
           throw new BadRequestException("Ожидается JSON или GeoJSON");
       }
-      const contentType = record.role === "seabed_msh" || record.role === "flat_mesh_msh"
+      const contentType = record.role === "expert_ratings_tsv"
+        ? "text/tab-separated-values"
+        : record.role === "seabed_msh" || record.role === "flat_mesh_msh"
         ? "application/octet-stream"
         : record.role === "adaptive_field_csv" ||
           (record.role === "wave_climate" && record.filename.toLowerCase().endsWith(".csv"))

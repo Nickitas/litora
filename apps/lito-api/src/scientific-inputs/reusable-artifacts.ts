@@ -20,6 +20,12 @@ export function reusableArtifactRole(jobKind: string, filename: string): Scienti
     if (filename === "seabed/adaptive/size-field.csv") return "adaptive_field_csv";
     if (filename === "seabed/adaptive/size-field.json") return "adaptive_field_report_json";
   }
+  if (jobKind === "seabed_compare_adaptive") {
+    if (filename === "seabed/adaptive/comparison/adaptive-generator-comparison.json")
+      return "adaptive_comparison_report_json";
+    if (filename === "seabed/expert-set/organizer-key.json")
+      return "expert_organizer_key_json";
+  }
   return null;
 }
 

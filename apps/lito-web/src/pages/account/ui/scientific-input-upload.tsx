@@ -33,7 +33,8 @@ export function ScientificInputUpload({
   const coordinateUnit = role === "coastline_geojson" || role === "bathymetry_grid_json" || role === "shoreline_observations_json"
     ? "degrees" : role === "seabed_msh" || role === "flat_mesh_msh" ? "meters" : "not-applicable";
   const isCercProfile = role === "longshore_sediment_sources_json" || role === "longshore_structures_json";
-  const maximum = isCercProfile ? 1 : role === "mesh_comparison_report_json" ? 2
+  const isAIInput = role === "adaptive_comparison_report_json" || role === "expert_organizer_key_json" || role === "expert_ratings_tsv";
+  const maximum = isCercProfile ? 1 : role === "mesh_comparison_report_json" || isAIInput ? 2
     : role === "wave_climate" || role === "shoreline_observations_json" ? 16 : 512;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -84,7 +85,7 @@ export function ScientificInputUpload({
       <div className="space-y-2">
         <Label htmlFor="scientific-file">Файл (до {maximum} МиБ)</Label>
         <Input id="scientific-file" type="file" required disabled={busy}
-          accept={role === "wave_climate" ? ".json,.csv" : role === "shoreline_observations_json" || role === "mesh_comparison_report_json" || isCercProfile ? ".json" : undefined}
+          accept={role === "wave_climate" ? ".json,.csv" : role === "expert_ratings_tsv" ? ".tsv" : role === "shoreline_observations_json" || role === "mesh_comparison_report_json" || role === "adaptive_comparison_report_json" || role === "expert_organizer_key_json" || isCercProfile ? ".json" : undefined}
           onChange={(event) => {
             const selected = event.target.files?.[0] ?? null;
             setFile(selected);
