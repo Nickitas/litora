@@ -136,6 +136,7 @@ export class ScientificInputsRepository {
               a.object_key,a.created_at
        FROM calculation_artifacts a JOIN calculation_jobs j ON j.id=a.job_id
        WHERE a.id=$1 AND j.user_id=$2 AND j.status='succeeded'
+         AND j.deletion_requested_at IS NULL
          AND a.category='output' AND a.bucket=$3`,
       [id, userId, bucket],
     );
@@ -158,7 +159,7 @@ export class ScientificInputsRepository {
       `SELECT a.id,a.job_id,j.kind AS job_kind,a.filename,a.size_bytes,a.sha256,
               a.object_key,a.created_at
        FROM calculation_artifacts a JOIN calculation_jobs j ON j.id=a.job_id
-       WHERE j.user_id=$1 AND j.status='succeeded' AND a.category='output'
+       WHERE j.user_id=$1 AND j.status='succeeded' AND j.deletion_requested_at IS NULL AND a.category='output'
          AND a.bucket=$2 AND a.size_bytes BETWEEN 1 AND $3
          AND (
            (j.kind='source_file' AND

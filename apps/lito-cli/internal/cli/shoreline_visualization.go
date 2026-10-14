@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	shorelineChunkMaxFrames = 64
-	shorelineChunkMaxBytes  = 4 * 1024 * 1024
-	shorelineIndexMaxBytes  = 4 * 1024 * 1024
+	shorelineChunkMaxFrames  = 64
+	shorelineChunkMaxBytes   = 4 * 1024 * 1024
+	shorelineIndexMaxBytes   = 4 * 1024 * 1024
+	shorelineSeriesGroupSize = 10
 )
 
 type shorelineFrameIndex struct {
@@ -45,18 +46,23 @@ type shorelineChunk struct {
 }
 
 type shorelineIndex struct {
-	SchemaVersion    int                   `json:"schemaVersion"`
-	Mode             string                `json:"mode"`
-	ScenarioStatus   string                `json:"scenarioStatus"`
-	UsageLimitations []string              `json:"usageLimitations"`
-	WaveSource       string                `json:"waveSource"`
-	BathymetrySHA256 string                `json:"bathymetrySha256"`
-	BathymetryStatus string                `json:"bathymetryStatus"`
-	CRS              string                `json:"crs"`
-	CoordinateUnit   string                `json:"coordinateUnit"`
-	Bounds           [4]float64            `json:"bounds"`
-	PointCount       int                   `json:"pointCount"`
-	Frames           []shorelineFrameIndex `json:"frames"`
+	SchemaVersion    int                       `json:"schemaVersion"`
+	Mode             string                    `json:"mode"`
+	ScenarioStatus   string                    `json:"scenarioStatus"`
+	UsageLimitations []string                  `json:"usageLimitations"`
+	WaveSource       string                    `json:"waveSource"`
+	BathymetrySHA256 string                    `json:"bathymetrySha256"`
+	BathymetryStatus string                    `json:"bathymetryStatus"`
+	CRS              string                    `json:"crs"`
+	CoordinateUnit   string                    `json:"coordinateUnit"`
+	Bounds           [4]float64                `json:"bounds"`
+	PointCount       int                       `json:"pointCount"`
+	PointSeries      *shorelinePointSeriesInfo `json:"pointSeries,omitempty"`
+	Frames           []shorelineFrameIndex     `json:"frames"`
+}
+
+type shorelinePointSeriesInfo struct {
+	GroupSize int `json:"groupSize"`
 }
 
 // WriteShorelineVisualization сохраняет ограниченные кадры карты из уже
@@ -74,7 +80,8 @@ func WriteShorelineVisualization(model geometry.LongshoreModelResult, output *Ou
 		UsageLimitations: append([]string{}, model.UsageLimitations...), WaveSource: model.Climate.Source,
 		BathymetrySHA256: model.BathymetrySHA256, BathymetryStatus: model.BathymetryStatus,
 		CRS: "EPSG:4326", CoordinateUnit: "degrees",
-		PointCount: pointCount, Frames: make([]shorelineFrameIndex, 0, len(model.Snapshots)),
+		PointCount: pointCount, PointSeries: &shorelinePointSeriesInfo{GroupSize: shorelineSeriesGroupSize},
+		Frames: make([]shorelineFrameIndex, 0, len(model.Snapshots)),
 	}
 	if len(model.Steps) > 0 {
 		allTimed := true
@@ -195,6 +202,9 @@ func WriteShorelineVisualization(model geometry.LongshoreModelResult, output *Ou
 		chunkBytes += len(frameData) + 1
 	}
 	if err := flush(); err != nil {
+		return err
+	}
+	if err := writeShorelinePointSeries(model, pointCount, temporary); err != nil {
 		return err
 	}
 	index.Bounds = [4]float64{minLon, minLat, maxLon, maxLat}

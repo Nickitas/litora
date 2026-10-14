@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 import type {
   CalculationArtifactDto,
   CalculationJobDto,
@@ -18,6 +19,7 @@ import {
   useCalculationKinds,
 } from "./model/use-calculations";
 import { CancelCalculationDialog } from "./ui/cancel-calculation-dialog";
+import { DeleteCalculationDialog } from "./ui/delete-calculation-dialog";
 import { CercCalibrationResults } from "./ui/cerc-calibration-results";
 import { AINecessityResults } from "./ui/ai-necessity-results";
 import { CalculationImagePreview } from "./ui/calculation-image-preview";
@@ -251,10 +253,13 @@ export function CalculationDetailPage() {
 }
 
 function CalculationDetail({ jobId }: { jobId: string }) {
+  const navigate = useNavigate();
   const { job, loading, error, reload } = useCalculation(jobId);
   const { kinds } = useCalculationKinds();
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
 
   async function cancel(selectedJob: CalculationJobDto) {
     await api.cancelCalculation(selectedJob.id);
@@ -305,6 +310,14 @@ function CalculationDetail({ jobId }: { jobId: string }) {
                 onClick={() => setCancelOpen(true)}
               >
                 Отменить расчёт
+              </Button>
+            )}
+            {!isActiveCalculation(job) && !job.deletionRequestedAt && (
+              <Button ref={deleteButtonRef} type="button" variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setDeleteOpen(true)}>
+                <Trash2 aria-hidden="true" />
+                Удалить расчёт
               </Button>
             )}
           </div>
@@ -579,6 +592,14 @@ function CalculationDetail({ jobId }: { jobId: string }) {
         title="Отменить расчёт"
         onRestoreFocus={() => cancelButtonRef.current?.focus()}
       />
+      {deleteOpen && job && (
+        <DeleteCalculationDialog
+          target={job}
+          onClose={() => setDeleteOpen(false)}
+          onQueued={() => navigate("/account/calculations")}
+          onRestoreFocus={() => deleteButtonRef.current?.focus()}
+        />
+      )}
     </section>
   );
 }

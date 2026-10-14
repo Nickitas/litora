@@ -89,6 +89,9 @@ export class CalculationResponse implements CalculationJobDto {
   @ApiProperty({ type: String, format: "date-time", nullable: true })
   finishedAt!: string | null;
   @ApiProperty({ type: String, format: "date-time" }) updatedAt!: string;
+  @ApiProperty({ type: String, format: "date-time", nullable: true,
+    description: "Время запроса удаления; null, пока расчёт не удаляется" })
+  deletionRequestedAt!: string | null;
   @ApiProperty({ type: [ArtifactResponse] })
   artifacts!: CalculationArtifactDto[];
 }

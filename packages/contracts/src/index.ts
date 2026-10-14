@@ -59,7 +59,14 @@ export interface ShorelineVisualizationIndexDto {
   coordinateUnit: "degrees";
   bounds: [number, number, number, number];
   pointCount: number;
+  pointSeries?: { groupSize: 10 };
   frames: ShorelineVisualizationFrameDto[];
+}
+
+export interface ShorelinePointSeriesDto {
+  schemaVersion: 1;
+  pointIndex: number;
+  shorelineChangeM: (number | null)[];
 }
 
 export interface ShorelineVisualizationChunkDto {
@@ -89,7 +96,25 @@ export interface CalculationJobDto {
   startedAt: string | null;
   finishedAt: string | null;
   updatedAt: string;
+  deletionRequestedAt?: string | null;
   artifacts: CalculationArtifactDto[];
+}
+
+export interface CalculationDeletionOverviewDto {
+  totalCount: number;
+  activeCount: number;
+  settlingCount: number;
+  deletingCount: number;
+}
+
+export interface CalculationDeletionRequestDto {
+  id: string;
+  scope: "single" | "all";
+  requestedCount: number;
+  deletedCount: number;
+  retryingCount: number;
+  status: "pending" | "retrying" | "completed";
+  createdAt: string;
 }
 
 export interface CalculationMetadataExportV1 {

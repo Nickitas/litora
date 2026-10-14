@@ -7,6 +7,7 @@ import { CalculationsRepository } from "./calculations.repository.js";
 import {
   parseShorelineChunk,
   parseShorelineIndex,
+  parseShorelinePointSeries,
 } from "./shoreline-visualization.js";
 
 const index = parseShorelineIndex({
@@ -95,6 +96,40 @@ test("визуализация требует связанный chunk и вал
   );
 });
 
+test("временной ряд возвращает выбранный узел и сохраняет пропуски", () => {
+  const seriesIndex = { ...index, pointSeries: { groupSize: 10 as const } };
+  const group = {
+    schemaVersion: 1,
+    id: "000001",
+    pointStart: 0,
+    series: [
+      [null, -0.25],
+      [null, null],
+    ],
+  };
+  assert.deepEqual(parseShorelinePointSeries(group, 0, seriesIndex), {
+    schemaVersion: 1,
+    pointIndex: 0,
+    shorelineChangeM: [null, -0.25],
+  });
+  assert.throws(() =>
+    parseShorelinePointSeries({ ...group, id: "000002" }, 0, seriesIndex),
+  );
+  assert.throws(() =>
+    parseShorelinePointSeries(
+      {
+        ...group,
+        series: [
+          [null, Number.NaN],
+          [null, null],
+        ],
+      },
+      0,
+      seriesIndex,
+    ),
+  );
+});
+
 test("чужой расчёт не открывает объект S3", async () => {
   const calls: { sql: string; values: unknown[] }[] = [];
   const database = {
@@ -123,4 +158,10 @@ test("чужой расчёт не открывает объект S3", async ()
     "erosion/visualization/index.json",
     "private",
   ]);
+  await assert.rejects(
+    () => repository.shorelinePointSeries("job", "owner", "0"),
+    NotFoundException,
+  );
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1].values, calls[0].values);
 });

@@ -21,6 +21,7 @@ import {
   CalculationsRepository,
   type JobRow,
 } from "../calculations/calculations.repository.js";
+import { CalculationDeletionService } from "../calculations/calculation-deletion.service.js";
 import {
   commandArguments,
   scientificReferences,
@@ -51,6 +52,7 @@ import { includeJsonMetric } from "./output-metrics.js";
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
 const repository = new CalculationsRepository(db, storage);
+const deletion = new CalculationDeletionService(db, storage);
 const datasets = new DatasetsRepository(db, storage);
 const scientificInputs = new ScientificInputsRepository(db);
 const workerId = randomUUID();
@@ -417,6 +419,11 @@ async function run(job: JobRow) {
     clearTimeout(deadline);
     stopProcess();
     active = undefined;
+    await db.query(
+      `UPDATE calculation_jobs SET worker_id=NULL
+       WHERE id=$1 AND worker_id=$2 AND status IN ('succeeded','failed','cancelled')`,
+      [job.id, workerId],
+    );
     await rm(directory, { recursive: true, force: true });
   }
 }
@@ -426,12 +433,23 @@ async function main() {
   await storage.initialize();
   await stat(environment.cliBinary);
   console.log(`Worker ${workerId} (${environment.workerProfile}) готов`);
+  let lastAuditPrune = 0;
   while (!stopping) {
+    if (environment.workerProfile === "standard" && Date.now() - lastAuditPrune > 24 * 60 * 60 * 1000) {
+      await deletion.pruneCompletedAudit();
+      lastAuditPrune = Date.now();
+    }
     await db.query(`UPDATE calculation_jobs SET status='failed',error_message='Worker потерял связь. Создайте новый расчёт.',finished_at=now(),updated_at=now()
       WHERE status='running' AND worker_id IS NOT NULL AND heartbeat_at<now()-interval '60 seconds'`);
+    await db.query(`UPDATE calculation_jobs SET worker_id=NULL
+      WHERE status IN ('succeeded','failed','cancelled') AND worker_id IS NOT NULL
+        AND finished_at<now()-interval '1 hour'
+        AND (heartbeat_at IS NULL OR heartbeat_at<now()-interval '1 hour')`);
+    const item = environment.workerProfile === "standard" ? await deletion.claim() : undefined;
+    if (item) await deletion.process(item);
     const job = await repository.claim(workerId, environment.workerProfile);
     if (job) await run(job);
-    else await delay(1000);
+    else if (!item) await delay(1000);
   }
 }
 main()

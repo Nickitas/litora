@@ -73,6 +73,20 @@ export function AccountOverviewPage() {
         </DialogTrigger>
       </div>
 
+      <section className="rounded-xl border bg-card p-5" aria-labelledby="shoreline-demo-heading">
+        <p className="text-sm font-medium text-primary">Интерактивная карта</p>
+        <h2 id="shoreline-demo-heading" className="mt-1 text-xl font-semibold">
+          Реплей береговой линии у Сочи
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          Откройте четыре сохранённых состояния модели CERC за 18 августа 2026 года,
+          проиграйте их по времени и выберите узел на карте. Свой расчёт не требуется.
+        </p>
+        <Button asChild className="mt-4">
+          <Link to="/account/shoreline">Открыть карту и реплей</Link>
+        </Button>
+      </section>
+
       {(error || kindsError) && (
         <div
           role="alert"

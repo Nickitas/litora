@@ -6,6 +6,7 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table";
 import { Link } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 import type { CalculationJobDto, CalculationKindDto } from "@litora/contracts";
 import { CalculationStatus } from "@/entities/calculation/ui/calculation-status";
 import { Button } from "@/shared/shadcn/components/ui/button";
@@ -36,6 +37,7 @@ export function CalculationHistoryTable({
   onCompareChange,
   onQuickView,
   onCancel,
+  onDelete,
 }: {
   jobs: CalculationJobDto[];
   kinds: CalculationKindDto[];
@@ -43,6 +45,7 @@ export function CalculationHistoryTable({
   onCompareChange: (jobId: string) => void;
   onQuickView: (jobId: string, trigger: HTMLButtonElement) => void;
   onCancel: (job: CalculationJobDto, trigger: HTMLButtonElement) => void;
+  onDelete: (job: CalculationJobDto, trigger: HTMLButtonElement) => void;
 }) {
   const columns = useMemo<ColumnDef<CalculationJobDto>[]>(
     () => [
@@ -53,7 +56,7 @@ export function CalculationHistoryTable({
           const job = row.original;
           const selected = comparisonIds.includes(job.id);
           const disabled =
-            job.status !== "succeeded" ||
+            job.status !== "succeeded" || Boolean(job.deletionRequestedAt) ||
             (comparisonIds.length === 2 && !selected);
           const title =
             kinds.find((item) => item.kind === job.kind)?.title ?? job.kind;
@@ -80,7 +83,9 @@ export function CalculationHistoryTable({
       {
         accessorKey: "status",
         header: "Статус",
-        cell: ({ row }) => <CalculationStatus status={row.original.status} />,
+        cell: ({ row }) => row.original.deletionRequestedAt
+          ? <span className="text-sm text-muted-foreground">Удаляется…</span>
+          : <CalculationStatus status={row.original.status} />,
       },
       {
         accessorKey: "createdAt",
@@ -124,12 +129,25 @@ export function CalculationHistoryTable({
                   Отменить
                 </Button>
               )}
+              {!isActiveCalculation(job) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-9 text-destructive hover:text-destructive"
+                  disabled={Boolean(job.deletionRequestedAt)}
+                  onClick={(event) => onDelete(job, event.currentTarget)}
+                >
+                  <Trash2 aria-hidden="true" />
+                  Удалить
+                </Button>
+              )}
             </div>
           );
         },
       },
     ],
-    [comparisonIds, kinds, onCancel, onCompareChange, onQuickView]
+    [comparisonIds, kinds, onCancel, onCompareChange, onDelete, onQuickView]
   );
   const table = useReactTable({
     data: jobs,

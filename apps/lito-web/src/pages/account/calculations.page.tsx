@@ -8,7 +8,8 @@ import {
   type FormEvent,
 } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { CalculationJobDto } from "@litora/contracts";
+import { Trash2 } from "lucide-react";
+import type { CalculationDeletionRequestDto, CalculationJobDto } from "@litora/contracts";
 import { api } from "@/shared/api/client";
 import { Button } from "@/shared/shadcn/components/ui/button";
 import { DialogTrigger } from "@/shared/shadcn/components/ui/dialog";
@@ -28,6 +29,7 @@ import {
 import { CancelCalculationDialog } from "./ui/cancel-calculation-dialog";
 import { CalculationHistoryTable } from "./ui/calculation-history-table";
 import { HistoryDateFilter } from "./ui/history-date-filter";
+import { DeleteCalculationDialog } from "./ui/delete-calculation-dialog";
 
 const CalculationQuickViewDialog = lazy(() =>
   import("./ui/calculation-quick-view-dialog").then((m) => ({
@@ -65,11 +67,27 @@ export function CalculationsPage() {
     searchDraft.urlValue === selectedJobId ? searchDraft.draft : selectedJobId;
   const [jobForCancellation, setJobForCancellation] =
     useState<CalculationJobDto>();
+  const [deletionTarget, setDeletionTarget] = useState<CalculationJobDto | "all">();
+  const [deletionRequest, setDeletionRequest] = useState<CalculationDeletionRequestDto>();
+  const [deletionPollError, setDeletionPollError] = useState("");
+  const deletionRequestId = deletionRequest?.id;
+  const deletionRequestStatus = deletionRequest?.status;
   const [quickViewJobId, setQuickViewJobId] = useState<string>();
   const [comparisonIds, setComparisonIds] = useState<string[]>([]);
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const clearAllButtonRef = useRef<HTMLButtonElement | null>(null);
   const loadMoreBoundaryRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    void api.currentCalculationDeletionRequest().then((request) => {
+      if (mounted && request) setDeletionRequest((current) => current ?? request);
+    }).catch(() => {
+      // Ошибка чтения очереди не должна скрывать основную историю.
+    });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     const boundary = loadMoreBoundaryRef.current;
@@ -91,6 +109,32 @@ export function CalculationsPage() {
     observer.observe(boundary);
     return () => observer.disconnect();
   }, [loadMore, loadMoreError, loading, loadingMore, nextCursor]);
+
+  useEffect(() => {
+    const requestId = deletionRequestId;
+    if (!requestId || deletionRequestStatus === "completed") return;
+    let mounted = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function poll(id: string) {
+      try {
+        const next = await api.calculationDeletionRequest(id);
+        if (!mounted) return;
+        setDeletionRequest(next);
+        setDeletionPollError("");
+        reload();
+        if (next.status !== "completed") timer = setTimeout(() => void poll(id), 2500);
+      } catch (nextError) {
+        if (!mounted) return;
+        setDeletionPollError(nextError instanceof Error ? nextError.message : "Не удалось проверить удаление");
+        timer = setTimeout(() => void poll(id), 5000);
+      }
+    }
+    timer = setTimeout(() => void poll(requestId), 1200);
+    return () => {
+      mounted = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [deletionRequestId, deletionRequestStatus, reload]);
 
   function changeFilter(name: string, value: string) {
     setComparisonIds([]);
@@ -138,6 +182,11 @@ export function CalculationsPage() {
     reload();
   }
 
+  const openDeletion = useCallback((job: CalculationJobDto, trigger: HTMLButtonElement) => {
+    returnFocusRef.current = trigger;
+    setDeletionTarget(job);
+  }, []);
+
   return (
     <div className="min-w-0 space-y-6">
       <div className="rounded-2xl border bg-card p-5 text-card-foreground sm:p-6">
@@ -152,9 +201,20 @@ export function CalculationsPage() {
               модальном окне и сопоставляйте два совместимых результата.
             </p>
           </div>
-          <DialogTrigger asChild>
-            <Button type="button">Новый расчёт</Button>
-          </DialogTrigger>
+          <div className="flex flex-wrap gap-2">
+            <DialogTrigger asChild>
+              <Button type="button">Новый расчёт</Button>
+            </DialogTrigger>
+            <Button ref={clearAllButtonRef} type="button" variant="outline"
+              className="text-destructive hover:text-destructive"
+              onClick={(event) => {
+                returnFocusRef.current = event.currentTarget;
+                setDeletionTarget("all");
+              }}>
+              <Trash2 aria-hidden="true" />
+              Очистить историю
+            </Button>
+          </div>
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <p className="text-sm text-muted-foreground" role="status">
@@ -306,6 +366,23 @@ export function CalculationsPage() {
         </div>
       )}
 
+      {deletionRequest && (
+        <div role="status" aria-live="polite"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4 text-sm">
+          <p>
+            {deletionRequest.status === "completed" ? "Удаление завершено." : "Удаление выполняется."}
+            {` Удалено ${deletionRequest.deletedCount} из ${deletionRequest.requestedCount}.`}
+            {deletionRequest.retryingCount > 0 && ` Ошибки хранилища: ${deletionRequest.retryingCount}; повторим автоматически.`}
+          </p>
+          {deletionRequest.status === "completed" && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setDeletionRequest(undefined)}>
+              Скрыть
+            </Button>
+          )}
+          {deletionPollError && <p role="alert" className="basis-full text-destructive">{deletionPollError}</p>}
+        </div>
+      )}
+
       {comparisonIds.length > 0 && (
         <section
           aria-label="Выбор для сравнения"
@@ -368,6 +445,7 @@ export function CalculationsPage() {
             onCompareChange={toggleComparison}
             onQuickView={openQuickView}
             onCancel={openCancellation}
+            onDelete={openDeletion}
           />
         )}
         {jobs.length > 0 && (
@@ -455,6 +533,21 @@ export function CalculationsPage() {
         title="Отменить расчёт"
         onRestoreFocus={() => returnFocusRef.current?.focus()}
       />
+      {deletionTarget && <DeleteCalculationDialog
+        key={deletionTarget === "all" ? "all" : deletionTarget.id}
+        target={deletionTarget}
+        onClose={() => setDeletionTarget(undefined)}
+        onQueued={(request) => {
+          setDeletionRequest(request);
+          setDeletionPollError("");
+          setComparisonIds([]);
+          reload();
+        }}
+        onRestoreFocus={() => {
+          if (returnFocusRef.current?.isConnected) returnFocusRef.current.focus();
+          else clearAllButtonRef.current?.focus();
+        }}
+      />}
       {quickViewJobId && (
         <Suspense fallback={null}>
           <CalculationQuickViewDialog

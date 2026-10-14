@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
+  HttpCode,
   Inject,
   Param,
   ParseUUIDPipe,
@@ -16,11 +18,13 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
 import { CalculationsRepository } from "./calculations.repository.js";
+import { CalculationDeletionService } from "./calculation-deletion.service.js";
 import { calculationKinds, resourceProfileForKind, validateCalculation } from "./commands.js";
 import { environment } from "../config/environment.js";
 import { AuthGuard, type AuthRequest } from "../auth/auth.guard.js";
@@ -30,6 +34,20 @@ import {
 } from "../http-models.js";
 import { parseHistoryPageQuery } from "./history-page.js";
 
+const deletionRequestSchema = {
+  type: "object" as const,
+  required: ["id", "scope", "requestedCount", "deletedCount", "retryingCount", "status", "createdAt"],
+  properties: {
+    id: { type: "string" as const, format: "uuid" },
+    scope: { type: "string" as const, enum: ["single", "all"] },
+    requestedCount: { type: "integer" as const },
+    deletedCount: { type: "integer" as const },
+    retryingCount: { type: "integer" as const },
+    status: { type: "string" as const, enum: ["pending", "retrying", "completed"] },
+    createdAt: { type: "string" as const, format: "date-time" },
+  },
+};
+
 @Controller("calculations")
 @ApiTags("Расчёты")
 @ApiBearerAuth()
@@ -38,6 +56,8 @@ export class CalculationsController {
   constructor(
     @Inject(CalculationsRepository)
     private readonly calculations: CalculationsRepository,
+    @Inject(CalculationDeletionService)
+    private readonly deletion: CalculationDeletionService,
   ) {}
 
   @Get("kinds")
@@ -243,6 +263,53 @@ export class CalculationsController {
     );
   }
 
+  @Get("deletion-overview")
+  @ApiOperation({ summary: "Количество своих расчётов и ограничения полной очистки" })
+  @ApiResponse({ status: 200, schema: { type: "object", properties: {
+    totalCount: { type: "integer" }, activeCount: { type: "integer" },
+    settlingCount: { type: "integer" }, deletingCount: { type: "integer" },
+  } } })
+  overviewDeletion(@Req() req: AuthRequest) {
+    return this.deletion.overview(req.user.id);
+  }
+
+  @Get("deletions/:requestId")
+  @ApiOperation({ summary: "Состояние собственного запроса удаления" })
+  @ApiResponse({ status: 200, schema: deletionRequestSchema })
+  @ApiResponse({ status: 404, description: "Запрос не найден или принадлежит другому пользователю" })
+  deletionRequest(
+    @Req() req: AuthRequest,
+    @Param("requestId", new ParseUUIDPipe()) requestId: string,
+  ) {
+    return this.deletion.getRequest(req.user.id, requestId);
+  }
+
+  @Get("deletions-current")
+  @ApiOperation({ summary: "Последний незавершённый запрос удаления владельца" })
+  @ApiResponse({ status: 200, schema: { ...deletionRequestSchema, nullable: true } })
+  currentDeletionRequest(@Req() req: AuthRequest) {
+    return this.deletion.currentRequest(req.user.id);
+  }
+
+  @Delete()
+  @HttpCode(202)
+  @ApiOperation({ summary: "Запросить удаление всех своих завершённых расчётов и файлов" })
+  @ApiResponse({ status: 202, schema: deletionRequestSchema, description: "Удаление поставлено в очередь" })
+  @ApiResponse({ status: 409, description: "Есть активный, завершающийся или уже удаляемый расчёт" })
+  deleteAll(@Req() req: AuthRequest) {
+    return this.deletion.requestAll(req.user.id);
+  }
+
+  @Delete(":id")
+  @HttpCode(202)
+  @ApiOperation({ summary: "Запросить удаление своего завершённого расчёта и файлов" })
+  @ApiResponse({ status: 202, schema: deletionRequestSchema, description: "Удаление поставлено в очередь" })
+  @ApiResponse({ status: 404, description: "Расчёт не найден или принадлежит другому пользователю" })
+  @ApiResponse({ status: 409, description: "Расчёт активен, ещё завершается, имеет зависимости или уже удаляется" })
+  deleteOne(@Req() req: AuthRequest, @Param("id", new ParseUUIDPipe()) id: string) {
+    return this.deletion.requestSingle(req.user.id, id);
+  }
+
   @Get(":id")
   @ApiResponse({ status: 200, type: CalculationResponse })
   @ApiOperation({ summary: "Свой расчёт, метрики и ссылки на 15 минут" })
@@ -264,6 +331,7 @@ export class CalculationsController {
       coordinateUnit: { type: "string", enum: ["degrees"] },
       bounds: { type: "array", minItems: 4, maxItems: 4, items: { type: "number" } },
       pointCount: { type: "integer" },
+      pointSeries: { type: "object", properties: { groupSize: { type: "integer", enum: [10] } } },
       frames: { type: "array", items: { type: "object", properties: {
         index: { type: "integer" }, time: { type: "string", nullable: true }, chunkId: { type: "string" },
         durationHours: { type: "number", nullable: true },
@@ -298,6 +366,29 @@ export class CalculationsController {
     @Param("chunkId") chunkId: string,
   ) {
     return this.calculations.shorelineVisualizationChunk(id, req.user.id, chunkId);
+  }
+
+  @Get(":id/visualization/points/:pointIndex/series")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Временной ряд рассчитанного смещения собственного узла CERC" })
+  @ApiParam({ name: "pointIndex", type: Number, description: "Индекс узла с нуля, от 0 до pointCount − 1" })
+  @ApiResponse({ status: 200, description: "Смещение ячейки за каждый шаг модели", schema: {
+    type: "object", required: ["schemaVersion", "pointIndex", "shorelineChangeM"],
+    properties: {
+      schemaVersion: { type: "integer", enum: [1] },
+      pointIndex: { type: "integer" },
+      shorelineChangeM: { type: "array", items: { type: "number", nullable: true } },
+    },
+  } })
+  @ApiResponse({ status: 404, description: "Расчёт или временной ряд не найдены" })
+  @ApiResponse({ status: 502, description: "Сохранённый ряд повреждён" })
+  @ApiResponse({ status: 503, description: "Хранилище временно недоступно" })
+  shorelinePointSeries(
+    @Req() req: AuthRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("pointIndex") pointIndex: string,
+  ) {
+    return this.calculations.shorelinePointSeries(id, req.user.id, pointIndex);
   }
 
   @Post(":id/cancel")

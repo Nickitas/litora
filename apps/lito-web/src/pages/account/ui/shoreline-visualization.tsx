@@ -1,14 +1,31 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { geoGraticule, geoMercator, geoPath } from "d3-geo";
 import { scaleLinear, scaleUtc } from "d3-scale";
 import { line } from "d3-shape";
 import type {
+  ShorelinePointSeriesDto,
   ShorelineVisualizationChunkDto,
   ShorelineVisualizationIndexDto,
 } from "@litora/contracts";
 import { Button } from "@/shared/shadcn/components/ui/button";
 
 type Frame = ShorelineVisualizationChunkDto["frames"][number];
+
+function useChartWidth(active: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(800);
+  useEffect(() => {
+    const node = ref.current;
+    if (!active || !node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      const next = Math.max(280, Math.round(entry.contentRect.width));
+      setWidth((current) => (current === next ? current : next));
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [active]);
+  return { ref, width };
+}
 
 function lineGeometry(frame: Frame) {
   return {
@@ -306,6 +323,125 @@ export function WaveTimelineChart({
   );
 }
 
+export function ShorelinePointTimelineChart({
+  index,
+  series,
+  selectedIndex,
+}: {
+  index: ShorelineVisualizationIndexDto;
+  series: ShorelinePointSeriesDto;
+  selectedIndex: number;
+}) {
+  const values = series.shorelineChangeM;
+  const hasValues = values.some((value) => value !== null);
+  const { ref, width } = useChartWidth(hasValues);
+  if (!hasValues)
+    return (
+      <p className="text-sm text-muted-foreground">
+        У узла {series.pointIndex + 1} нет рассчитанного смещения за шаги
+        модели.
+      </p>
+    );
+  const maximum = values.reduce<number>(
+    (largest, value) => Math.max(largest, Math.abs(value ?? 0)),
+    0.000001
+  );
+  const y = scaleLinear([-maximum, maximum], [165, 25]);
+  const firstTime =
+    index.mode === "calendar" ? Date.parse(index.frames[0].time ?? "") : 0;
+  const lastTime =
+    index.mode === "calendar" ? Date.parse(index.frames.at(-1)?.time ?? "") : 1;
+  const xCalendar = scaleUtc(
+    [
+      new Date(firstTime),
+      new Date(lastTime === firstTime ? lastTime + 1 : lastTime),
+    ],
+    [35, width - 15]
+  );
+  const xSteps = scaleLinear(
+    [0, Math.max(values.length - 1, 1)],
+    [35, width - 15]
+  );
+  const x = (position: number) =>
+    index.mode === "calendar"
+      ? xCalendar(new Date(index.frames[position].time ?? ""))
+      : xSteps(position);
+  const dots = values
+    .map((value, position) =>
+      value === null
+        ? ""
+        : `M${x(position).toFixed(2)},${y(value).toFixed(2)}h0.01`
+    )
+    .join("");
+  const selectedValue = values[selectedIndex];
+  const selectedX = x(selectedIndex);
+  const formatter = new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 7,
+  });
+  return (
+    <section className="space-y-2" aria-labelledby="point-timeline-title">
+      <h2 id="point-timeline-title" className="text-lg font-semibold">
+        Смещение узла {series.pointIndex + 1} во времени
+      </h2>
+      <div ref={ref}>
+        <svg
+          viewBox={`0 0 ${width} 200`}
+          role="img"
+          aria-label={`Точечный график смещения узла ${series.pointIndex + 1} за шаг модели в метрах. Выбран шаг ${selectedIndex}.`}
+          className="h-[200px] w-full rounded-lg border bg-card"
+        >
+          <path
+            d={`M35 25V165H${width - 15}`}
+            fill="none"
+            stroke="var(--muted-foreground)"
+          />
+          <path
+            d={`M35 ${y(0)}H${width - 15}`}
+            fill="none"
+            stroke="var(--border)"
+            strokeDasharray="4 4"
+          />
+          <path
+            d={dots}
+            fill="none"
+            stroke="var(--chart-1)"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+          {selectedValue !== null && selectedValue !== undefined && (
+            <circle
+              cx={selectedX}
+              cy={y(selectedValue)}
+              r="6"
+              fill="var(--chart-3)"
+            >
+              <title>{`Шаг ${selectedIndex}: ${formatter.format(selectedValue)} м`}</title>
+            </circle>
+          )}
+          <text x="5" y="30" fill="var(--muted-foreground)" fontSize="13">
+            м
+          </text>
+          <text x="35" y="190" fill="var(--muted-foreground)" fontSize="13">
+            {index.mode === "calendar" ? "Начало" : "Шаг 1"}
+          </text>
+          <text
+            x={width - 65}
+            y="190"
+            fill="var(--muted-foreground)"
+            fontSize="13"
+          >
+            {index.mode === "calendar" ? "Конец" : `Шаг ${values.length - 1}`}
+          </text>
+        </svg>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Каждая точка — смещение за отдельный шаг модели. Пропуски значений не
+        интерполируются; точное значение выбранного шага приведено в таблице.
+      </p>
+    </section>
+  );
+}
+
 export function ShorelineChangeChart({
   frame,
   selectedPoint,
@@ -322,7 +458,7 @@ export function ShorelineChangeChart({
   const values = frame.cells;
   const extent = Math.max(
     ...values.map((cell) => Math.abs(cell.shorelineChangeM)),
-    0.01
+    0.000001
   );
   const x = scaleLinear([0, Math.max(values.length - 1, 1)], [50, 750]);
   const y = scaleLinear([-extent, extent], [165, 25]);

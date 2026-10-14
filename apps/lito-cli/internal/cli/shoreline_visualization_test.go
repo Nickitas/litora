@@ -66,6 +66,19 @@ func TestWriteShorelineVisualizationCalendarAndChunks(t *testing.T) {
 	if chunk.Frames[1].Cells[0].ShorelineChangeM != -0.25 || index.Frames[1].ErodedVolumeM3 == nil || *index.Frames[1].ErodedVolumeM3 != 4 {
 		t.Fatal("визуализация изменила значения результата CERC")
 	}
+	seriesData, err := os.ReadFile(output.ErosionPath("visualization/series/000001.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var group shorelineSeriesGroup
+	if err := json.Unmarshal(seriesData, &group); err != nil {
+		t.Fatal(err)
+	}
+	if index.PointSeries == nil || index.PointSeries.GroupSize != 10 || group.PointStart != 0 ||
+		group.Series[0][0] != nil || group.Series[0][1] == nil || *group.Series[0][1] != -0.25 ||
+		group.Series[1][1] != nil {
+		t.Fatal("временной ряд узла не соответствует шагам CERC")
+	}
 }
 
 func TestWriteShorelineVisualizationWithoutDates(t *testing.T) {
@@ -113,6 +126,16 @@ func TestWriteShorelineVisualizationLongSeriesBudget(t *testing.T) {
 	for i := range model.Snapshots {
 		model.Snapshots[i] = points
 	}
+	cells := make([]geometry.LongshoreCellResult, len(points))
+	for point := range cells {
+		cells[point] = geometry.LongshoreCellResult{PointIndex: point, ShorelineChangeM: -1.2345678901234567}
+	}
+	for step := range model.Steps {
+		model.Steps[step] = geometry.LongshoreStepResult{
+			Condition: geometry.WaveCondition{DurationHours: 1},
+			Cells:     cells,
+		}
+	}
 	if err := WriteShorelineVisualization(model, output); err != nil {
 		t.Fatal(err)
 	}
@@ -137,6 +160,22 @@ func TestWriteShorelineVisualizationLongSeriesBudget(t *testing.T) {
 		}
 		if info.Size() > shorelineChunkMaxBytes {
 			t.Fatalf("файл %s превышает лимит: %d", entry.Name(), info.Size())
+		}
+	}
+	seriesEntries, err := os.ReadDir(output.ErosionPath("visualization/series"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seriesEntries) != 20 {
+		t.Fatalf("ожидалось 20 групп временных рядов, получено %d", len(seriesEntries))
+	}
+	for _, entry := range seriesEntries {
+		info, err := entry.Info()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Size() > shorelineChunkMaxBytes {
+			t.Fatalf("группа %s превышает лимит: %d", entry.Name(), info.Size())
 		}
 	}
 }

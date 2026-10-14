@@ -1,5 +1,11 @@
 import type { CreateDatasetDto } from "@litora/contracts";
 
+export {
+  shorelineDemoChunk,
+  shorelineDemoIndex,
+  shorelineDemoSeries,
+} from "./shoreline-demo";
+
 // Координаты из apps/lito-cli/data/examples/sochi-local-segment.geojson.
 // При обновлении исходного примера синхронизируйте этот небольшой web-образец.
 export const defaultCoastlineDataset: CreateDatasetDto = {

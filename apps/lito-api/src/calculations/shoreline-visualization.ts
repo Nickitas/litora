@@ -1,4 +1,5 @@
 import type {
+  ShorelinePointSeriesDto,
   ShorelineVisualizationChunkDto,
   ShorelineVisualizationFrameDto,
   ShorelineVisualizationIndexDto,
@@ -69,6 +70,8 @@ export function parseShorelineIndex(
     typeof value.pointCount !== "number" ||
     !Number.isInteger(value.pointCount) ||
     value.pointCount < 2 ||
+    (value.pointSeries !== undefined &&
+      (!record(value.pointSeries) || value.pointSeries.groupSize !== 10)) ||
     !Array.isArray(value.frames) ||
     value.frames.length < 2 ||
     value.frames.length > 10_001
@@ -119,7 +122,50 @@ export function parseShorelineIndex(
       value.bounds[3],
     ],
     pointCount: value.pointCount,
+    ...(value.pointSeries === undefined
+      ? {}
+      : { pointSeries: { groupSize: 10 } }),
     frames,
+  };
+}
+
+export function parseShorelinePointSeries(
+  value: unknown,
+  pointIndex: number,
+  index: ShorelineVisualizationIndexDto,
+): ShorelinePointSeriesDto {
+  const groupSize = index.pointSeries?.groupSize;
+  if (
+    !groupSize ||
+    !Number.isInteger(pointIndex) ||
+    pointIndex < 0 ||
+    pointIndex >= index.pointCount
+  )
+    throw new Error("Временной ряд узла недоступен");
+  const pointStart = Math.floor(pointIndex / groupSize) * groupSize;
+  const id = String(pointStart / groupSize + 1).padStart(6, "0");
+  if (
+    !record(value) ||
+    value.schemaVersion !== 1 ||
+    value.id !== id ||
+    value.pointStart !== pointStart ||
+    !Array.isArray(value.series) ||
+    value.series.length !== Math.min(groupSize, index.pointCount - pointStart)
+  )
+    throw new Error("Некорректный временной ряд узла");
+  for (const row of value.series) {
+    if (
+      !Array.isArray(row) ||
+      row.length !== index.frames.length ||
+      row[0] !== null ||
+      !row.every(nullableFinite)
+    )
+      throw new Error("Некорректные значения временного ряда узла");
+  }
+  return {
+    schemaVersion: 1,
+    pointIndex,
+    shorelineChangeM: value.series[pointIndex - pointStart],
   };
 }
 

@@ -1,6 +1,8 @@
 import type {
   AuthDto,
   CalculationJobDto,
+  CalculationDeletionOverviewDto,
+  CalculationDeletionRequestDto,
   CalculationKindDto,
   CalculationPageDto,
   CalculationPageQueryDto,
@@ -14,6 +16,7 @@ import type {
   ReleaseDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
+  ShorelinePointSeriesDto,
   ShorelineVisualizationChunkDto,
   ShorelineVisualizationIndexDto,
   UserDto,
@@ -151,11 +154,29 @@ export function createApiClient(options: ApiClientOptions = {}) {
       send<ShorelineVisualizationChunkDto>(
         `/calculations/${encodeURIComponent(id)}/visualization/chunks/${encodeURIComponent(chunkId)}`,
       ),
+    shorelinePointSeries: (id: string, pointIndex: number) =>
+      send<ShorelinePointSeriesDto>(
+        `/calculations/${encodeURIComponent(id)}/visualization/points/${pointIndex}/series`,
+      ),
     cancelCalculation: (id: string) =>
       send<CalculationJobDto>(
         `/calculations/${encodeURIComponent(id)}/cancel`,
         "POST",
       ),
+    calculationDeletionOverview: () =>
+      send<CalculationDeletionOverviewDto>("/calculations/deletion-overview"),
+    calculationDeletionRequest: (id: string) =>
+      send<CalculationDeletionRequestDto>(
+        `/calculations/deletions/${encodeURIComponent(id)}`,
+      ),
+    currentCalculationDeletionRequest: () =>
+      send<CalculationDeletionRequestDto | null>("/calculations/deletions-current"),
+    deleteCalculation: (id: string) =>
+      send<CalculationDeletionRequestDto>(
+        `/calculations/${encodeURIComponent(id)}`, "DELETE",
+      ),
+    deleteAllCalculations: () =>
+      send<CalculationDeletionRequestDto>("/calculations", "DELETE"),
   };
 }
 

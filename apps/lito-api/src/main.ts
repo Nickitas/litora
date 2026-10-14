@@ -19,6 +19,7 @@ import {
 import type { HealthDto, ReleaseDto } from "@litora/contracts";
 import { CalculationsController } from "./calculations/calculations.controller.js";
 import { CalculationsRepository } from "./calculations/calculations.repository.js";
+import { CalculationDeletionService } from "./calculations/calculation-deletion.service.js";
 import { DatabaseService } from "./infrastructure/database.service.js";
 import { ObjectStorageService } from "./infrastructure/object-storage.service.js";
 import { AuthController } from "./auth/auth.controller.js";
@@ -84,6 +85,7 @@ class AppController {
     DatabaseService,
     ObjectStorageService,
     CalculationsRepository,
+    CalculationDeletionService,
     DatasetsRepository,
     ScientificInputsRepository,
     AuthService,

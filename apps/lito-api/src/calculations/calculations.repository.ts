@@ -12,6 +12,7 @@ import type {
   CalculationJobDto,
   CalculationPageDto,
   CreateCalculationDto,
+  ShorelinePointSeriesDto,
   ShorelineVisualizationChunkDto,
   ShorelineVisualizationIndexDto,
 } from "@litora/contracts";
@@ -26,7 +27,7 @@ import { resourceProfileForKind, scientificReferences } from "./commands.js";
 import { ScientificInputsRepository } from "../scientific-inputs/scientific-inputs.repository.js";
 import { maxReusableArtifactTotalBytes } from "../scientific-inputs/reusable-artifacts.js";
 import { isErosionBathymetryFilename } from "./erosion-bathymetry-filename.js";
-import { parseShorelineChunk, parseShorelineIndex } from "./shoreline-visualization.js";
+import { parseShorelineChunk, parseShorelineIndex, parseShorelinePointSeries } from "./shoreline-visualization.js";
 
 export interface JobRow {
   id: string;
@@ -48,6 +49,7 @@ export interface JobRow {
   worker_id: string | null;
   user_id: string | null;
   dataset_id: string | null;
+  deletion_requested_at?: Date | null;
 }
 
 interface ArtifactRow {
@@ -146,23 +148,28 @@ export class CalculationsRepository {
       );
       if (!owned.rows[0]) throw new NotFoundException("Набор данных не найден");
     }
-    const scientificInputs = new ScientificInputsRepository(this.database);
-    let scientificBytes = 0;
-    for (const reference of scientificReferences(job)) {
-      const source = await scientificInputs.resolveOwnedSource(
-        reference.id, userId, reference.role, this.storage.bucket,
-      );
-      if ((job.kind === "erosion_file" || job.kind === "all_file" || job.kind === "calibrate_cerc") && reference.field === "bathymetryInputId" &&
-          !isErosionBathymetryFilename(source.filename))
-        throw new BadRequestException("Имя батиметрии для CERC должно быть простым именем .json без пути");
-      scientificBytes += Number(source.size_bytes);
-      if (scientificBytes > maxReusableArtifactTotalBytes)
-        throw new BadRequestException("Суммарный размер научных входов превышает 4 ГиБ");
-    }
     const row = await this.database.transaction(async (client) => {
       await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
         userId,
       ]);
+      // Блокировка пользователя сериализует создание зависимостей и запрос
+      // удаления. Иначе источник может быть удалён между проверкой и INSERT.
+      const scientificInputs = new ScientificInputsRepository(this.database);
+      const sourceJobIds = new Set<string>();
+      let scientificBytes = 0;
+      for (const reference of scientificReferences(job)) {
+        const source = await scientificInputs.resolveOwnedSource(
+          reference.id, userId, reference.role, this.storage.bucket,
+        );
+        if ((job.kind === "erosion_file" || job.kind === "all_file" || job.kind === "calibrate_cerc") && reference.field === "bathymetryInputId" &&
+            !isErosionBathymetryFilename(source.filename))
+          throw new BadRequestException("Имя батиметрии для CERC должно быть простым именем .json без пути");
+        scientificBytes += Number(source.size_bytes);
+        if (scientificBytes > maxReusableArtifactTotalBytes)
+          throw new BadRequestException("Суммарный размер научных входов превышает 4 ГиБ");
+        if (source.origin === "artifact" && source.source_job_id)
+          sourceJobIds.add(source.source_job_id);
+      }
       const result = await client.query<JobRow>(
         `INSERT INTO calculation_jobs(user_id,kind,input,dataset_id,input_schema_version,resource_profile)
         SELECT $1,$2,$3,$4,$5,$6 WHERE (SELECT count(*) FROM calculation_jobs WHERE user_id=$1 AND status IN ('queued','running')) < 5 RETURNING *`,
@@ -178,6 +185,11 @@ export class CalculationsRepository {
       if (!result.rows[0])
         throw new ConflictException(
           "Уже есть 5 незавершённых расчётов. Дождитесь завершения или отмените лишние",
+        );
+      for (const sourceJobId of sourceJobIds)
+        await client.query(
+          `INSERT INTO calculation_job_dependencies(dependent_job_id,source_job_id)
+           VALUES($1,$2)`, [result.rows[0].id, sourceJobId],
         );
       await client.query(
         "INSERT INTO calculation_events(job_id,event_type) VALUES($1,'queued')",
@@ -310,6 +322,23 @@ export class CalculationsRepository {
     }
   }
 
+  async shorelinePointSeries(id: string, userId: string, pointIndexText: string): Promise<ShorelinePointSeriesDto> {
+    if (!/^(0|[1-9][0-9]{0,2})$/.test(pointIndexText))
+      throw new NotFoundException("Временной ряд узла не найден");
+    const pointIndex = Number(pointIndexText);
+    const index = await this.shorelineVisualization(id, userId);
+    if (!index.pointSeries || pointIndex >= index.pointCount)
+      throw new NotFoundException("Временной ряд узла не найден");
+    const groupNumber = Math.floor(pointIndex / index.pointSeries.groupSize) + 1;
+    const groupId = String(groupNumber).padStart(6, "0");
+    const value = await this.visualizationFile(id, userId, `erosion/visualization/series/${groupId}.json`, 4 * 1024 * 1024);
+    try {
+      return parseShorelinePointSeries(value, pointIndex, index);
+    } catch {
+      throw new BadGatewayException("Временной ряд узла повреждён");
+    }
+  }
+
   async cancel(id: string, userId: string): Promise<CalculationJobDto> {
     await this.get(id, userId);
     await this.database.query(
@@ -336,7 +365,7 @@ export class CalculationsRepository {
     row: JobRow,
     includeArtifacts = true,
   ): Promise<CalculationJobDto> {
-    const artifacts = includeArtifacts
+    const artifacts = includeArtifacts && !row.deletion_requested_at
       ? await this.database.query<ArtifactRow>(
           "SELECT * FROM calculation_artifacts WHERE job_id = $1 ORDER BY created_at",
           [row.id],
@@ -359,6 +388,7 @@ export class CalculationsRepository {
       startedAt: row.started_at?.toISOString() ?? null,
       finishedAt: row.finished_at?.toISOString() ?? null,
       updatedAt: row.updated_at.toISOString(),
+      deletionRequestedAt: row.deletion_requested_at?.toISOString() ?? null,
       artifacts: await Promise.all(
         artifacts.rows.map(
           async (artifact): Promise<CalculationArtifactDto> => ({

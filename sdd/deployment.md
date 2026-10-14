@@ -242,11 +242,46 @@ header, 429 и отсутствие прямого доступа к API — л�
 }
 ```
 
-ListBucket нужен для HeadBucket; CreateBucket/DeleteObject не выдаём. Приложение
+ListBucket нужен для HeadBucket; базовая роль не получает CreateBucket/DeleteObject.
+Для функции удаления расчётов из [среза 0043](features/0043-account-calculation-deletion.md)
+worker дополнительно нужен `s3:DeleteObject` на
+`arn:aws:s3:::BUCKET_NAME/users/*`. Это право разрешает удалять текущие версии
+объектов в пространстве `users/`, где лежат и пользовательские входы: раздельные
+IAM credentials API/worker уменьшают область риска, но сам worker ограничивает
+операцию проверенным `users/{jobId}/` и владельцем в PostgreSQL. Не выдавать
+`s3:DeleteObjectVersion`; noncurrent versions и backup имеют отдельную политику.
+Если API и worker используют одни credentials, добавленное право получит и API;
+перед production-приёмкой разделить эти роли или явно принять этот риск.
+Добавочный statement для роли worker (не для публичного web):
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["s3:DeleteObject"],
+  "Resource": "arn:aws:s3:::BUCKET_NAME/users/*"
+}
+```
+
+До выдачи права проверить IAM на staging, тест отказа удаления и восстановление
+резервной копии. Пока право отсутствует, запрос остаётся в очереди с повтором,
+а не исчезает из БД. Приложение
 умеет создавать отсутствующий bucket в dev (`S3_AUTO_CREATE_BUCKET=true`); в
 production-шаблоне эта опция принудительно отключена. Если bucket не найден, API
 останавливается с явной ошибкой вместо попытки CreateBucket. При запуске вне
 production-шаблона выставить `S3_AUTO_CREATE_BUCKET=false` вручную.
+
+Для диагностики незавершённого удаления читать только очередь, не удалять её
+строки вручную:
+
+```sql
+SELECT request_id, job_id, status, attempts, error_code, next_attempt_at
+FROM calculation_deletion_items
+WHERE status <> 'deleted'
+ORDER BY next_attempt_at, request_id;
+```
+
+Если `error_code` не исчезает, сверить права worker и текущие объекты ровно
+`users/{jobId}/`; перед ручной правкой БД/S3 выполнить backup и staging drill.
 403 при HeadBucket — ошибка прав, не повод сделать bucket публичным. IAM policy
 не заменяет block public access. При customer-managed KMS нужны согласованные KMS
 права и проверка, этот минимальный пример предполагает обычное S3-managed encryption.

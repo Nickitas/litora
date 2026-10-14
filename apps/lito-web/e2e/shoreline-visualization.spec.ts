@@ -57,6 +57,7 @@ const index = {
   coordinateUnit: "degrees",
   bounds: [39, 43, 39.03, 43.03],
   pointCount: 3,
+  pointSeries: { groupSize: 10 },
   frames: [
     {
       index: 0,
@@ -112,6 +113,49 @@ const chunks = {
     ],
   },
 } satisfies Record<string, ShorelineVisualizationChunkDto>;
+const pointSeries = {
+  schemaVersion: 1,
+  pointIndex: 0,
+  shorelineChangeM: [null, -0.2, -0.4],
+};
+const secondPointSeries = {
+  schemaVersion: 1,
+  pointIndex: 1,
+  shorelineChangeM: [null, 0.3, null],
+};
+const emptyPointSeries = {
+  schemaVersion: 1,
+  pointIndex: 2,
+  shorelineChangeM: [null, null, null],
+};
+
+test("пример открывается из обзора без своего расчёта и проигрывает сохранённые кадры", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.route((url) => url.pathname.startsWith("/api/"), async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/refresh") {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify(session) });
+    } else if (path === "/api/calculations" || path === "/api/calculations/kinds") {
+      await route.fulfill({ contentType: "application/json", body: "[]" });
+    } else {
+      await route.abort("blockedbyclient");
+    }
+  });
+  await page.goto("/account");
+  await page.getByRole("link", { name: "Открыть карту и реплей" }).click();
+  await expect(page).toHaveURL(/\/account\/shoreline$/);
+  await expect(page.getByRole("img", { name: /Карта: исходная линия/ })).toBeVisible();
+  await expect(page.getByText("Короткий демонстрационный расчёт за 3 часа", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: /Воспроизвести/ }).click();
+  await expect(page.getByRole("img", { name: /положение после шага 3/ })).toBeVisible();
+  await page.getByRole("button", { name: "Предыдущий кадр" }).click();
+  await page.getByRole("button", { name: "Предыдущий кадр" }).click();
+  await expect(page.getByRole("row", { name: /Смещение ячейки за шаг/ })).toContainText(/0,0001455 м/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});
 
 test("карта показывает фактический кадр и не подставляет его в день без данных", async ({
   page,
@@ -130,6 +174,9 @@ test("карта показывает фактический кадр и не п
       else if (path === `/api/calculations/${id}/visualization`) body = index;
       else if (path.endsWith("/chunks/000001")) body = chunks["000001"];
       else if (path.endsWith("/chunks/000002")) body = chunks["000002"];
+      else if (path.endsWith("/points/0/series")) body = pointSeries;
+      else if (path.endsWith("/points/1/series")) body = secondPointSeries;
+      else if (path.endsWith("/points/2/series")) body = emptyPointSeries;
       else {
         await route.abort("blockedbyclient");
         return;
@@ -149,6 +196,27 @@ test("карта показывает фактический кадр и не п
       name: /Карта: исходная линия и положение после шага 2/,
     })
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Смещение узла 1 во времени" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: /Точечный график смещения узла 1/ })
+  ).toHaveAttribute("viewBox", /0 0 2\d\d 200/);
+  await page.getByLabel("Узел береговой линии").fill("2");
+  await expect(
+    page.getByRole("heading", { name: "Смещение узла 2 во времени" })
+  ).toBeVisible();
+  await page.getByLabel("Узел береговой линии").fill("3");
+  await expect(
+    page.getByText("У узла 3 нет рассчитанного смещения", { exact: false })
+  ).toBeVisible();
+  await page.getByLabel("Узел береговой линии").fill("1");
+  await expect(
+    page.getByRole("heading", { name: "Смещение узла 1 во времени" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: /Точечный график смещения узла 1/ })
+  ).toHaveAttribute("viewBox", /0 0 2\d\d 200/);
   await page.getByRole("button", { name: "День", exact: true }).click();
   await page.getByLabel("Перейти к дате (UTC)").fill("2024-01-02");
   await expect(
@@ -194,6 +262,9 @@ test("ряд без временных меток показывает толь�
         body = stepsIndex;
       else if (path.endsWith("/chunks/000001")) body = chunks["000001"];
       else if (path.endsWith("/chunks/000002")) body = chunks["000002"];
+      else if (path.endsWith("/points/0/series")) body = pointSeries;
+      else if (path.endsWith("/points/1/series")) body = secondPointSeries;
+      else if (path.endsWith("/points/2/series")) body = emptyPointSeries;
       else {
         await route.abort("blockedbyclient");
         return;
