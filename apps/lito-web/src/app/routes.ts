@@ -77,6 +77,11 @@ const DatasetsPage = lazy(() =>
     default: m.DatasetsPage,
   }))
 );
+const ShorelineVisualizationPage = lazy(() =>
+  import("@/pages/account/shoreline-visualization.page").then((m) => ({
+    default: m.ShorelineVisualizationPage,
+  }))
+);
 
 export interface AppRoute {
   path?: string;
@@ -101,6 +106,7 @@ export const routes: AppRoute[] = [
       { path: "calculations", Component: CalculationsPage },
       { path: "calculations/:jobId", Component: CalculationDetailPage },
       { path: "datasets", Component: DatasetsPage },
+      { path: "shoreline", Component: ShorelineVisualizationPage },
     ],
   },
   { path: "/docs", Component: DocsPage },

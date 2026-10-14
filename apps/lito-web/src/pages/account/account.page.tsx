@@ -8,6 +8,7 @@ const navigation = [
   { to: "/account", label: "Обзор", end: true },
   { to: "/account/calculations", label: "Расчёты", end: true },
   { to: "/account/datasets", label: "Наборы данных", end: true },
+  { to: "/account/shoreline", label: "Динамика берега", end: true },
 ] as const;
 
 export function AccountPage() {

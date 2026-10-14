@@ -36,6 +36,42 @@ export interface CalculationArtifactDto {
   downloadUrl: string;
 }
 
+export interface ShorelineVisualizationFrameDto {
+  index: number;
+  time: string | null;
+  chunkId: string;
+  durationHours: number | null;
+  waveHeightM: number | null;
+  erodedVolumeM3: number | null;
+  depositedVolumeM3: number | null;
+  balanceClosureResidualM3: number | null;
+}
+
+export interface ShorelineVisualizationIndexDto {
+  schemaVersion: 1;
+  mode: "calendar" | "steps";
+  scenarioStatus: string;
+  usageLimitations: string[];
+  waveSource: string;
+  bathymetrySha256: string;
+  bathymetryStatus: string;
+  crs: "EPSG:4326";
+  coordinateUnit: "degrees";
+  bounds: [number, number, number, number];
+  pointCount: number;
+  frames: ShorelineVisualizationFrameDto[];
+}
+
+export interface ShorelineVisualizationChunkDto {
+  schemaVersion: 1;
+  id: string;
+  frames: {
+    index: number;
+    points: { lat: number; lon: number }[];
+    cells: { pointIndex: number; shorelineChangeM: number }[];
+  }[];
+}
+
 export interface CalculationJobDto {
   id: string;
   kind: string;

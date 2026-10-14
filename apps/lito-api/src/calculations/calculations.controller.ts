@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Inject,
   Param,
   ParseUUIDPipe,
@@ -247,6 +248,56 @@ export class CalculationsController {
   @ApiOperation({ summary: "Свой расчёт, метрики и ссылки на 15 минут" })
   get(@Req() req: AuthRequest, @Param("id", new ParseUUIDPipe()) id: string) {
     return this.calculations.get(id, req.user.id);
+  }
+
+  @Get(":id/visualization")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Индекс интерактивной карты собственного расчёта CERC" })
+  @ApiResponse({ status: 200, description: "Версионированный индекс кадров", schema: {
+    type: "object", required: ["schemaVersion", "mode", "frames", "bounds", "pointCount"],
+    properties: {
+      schemaVersion: { type: "integer", enum: [1] },
+      mode: { type: "string", enum: ["calendar", "steps"] },
+      scenarioStatus: { type: "string" }, usageLimitations: { type: "array", items: { type: "string" } },
+      waveSource: { type: "string" }, bathymetrySha256: { type: "string" },
+      bathymetryStatus: { type: "string" }, crs: { type: "string", enum: ["EPSG:4326"] },
+      coordinateUnit: { type: "string", enum: ["degrees"] },
+      bounds: { type: "array", minItems: 4, maxItems: 4, items: { type: "number" } },
+      pointCount: { type: "integer" },
+      frames: { type: "array", items: { type: "object", properties: {
+        index: { type: "integer" }, time: { type: "string", nullable: true }, chunkId: { type: "string" },
+        durationHours: { type: "number", nullable: true },
+        waveHeightM: { type: "number", nullable: true }, erodedVolumeM3: { type: "number", nullable: true },
+        depositedVolumeM3: { type: "number", nullable: true }, balanceClosureResidualM3: { type: "number", nullable: true },
+      } } },
+    },
+  } })
+  @ApiResponse({ status: 404, description: "Расчёт или визуализация не найдены" })
+  shorelineVisualization(@Req() req: AuthRequest, @Param("id", new ParseUUIDPipe()) id: string) {
+    return this.calculations.shorelineVisualization(id, req.user.id);
+  }
+
+  @Get(":id/visualization/chunks/:chunkId")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Ограниченный набор кадров собственной карты CERC" })
+  @ApiResponse({ status: 200, description: "Кадры карты", schema: {
+    type: "object", required: ["schemaVersion", "id", "frames"],
+    properties: {
+      schemaVersion: { type: "integer", enum: [1] }, id: { type: "string" },
+      frames: { type: "array", items: { type: "object", properties: {
+        index: { type: "integer" },
+        points: { type: "array", items: { type: "object", properties: { lat: { type: "number" }, lon: { type: "number" } } } },
+        cells: { type: "array", items: { type: "object", properties: { pointIndex: { type: "integer" }, shorelineChangeM: { type: "number" } } } },
+      } } },
+    },
+  } })
+  @ApiResponse({ status: 404, description: "Расчёт или кадры не найдены" })
+  shorelineVisualizationChunk(
+    @Req() req: AuthRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("chunkId") chunkId: string,
+  ) {
+    return this.calculations.shorelineVisualizationChunk(id, req.user.id, chunkId);
   }
 
   @Post(":id/cancel")

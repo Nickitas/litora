@@ -142,6 +142,30 @@ export class ObjectStorageService implements OnModuleInit {
     }
   }
 
+  async readObjectBytes(objectKey: string, maxBytes: number): Promise<Buffer> {
+    const response = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      { abortSignal: AbortSignal.timeout(30_000) },
+    );
+    if (response.ContentLength !== undefined && response.ContentLength > maxBytes)
+      throw new Error("Размер артефакта превышает лимит просмотра");
+    if (!response.Body || !(Symbol.asyncIterator in response.Body))
+      throw new Error("S3 не вернул поток артефакта");
+    const body = response.Body as Readable;
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of body) {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+      size += bytes.length;
+      if (size > maxBytes) {
+        body.destroy();
+        throw new Error("Размер артефакта превышает лимит просмотра");
+      }
+      chunks.push(bytes);
+    }
+    return Buffer.concat(chunks, size);
+  }
+
   async deleteObject(objectKey: string): Promise<void> {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: objectKey }),

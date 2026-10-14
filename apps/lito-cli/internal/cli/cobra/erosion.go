@@ -259,6 +259,9 @@ func runErosion(cmd *cobra.Command, args []string) error {
 	if err := writeModel(model, outputMgr); err != nil {
 		return fmt.Errorf("сохранение баланса наносов: %w", err)
 	}
+	if err := cli.WriteShorelineVisualization(model, outputMgr); err != nil {
+		fmt.Printf("Предупреждение: не удалось подготовить интерактивную карту: %v\n", err)
+	}
 	if err := exportErosionArtifacts(outputMgr, snapshots, nil, erosionOutputCSV, erosionCSVFormat, erosionOutputGIF, erosionGIFFPS, erosionGIFSkip); err != nil {
 		return err
 	}

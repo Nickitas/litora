@@ -14,6 +14,8 @@ import type {
   ReleaseDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
+  ShorelineVisualizationChunkDto,
+  ShorelineVisualizationIndexDto,
   UserDto,
 } from "@litora/contracts";
 
@@ -141,6 +143,14 @@ export function createApiClient(options: ApiClientOptions = {}) {
     },
     calculation: (id: string) =>
       send<CalculationJobDto>(`/calculations/${encodeURIComponent(id)}`),
+    shorelineVisualization: (id: string) =>
+      send<ShorelineVisualizationIndexDto>(
+        `/calculations/${encodeURIComponent(id)}/visualization`,
+      ),
+    shorelineVisualizationChunk: (id: string, chunkId: string) =>
+      send<ShorelineVisualizationChunkDto>(
+        `/calculations/${encodeURIComponent(id)}/visualization/chunks/${encodeURIComponent(chunkId)}`,
+      ),
     cancelCalculation: (id: string) =>
       send<CalculationJobDto>(
         `/calculations/${encodeURIComponent(id)}/cancel`,

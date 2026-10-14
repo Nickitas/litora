@@ -1,15 +1,19 @@
 import {
   BadRequestException,
+  BadGatewayException,
   ConflictException,
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import type {
   CalculationArtifactDto,
   CalculationJobDto,
   CalculationPageDto,
   CreateCalculationDto,
+  ShorelineVisualizationChunkDto,
+  ShorelineVisualizationIndexDto,
 } from "@litora/contracts";
 import {
   encodeHistoryCursor,
@@ -22,6 +26,7 @@ import { resourceProfileForKind, scientificReferences } from "./commands.js";
 import { ScientificInputsRepository } from "../scientific-inputs/scientific-inputs.repository.js";
 import { maxReusableArtifactTotalBytes } from "../scientific-inputs/reusable-artifacts.js";
 import { isErosionBathymetryFilename } from "./erosion-bathymetry-filename.js";
+import { parseShorelineChunk, parseShorelineIndex } from "./shoreline-visualization.js";
 
 export interface JobRow {
   id: string;
@@ -255,6 +260,54 @@ export class CalculationsRepository {
     );
     if (!result.rows[0]) throw new NotFoundException("Расчёт не найден");
     return this.toDto(result.rows[0]);
+  }
+
+  private async visualizationFile(id: string, userId: string, filename: string, maxBytes: number): Promise<unknown> {
+    const result = await this.database.query<{ object_key: string; size_bytes: string }>(
+      `SELECT a.object_key, a.size_bytes FROM calculation_jobs j
+       JOIN calculation_artifacts a ON a.job_id=j.id
+       WHERE j.id=$1 AND j.user_id=$2 AND j.status='succeeded'
+         AND a.filename=$3 AND a.category='output' AND a.bucket=$4`,
+      [id, userId, filename, this.storage.bucket],
+    );
+    const artifact = result.rows[0];
+    if (!artifact) throw new NotFoundException("Визуализация для расчёта недоступна");
+    if (Number(artifact.size_bytes) > maxBytes)
+      throw new BadGatewayException("Файл визуализации превышает допустимый размер");
+    let bytes: Buffer;
+    try {
+      bytes = await this.storage.readObjectBytes(artifact.object_key, maxBytes);
+    } catch {
+      throw new ServiceUnavailableException("Не удалось прочитать файл визуализации");
+    }
+    try {
+      return JSON.parse(bytes.toString("utf8")) as unknown;
+    } catch {
+      throw new BadGatewayException("Файл визуализации повреждён");
+    }
+  }
+
+  async shorelineVisualization(id: string, userId: string): Promise<ShorelineVisualizationIndexDto> {
+    const value = await this.visualizationFile(id, userId, "erosion/visualization/index.json", 4 * 1024 * 1024);
+    try {
+      return parseShorelineIndex(value);
+    } catch {
+      throw new BadGatewayException("Индекс визуализации повреждён");
+    }
+  }
+
+  async shorelineVisualizationChunk(id: string, userId: string, chunkId: string): Promise<ShorelineVisualizationChunkDto> {
+    if (!/^[0-9]{6}$/.test(chunkId))
+      throw new NotFoundException("Кадры визуализации не найдены");
+    const index = await this.shorelineVisualization(id, userId);
+    if (!index.frames.some((frame) => frame.chunkId === chunkId))
+      throw new NotFoundException("Кадры визуализации не найдены");
+    const value = await this.visualizationFile(id, userId, `erosion/visualization/chunks/${chunkId}.json`, 4 * 1024 * 1024);
+    try {
+      return parseShorelineChunk(value, chunkId, index);
+    } catch {
+      throw new BadGatewayException("Кадры визуализации повреждены");
+    }
   }
 
   async cancel(id: string, userId: string): Promise<CalculationJobDto> {

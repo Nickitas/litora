@@ -287,6 +287,12 @@ function CalculationDetail({ jobId }: { jobId: string }) {
         </div>
         {job && (
           <div className="flex flex-wrap gap-2">
+            {job.status === "succeeded" && job.artifacts.some((file) =>
+              file.category === "output" && file.filename === "erosion/visualization/index.json") && (
+              <Button asChild variant="outline">
+                <Link to={`/account/shoreline?job=${job.id}`}>Открыть динамику берега</Link>
+              </Button>
+            )}
             <Button asChild variant="outline">
               <Link to={`/account/calculations?repeat=${job.id}`}>
                 Создать на основе
