@@ -182,7 +182,7 @@ test("кабинет на 360 px показывает все статусы бе
       });
     }
   );
-  await page.goto("/account/calculations");
+  await page.goto("/lab/calculations");
   const history = page.getByRole("region", { name: "История расчётов" });
   await expect(
     history.getByRole("table", { name: "История расчётов" })
@@ -209,11 +209,44 @@ test("кабинет на 360 px показывает все статусы бе
   await accountTrigger.click();
   const accountMenu = page.locator("#account-menu");
   await expect(accountMenu).toBeVisible();
-  await accountMenu.getByRole("link", { name: "Личный кабинет" }).focus();
+  for (const [name, href] of [
+    ["Обзор лаборатории", "/lab"],
+    ["Расчёты и отчёты", "/lab/calculations"],
+    ["Наборы данных", "/lab/datasets"],
+    ["Динамика берега", "/lab/shoreline"],
+    ["Аккаунт", "/account"],
+  ]) {
+    await expect(accountMenu.getByRole("menuitem", { name })).toHaveAttribute("href", href);
+  }
+  await accountMenu.getByRole("menuitem", { name: "Аккаунт" }).focus();
   await page.keyboard.press("Escape");
   await expect(accountTrigger).toBeFocused();
   await expect(accountTrigger).toHaveAttribute("aria-expanded", "false");
   await expect(accountMenu).toBeHidden();
+
+  await accountTrigger.click();
+  await accountMenu.getByRole("menuitem", { name: "Аккаунт" }).click();
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(page.getByRole("heading", { name: "Аккаунт", exact: true })).toBeVisible();
+  await expect(page.getByText("design@example.test")).toBeVisible();
+  await page.getByRole("link", { name: "Перейти в лабораторию" }).click();
+  await expect(page).toHaveURL(/\/lab$/);
+
+  await page.goto("/account/calculations?status=succeeded");
+  await expect(page).toHaveURL(/\/lab\/calculations\?status=succeeded$/);
+
+  await accountTrigger.click();
+  await accountMenu.getByRole("menuitem", { name: "Новый расчёт" }).click();
+  await expect(page.getByRole("dialog", { name: /Новый расчёт/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/lab$/);
+
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.getByRole("button", { name: "Открыть меню", exact: true }).click();
+  const mobileMenu = page.locator("#mobile-navigation");
+  await expect(mobileMenu.getByRole("link", { name: "Расчёты и отчёты" })).toBeVisible();
+  await expect(mobileMenu.getByRole("link", { name: "Аккаунт" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
 });
 
 test("справочник и релизы открываются в обеих темах на узком экране", async ({
@@ -337,18 +370,18 @@ test("публичные CTA — одиночные ссылки, доступн
   await page.keyboard.press("Enter");
   await expect(page.locator("main")).toBeFocused();
 
-  const details = page.getByRole("link", { name: "Подробнее" });
+  const details = page.getByRole("link", { name: "В лабораторию" });
   await details.focus();
   await expect(details).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/about$/);
+  await expect(page).toHaveURL(/\/login$/);
 
   await page.setViewportSize({ width: 720, height: 900 });
   await page.goto("/");
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "200%";
   });
-  const detailsAtZoom = page.getByRole("link", { name: "Подробнее" });
+  const detailsAtZoom = page.getByRole("link", { name: "В лабораторию" });
   await expect(detailsAtZoom).toBeVisible();
   const ctaIsInsideHero = await detailsAtZoom.evaluate((link) => {
     const hero = link?.closest("section");

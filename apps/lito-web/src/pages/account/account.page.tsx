@@ -1,20 +1,16 @@
 import { useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/features/auth";
+import { LAB_NAV_ITEMS } from "@/shared/config/routes";
+import { Button } from "@/shared/shadcn/components/ui/button";
 import { Dialog } from "@/shared/shadcn/components/ui/dialog";
 import { NewCalculationDialog } from "./new-calculation.page";
-
-const navigation = [
-  { to: "/account", label: "Обзор", end: true },
-  { to: "/account/calculations", label: "Расчёты", end: true },
-  { to: "/account/datasets", label: "Наборы данных", end: true },
-  { to: "/account/shoreline", label: "Динамика берега", end: true },
-] as const;
 
 export function AccountPage() {
   const auth = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const repeatJobId = searchParams.get("repeat");
+  const createRequested = searchParams.get("new") === "1";
   const [newCalculationOpen, setNewCalculationOpen] = useState(false);
   const newCalculationTriggerRef = useRef<HTMLElement | null>(null);
   const calculationsLinkRef = useRef<HTMLAnchorElement>(null);
@@ -24,25 +20,41 @@ export function AccountPage() {
       newCalculationTriggerRef.current = document.activeElement;
     }
     setNewCalculationOpen(open);
-    if (!open && repeatJobId) {
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.delete("repeat");
-        return next;
-      }, { replace: true });
+    if (!open && (repeatJobId || createRequested)) {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete("repeat");
+          next.delete("new");
+          return next;
+        },
+        { replace: true }
+      );
     }
   }
 
   if (auth.loading) return <p role="status">Проверяем сессию…</p>;
+  if (auth.checkError && !auth.isAuthenticated)
+    return (
+      <div className="mx-auto max-w-lg space-y-4 rounded-xl border bg-card p-6">
+        <p role="alert">Не удалось проверить сессию: {auth.checkError}</p>
+        <Button type="button" onClick={() => void auth.retrySession()}>
+          Повторить проверку
+        </Button>
+      </div>
+    );
   if (!auth.isAuthenticated || !auth.user)
     return <Navigate to="/login" replace />;
 
   return (
-    <Dialog open={newCalculationOpen || Boolean(repeatJobId)} onOpenChange={changeNewCalculationOpen}>
+    <Dialog
+      open={newCalculationOpen || Boolean(repeatJobId) || createRequested}
+      onOpenChange={changeNewCalculationOpen}
+    >
       <div className="mx-auto max-w-[1440px] space-y-6">
         <header>
           <p className="text-sm text-muted-foreground">
-            Личный кабинет · {auth.user.name}
+            Лаборатория · {auth.user.name}
           </p>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Рабочее место для запуска, контроля и изучения.
@@ -50,19 +62,24 @@ export function AccountPage() {
         </header>
         <div className="grid items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
           <nav
-            aria-label="Разделы личного кабинета"
+            aria-label="Разделы лаборатории"
             className="flex gap-2 overflow-x-auto pb-1 lg:sticky lg:top-24 lg:block lg:space-y-1 lg:overflow-visible lg:pb-0"
           >
-            {navigation.map((item) => (
+            {LAB_NAV_ITEMS.map((item) => (
               <NavLink
-                key={item.to}
-                ref={item.to === "/account/calculations" ? calculationsLinkRef : undefined}
-                to={item.to}
+                key={item.path}
+                ref={
+                  item.path === "/lab/calculations"
+                    ? calculationsLinkRef
+                    : undefined
+                }
+                to={item.path}
                 end={item.end}
                 className={({ isActive }) =>
-                  `inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:flex ${isActive
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  `inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:flex ${
+                    isActive
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`
                 }
               >
@@ -72,7 +89,7 @@ export function AccountPage() {
           </nav>
           <Outlet />
         </div>
-        {(newCalculationOpen || repeatJobId) && (
+        {(newCalculationOpen || repeatJobId || createRequested) && (
           <NewCalculationDialog
             key={repeatJobId ?? "new"}
             repeatJobId={repeatJobId ?? undefined}

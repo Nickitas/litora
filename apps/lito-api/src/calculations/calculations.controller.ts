@@ -224,6 +224,12 @@ export class CalculationsController {
     enum: calculationKinds.map((item) => item.kind),
   })
   @ApiQuery({
+    name: "visualization",
+    required: false,
+    enum: ["shoreline"],
+    description: "Только успешные собственные расчёты с индексом интерактивной карты",
+  })
+  @ApiQuery({
     name: "from",
     required: false,
     type: String,

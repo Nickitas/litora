@@ -10,8 +10,8 @@ export interface AppRelease {
 
 export const releasesPageContent = {
   hero: {
-    title: "Версии Litora CLI",
-    subtitle: "История версий и доступные сборки",
+    title: "История версий Litora CLI",
+    subtitle: "Выпуски вычислительного ядра и доступные сборки",
     description:
       "Сборки v2.0 доступны на сайте. Исторические релизы будут опубликованы в монорепозитории после проверки архивных файлов.",
   },

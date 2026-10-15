@@ -168,12 +168,17 @@ pnpm dev:web
 Текущий `dev:worker` запускает `tsx` без watch. После правки worker TS остановите
 его `Ctrl+C` и запустите снова. Встроенные данные/миграции также подхватываются
 при соответствующем рестарте. Node процессы берут настройки из корневого `.env.local`.
+Если удаление расчётов остаётся в ожидании с `attempts=0`, проверьте, что
+`dev:worker` перезапущен после обновления кода и что при старте применена
+миграция `015_calculation_deletion_lock_token.sql`. Не удаляйте строки очереди
+вручную: новый worker продолжит уже подтверждённые запросы.
 
 | Что открыть | Адрес по умолчанию |
 | --- | --- |
 | Сайт | http://localhost:5173/ |
 | Вход / регистрация | http://localhost:5173/login |
-| Личный кабинет | http://localhost:5173/account |
+| Лаборатория | http://localhost:5173/lab |
+| Аккаунт (профиль) | http://localhost:5173/account |
 | Swagger | http://localhost:3000/api/docs |
 | OpenAPI JSON | http://localhost:3000/api/docs-json |
 | Health API | http://localhost:3000/api/health |
@@ -203,7 +208,7 @@ pnpm --filter litora-api invitations create
 Существующим пользователям ключ для входа не нужен. Для Docker-режима см.
 операторскую команду в корневом README.
 
-Зарегистрируйтесь с ключом на `/login`, откройте `/account`, запустите dimension и дождитесь
+Зарегистрируйтесь с ключом на `/login`, откройте `/lab`, запустите dimension и дождитесь
 появления отчёта/ссылки. Затем map и демонстрационный erosion (`steps` 1–48).
 На странице Swagger после входа используйте полученный access token в Authorize;
 без него защищённые ручки вернут 401. Файлы доступны по подписанным ссылкам S3.
@@ -332,8 +337,9 @@ pnpm down
 | API 503 на `/api/health` | PostgreSQL/MinIO healthy, URL/порт/ключ bucket в `.env.local`, миграции и логи API |
 | `password authentication failed` | `DATABASE_URL`, пароль роли в существующем volume; env-файл сам пароль БД не меняет |
 | На 3000 JSON вместо сайта | Это API; React открыт на 5173 |
-| `Failed to load module script`, MIME `text/html` | В Network посмотреть **точный URL** сбойного модуля и `Content-Type` ответа. В Yandex Browser после старого ответа HTML для `/src/`, `/@fs/` и `/node_modules/.vite/deps/` помогли `Disable cache` в DevTools и повторная загрузка страницы: те же URL стали отдавать JS. Если `/assets/` — возможно, вкладка держит старый production-бандл после Docker. Если отключение кеша не помогает, сверить URL прямым запросом к Vite и проверить его логи; не менять MIME вручную. |
-| `Failed to fetch dynamically imported module` | Проверьте URL модуля и загрузку в чистой вкладке. Если Vite отдаёт его как JavaScript, а старая вкладка падает после hot reload, обновите её без кеша. Общий экран ошибки маршрута предлагает повторную загрузку; он не заменяет диагностику при устойчивом сбое. |
+| `Failed to load module script`, MIME `text/html` | В Network посмотреть **точный URL** сбойного модуля и `Content-Type` ответа. В Yandex Browser после старого ответа HTML для `/src/`, `/@fs/` и `/node_modules/.vite/deps/` помогли `Disable cache` в DevTools и повторная загрузка страницы: те же URL стали отдавать JS. В nginx отсутствующий `/assets/*` теперь должен давать 404, а не HTML. Если отключение кеша не помогает, сверить URL прямым запросом к Vite и проверить его логи; не менять MIME вручную. |
+| `Failed to fetch dynamically imported module` | Web один раз автоматически перезагружает текущий URL. Если ошибка остаётся, экран ошибки означает устойчивый сбой: проверить URL модуля, статус и `Content-Type` в Network, сеть, nginx/Vite и доступность assets. Не считать обновление релиза доказанной причиной без проверки. |
+| Сообщение о завершении сессии | Проверить статус `/api/auth/refresh`: только подтверждённый 401 означает недействительную/отозванную cookie. 429, 503 и сетевой сбой — временная ошибка проверки; посмотреть `Retry-After`, Origin, cookie attributes и согласованность вкладок, не копируя значения токенов в логи. Web-сценарии описаны в [0045](features/0045-auth-session-recovery.md). |
 | Кабинет не обновляется из `queued` | Отдельный `pnpm dev:worker` запущен, `apps/lito-cli/bin/lito` существует; логи worker |
 | Ошибка скачивания или `SignatureDoesNotMatch` | `S3_PUBLIC_ENDPOINT` должен совпадать с браузерным host/port, часы синхронизированы |
 | React `useState` of null | Одна копия React в workspace; Vite `dedupe` уже настроен, проверить зависимости/cache после обновления |

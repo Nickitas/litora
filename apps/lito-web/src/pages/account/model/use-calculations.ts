@@ -94,6 +94,8 @@ function pageQuery(search: string): CalculationPageQueryDto {
     status: (params.get("status") ||
       undefined) as CalculationPageQueryDto["status"],
     kind: (params.get("kind") || undefined) as CalculationPageQueryDto["kind"],
+    visualization: (params.get("visualization") ||
+      undefined) as CalculationPageQueryDto["visualization"],
     from: params.get("from") || undefined,
     to: params.get("to") || undefined,
     jobId: params.get("jobId") || undefined,
@@ -140,28 +142,29 @@ export function useInfiniteCalculationHistory(search: string) {
       try {
         const result = await api.calculationPage(query);
         if (mounted)
-          setState((current) =>
-            current.key === search
-              ? {
-                  ...current,
-                  jobs: mergeFirstPage(current.jobs, result.items),
-                  nextCursor:
-                    current.totalCount === null
-                      ? result.nextCursor
-                      : current.nextCursor,
-                  totalCount: result.totalCount,
-                  error: "",
-                }
-              : {
-                  key: search,
-                  jobs: result.items,
-                  nextCursor: result.nextCursor,
-                  totalCount: result.totalCount,
-                  loadingMore: false,
-                  error: "",
-                  loadMoreError: "",
-                }
-          );
+          setState((current) => {
+            // При уменьшении числа записей прежние страницы могут содержать
+            // уже удалённый job. Перечитываем историю с первой страницы.
+            const historyShrank = current.key === search && current.totalCount !== null &&
+              result.totalCount < current.totalCount;
+            if (current.key !== search || historyShrank)
+              return {
+                key: search,
+                jobs: result.items,
+                nextCursor: result.nextCursor,
+                totalCount: result.totalCount,
+                loadingMore: false,
+                error: "",
+                loadMoreError: "",
+              };
+            return {
+              ...current,
+              jobs: mergeFirstPage(current.jobs, result.items),
+              nextCursor: current.totalCount === null ? result.nextCursor : current.nextCursor,
+              totalCount: result.totalCount,
+              error: "",
+            };
+          });
       } catch (nextError) {
         if (mounted)
           setState((current) => ({

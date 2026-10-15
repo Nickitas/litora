@@ -1,8 +1,16 @@
 import { createElement, lazy, type ComponentType } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 
 function LegacyNewCalculationRoute() {
-  return createElement(Navigate, { to: "/account", replace: true });
+  return createElement(Navigate, { to: "/lab", replace: true });
+}
+
+function LegacyLabRoute() {
+  const location = useLocation();
+  return createElement(Navigate, {
+    to: `/lab${location.pathname.slice("/account".length)}${location.search}${location.hash}`,
+    replace: true,
+  });
 }
 
 const AboutPage = lazy(() =>
@@ -57,6 +65,11 @@ const AccountPage = lazy(() =>
     default: m.AccountPage,
   }))
 );
+const AccountProfilePage = lazy(() =>
+  import("@/pages/account/account-profile.page").then((m) => ({
+    default: m.AccountProfilePage,
+  }))
+);
 const AccountOverviewPage = lazy(() =>
   import("@/pages/account/account-overview.page").then((m) => ({
     default: m.AccountOverviewPage,
@@ -98,7 +111,7 @@ export const routes: AppRoute[] = [
   { path: "/releases", Component: ReleasesPage },
   { path: "/gallery", Component: GalleryPage },
   {
-    path: "/account",
+    path: "/lab",
     Component: AccountPage,
     children: [
       { index: true, Component: AccountOverviewPage },
@@ -109,6 +122,12 @@ export const routes: AppRoute[] = [
       { path: "shoreline", Component: ShorelineVisualizationPage },
     ],
   },
+  { path: "/account", Component: AccountProfilePage },
+  { path: "/account/calculations/new", Component: LegacyNewCalculationRoute },
+  { path: "/account/calculations", Component: LegacyLabRoute },
+  { path: "/account/calculations/:jobId", Component: LegacyLabRoute },
+  { path: "/account/datasets", Component: LegacyLabRoute },
+  { path: "/account/shoreline", Component: LegacyLabRoute },
   { path: "/docs", Component: DocsPage },
   { path: "/docs/modules/:moduleId", Component: ModuleDetailPage },
   { path: "/docs/capabilities/:capabilityId", Component: CapabilityDetailPage },

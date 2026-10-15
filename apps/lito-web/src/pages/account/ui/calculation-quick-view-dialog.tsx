@@ -158,7 +158,7 @@ export function CalculationQuickViewDialog({
                 Опубликовано файлов: {job.artifacts.length}.
               </p>
               <Button asChild>
-                <Link to={`/account/calculations/${job.id}`} onClick={onClose}>
+                <Link to={`/lab/calculations/${job.id}`} onClick={onClose}>
                   Открыть полную страницу
                 </Link>
               </Button>

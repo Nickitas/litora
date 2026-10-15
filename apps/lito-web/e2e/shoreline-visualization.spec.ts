@@ -1,10 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import type {
   AuthDto,
   CalculationJobDto,
   ShorelineVisualizationChunkDto,
   ShorelineVisualizationIndexDto,
 } from "@litora/contracts";
+
+test.beforeEach(async ({ page }) => {
+  await page.route("https://tiles.openfreemap.org/**", (route) => route.abort());
+});
 
 const id = "22222222-2222-4222-8222-222222222222";
 const session = {
@@ -123,6 +127,13 @@ const secondPointSeries = {
   pointIndex: 1,
   shorelineChangeM: [null, 0.3, null],
 };
+
+async function chooseCalendarDate(page: Page, value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  const dateLabel = new Date(year, month - 1, day).toLocaleDateString("ru-RU");
+  await page.getByRole("button", { name: /Перейти к дате \(UTC\)/ }).click();
+  await page.locator(`[data-day="${dateLabel}"]`).click();
+}
 const emptyPointSeries = {
   schemaVersion: 1,
   pointIndex: 2,
@@ -133,28 +144,186 @@ test("пример открывается из обзора без своего 
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 360, height: 800 });
+  await page.addInitScript(() => localStorage.setItem("fraes-theme", "dark"));
   await page.route((url) => url.pathname.startsWith("/api/"), async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/auth/refresh") {
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(session) });
     } else if (path === "/api/calculations" || path === "/api/calculations/kinds") {
       await route.fulfill({ contentType: "application/json", body: "[]" });
+    } else if (path === "/api/calculations/page") {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ items: [], nextCursor: null, totalCount: 0 }) });
     } else {
       await route.abort("blockedbyclient");
     }
   });
-  await page.goto("/account");
+  await page.goto("/lab");
   await page.getByRole("link", { name: "Открыть карту и реплей" }).click();
-  await expect(page).toHaveURL(/\/account\/shoreline$/);
+  await expect(page).toHaveURL(/\/lab\/shoreline$/);
+  await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.getByRole("img", { name: /Карта: исходная линия/ })).toBeVisible();
   await expect(page.getByText("Короткий демонстрационный расчёт за 3 часа", { exact: false })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Данные для карты" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Скорость" }).click();
+  await page.getByRole("option", { name: "2×" }).click();
   await page.getByRole("button", { name: /Воспроизвести/ }).click();
   await expect(page.getByRole("img", { name: /положение после шага 3/ })).toBeVisible();
+  const map = page.getByRole("img", { name: /положение после шага 3/ });
+  await expect(map).toHaveAttribute("viewBox", "0 0 800 1500");
+  await expect(map.locator('[data-map-grid="local"]')).toHaveAttribute("d", /V1500.*H800/);
+  await expect(page.getByRole("combobox", { name: "Усиление смещения" })).toContainText("1 000 000×");
+  await expect(map.locator('[data-display-contour="1000000"]')).toHaveCount(1);
+  await page.getByLabel("Узел береговой линии").fill("13");
+  const connector = await map.evaluate((svg) => {
+    const length = (kind: string) => {
+      const line = svg.querySelector<SVGLineElement>(`[data-selected-displacement="${kind}"]`);
+      if (!line) return 0;
+      return Math.hypot(
+        Number(line.getAttribute("x2")) - Number(line.getAttribute("x1")),
+        Number(line.getAttribute("y2")) - Number(line.getAttribute("y1")),
+      );
+    };
+    return { actual: length("actual"), visual: length("visual") };
+  });
+  expect(connector.actual).toBeLessThan(0.01);
+  expect(connector.visual).toBeGreaterThan(5);
+  const exactPath = await map.locator('[data-actual-contour="true"]').getAttribute("d");
+  await page.getByRole("combobox", { name: "Усиление смещения" }).click();
+  await page.getByRole("option", { name: "1× · точно" }).click();
+  await expect(map.locator("[data-display-contour]")).toHaveCount(0);
+  expect(await map.locator('[data-actual-contour="true"]').getAttribute("d")).toBe(exactPath);
+  await page.getByRole("combobox", { name: "Усиление смещения" }).click();
+  await page.getByRole("option", { name: "1 000 000×" }).click();
+  await page.getByLabel("Узел береговой линии").fill("1");
+  await expect(map.locator('[data-change-kind="landward"]').first()).toBeVisible();
+  await expect(map.locator('[data-change-kind="seaward"]').first()).toBeVisible();
+  await expect(page.getByRole("paragraph").filter({ hasText: "Узел 1: смещение к суше" })).toBeVisible();
+  await page.getByRole("button", { name: "Смещения по узлам" }).click();
+  await expect(map.locator("[data-change-kind]")).toHaveCount(0);
+  await page.getByRole("button", { name: "Смещения по узлам" }).click();
+  await expect(map.locator('[data-change-kind="landward"]').first()).toBeVisible();
+  const stableMap = await map.elementHandle();
+  const mapSize = await map.evaluate((element) => ({
+    width: element.getBoundingClientRect().width,
+    height: element.getBoundingClientRect().height,
+  }));
   await page.getByRole("button", { name: "Предыдущий кадр" }).click();
   await page.getByRole("button", { name: "Предыдущий кадр" }).click();
+  await expect(page.getByRole("img", { name: /положение после шага 1/ })).toBeVisible();
+  expect(await stableMap?.evaluate((element) => element.isConnected)).toBe(true);
+  expect(await page.getByRole("img", { name: /положение после шага 1/ })
+    .evaluate((element) => ({
+      width: element.getBoundingClientRect().width,
+      height: element.getBoundingClientRect().height,
+    }))).toEqual(mapSize);
+  const slider = page.getByRole("region", { name: "Реплей береговой линии" })
+    .getByRole("slider", { name: "Состояние береговой линии" });
+  await expect(slider).toBeVisible();
+  await slider.focus();
+  await slider.press("Home");
+  await expect(page.getByRole("img", { name: /Карта: исходная линия/ })).toBeVisible();
+  await slider.press("End");
+  await expect(page.getByRole("img", { name: /положение после шага 3/ })).toBeVisible();
+  await slider.press("ArrowLeft");
+  await slider.press("ArrowLeft");
+  await page.getByRole("button", { name: "Следующий узел" }).click();
+  await expect(page.getByRole("heading", { name: "Смещение узла 2 во времени" })).toBeVisible();
+  await page.getByRole("button", { name: "Предыдущий узел" }).click();
   await expect(page.getByRole("row", { name: /Смещение ячейки за шаг/ })).toContainText(/0,0001455 м/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(errors).toEqual([]);
+});
+
+test("селектор фильтрует сценарии и открывает карту со следующей страницы", async ({ page }) => {
+  const olderId = "44444444-4444-4444-8444-444444444444";
+  const older = {
+    ...job,
+    id: olderId,
+    kind: "all_file" as const,
+    createdAt: "2023-12-01T02:00:00Z",
+  };
+  await page.route((url) => url.pathname.startsWith("/api/"), async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    let body: unknown;
+    if (path === "/api/auth/refresh") body = session;
+    else if (path === "/api/calculations/page") {
+      if (url.searchParams.get("kind") === "erosion_file")
+        body = { items: [job], nextCursor: null, totalCount: 1 };
+      else if (url.searchParams.get("cursor"))
+        body = { items: [older], nextCursor: null, totalCount: 2 };
+      else body = { items: [job], nextCursor: "next-page", totalCount: 2 };
+    } else if (path === `/api/calculations/${olderId}`) body = older;
+    else if (path === `/api/calculations/${olderId}/visualization`) body = index;
+    else if (path.endsWith("/chunks/000001")) body = chunks["000001"];
+    else if (path.endsWith("/chunks/000002")) body = chunks["000002"];
+    else if (path.endsWith("/points/0/series")) body = pointSeries;
+    else {
+      await route.abort("blockedbyclient");
+      return;
+    }
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/lab/shoreline");
+  await expect(page.getByText("Загружено карт: 1 из 2")).toBeVisible();
+  await page.getByRole("combobox", { name: "Сценарий карты" }).click();
+  await page.getByRole("option", { name: "Эрозия · свои данные" }).click();
+  await expect(page.getByText("Загружено карт: 1 из 1")).toBeVisible();
+  await page.getByRole("combobox", { name: "Сценарий карты" }).click();
+  await page.getByRole("option", { name: "Все сценарии CERC" }).click();
+  await page.getByRole("button", { name: "Показать ещё карты" }).click();
+  await expect(page.getByText("Загружено карт: 2 из 2")).toBeVisible();
+  await page.getByRole("combobox", { name: "Данные для карты" }).click();
+  await page.getByRole("option", { name: /44444444/ }).click();
+  await expect(page).toHaveURL(new RegExp(`job=${olderId}`));
+  const map = page.getByRole("img", { name: /положение после шага 2/ });
+  await expect(map).toBeVisible();
+  await expect(map.locator('[data-map-grid="local"]')).toHaveAttribute("d", /[ML]/);
+  await expect(map.locator('[data-selected-displacement="actual"]')).toHaveCount(1);
+  await page.getByRole("button", { name: "Исходный контур" }).click();
+  await expect(map.locator('[data-selected-displacement="actual"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Координатная сетка" }).click();
+  await expect(map.locator('[data-map-grid="local"]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Координатная сетка" })).toHaveAttribute("aria-pressed", "false");
+});
+
+test("загрузка соседнего chunk сохраняет положение карты", async ({ page }) => {
+  const delayedIndex: ShorelineVisualizationIndexDto = {
+    ...index,
+    frames: [...index.frames, {
+      ...index.frames[2], index: 3, time: "2024-01-04T01:00:00Z", chunkId: "000003",
+    }],
+  };
+  await page.route((url) => url.pathname.startsWith("/api/"), async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let body: unknown;
+    if (path === "/api/auth/refresh") body = session;
+    else if (path === "/api/scientific-inputs") body = [];
+    else if (path === "/api/calculations/page") body = { items: [job], nextCursor: null, totalCount: 1 };
+    else if (path === `/api/calculations/${id}`) body = job;
+    else if (path === `/api/calculations/${id}/visualization`) body = delayedIndex;
+    else if (path.endsWith("/chunks/000001")) body = chunks["000001"];
+    else if (path.endsWith("/chunks/000002")) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      body = chunks["000002"];
+    } else if (path.endsWith("/chunks/000003")) body = {
+      schemaVersion: 1, id: "000003", frames: [{ index: 3, points, cells: [] }],
+    };
+    else if (path.endsWith("/points/0/series")) body = {
+      ...pointSeries, shorelineChangeM: [null, -0.2, -0.4, null],
+    };
+    else return route.abort("blockedbyclient");
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto(`/lab/shoreline?job=${id}`);
+  const map = page.getByRole("img", { name: /положение после шага 3/ });
+  await expect(map).toBeVisible();
+  const stableMap = await map.elementHandle();
+  await page.getByRole("button", { name: "Предыдущий кадр" }).click();
+  await expect(page.getByText("пока показан предыдущий контур", { exact: false })).toBeVisible();
+  expect(await stableMap?.evaluate((element) => element.isConnected)).toBe(true);
+  await expect(page.getByRole("img", { name: /положение после шага 2/ })).toBeVisible();
+  expect(await stableMap?.evaluate((element) => element.isConnected)).toBe(true);
 });
 
 test("карта показывает фактический кадр и не подставляет его в день без данных", async ({
@@ -169,7 +338,7 @@ test("карта показывает фактический кадр и не п
       const path = new URL(route.request().url()).pathname;
       let body: unknown;
       if (path === "/api/auth/refresh") body = session;
-      else if (path === "/api/calculations") body = [job];
+      else if (path === "/api/calculations/page") body = { items: [job], nextCursor: null, totalCount: 1 };
       else if (path === `/api/calculations/${id}`) body = job;
       else if (path === `/api/calculations/${id}/visualization`) body = index;
       else if (path.endsWith("/chunks/000001")) body = chunks["000001"];
@@ -187,7 +356,7 @@ test("карта показывает фактический кадр и не п
       });
     }
   );
-  await page.goto(`/account/shoreline?job=${id}`);
+  await page.goto(`/lab/shoreline?job=${id}`);
   await expect(
     page.getByRole("heading", { name: "Динамика берега" })
   ).toBeVisible();
@@ -218,7 +387,7 @@ test("карта показывает фактический кадр и не п
     page.getByRole("img", { name: /Точечный график смещения узла 1/ })
   ).toHaveAttribute("viewBox", /0 0 2\d\d 200/);
   await page.getByRole("button", { name: "День", exact: true }).click();
-  await page.getByLabel("Перейти к дате (UTC)").fill("2024-01-02");
+  await chooseCalendarDate(page, "2024-01-02");
   await expect(
     page.getByText("В этом периоде нет сохранённого состояния", {
       exact: false,
@@ -227,13 +396,22 @@ test("карта показывает фактический кадр и не п
   await expect(
     page.getByRole("img", { name: /Карта: исходная линия/ })
   ).toHaveCount(0);
-  await page.getByLabel("Перейти к дате (UTC)").fill("2024-01-01");
+  await page.getByRole("button", { name: /Позже: Шаг 2/ }).click();
+  await expect(
+    page.getByRole("img", { name: /положение после шага 2/ })
+  ).toBeVisible();
+  await chooseCalendarDate(page, "2024-01-02");
+  await page.getByRole("button", { name: /Раньше: Шаг 1/ }).click();
   await expect(
     page.getByRole("img", { name: /положение после шага 1/ })
   ).toBeVisible();
   await expect(
     page.getByRole("row", { name: /Смещение ячейки за шаг/ })
   ).toContainText(/[-−]0,2 м/);
+  await page.getByRole("combobox", { name: "Данные для карты" }).click();
+  await page.getByRole("option", { name: /Пример Сочи/ }).click();
+  await expect(page).toHaveURL(/\/lab\/shoreline$/);
+  await expect(page.getByRole("img", { name: /Карта: исходная линия/ })).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth
@@ -256,7 +434,7 @@ test("ряд без временных меток показывает толь�
       const path = new URL(route.request().url()).pathname;
       let body: unknown;
       if (path === "/api/auth/refresh") body = session;
-      else if (path === "/api/calculations") body = [job];
+      else if (path === "/api/calculations/page") body = { items: [job], nextCursor: null, totalCount: 1 };
       else if (path === `/api/calculations/${id}`) body = job;
       else if (path === `/api/calculations/${id}/visualization`)
         body = stepsIndex;
@@ -275,7 +453,7 @@ test("ряд без временных меток показывает толь�
       });
     }
   );
-  await page.goto(`/account/shoreline?job=${id}`);
+  await page.goto(`/lab/shoreline?job=${id}`);
   await expect(
     page.getByText("У волнового ряда нет календарных меток", { exact: false })
   ).toBeVisible();

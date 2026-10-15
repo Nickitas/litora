@@ -42,7 +42,8 @@ semantic CSS variables и парными foreground-токенами, а не з
 web приводятся к общим `Input`, `Label`, `Select`, `Checkbox`, `Collapsible` и
 `Dialog` в этом слое. Они сохраняют семантические HTML-элементы и используют
 текущие токены обеих тем. Системный выбор файла остаётся внутри `Input`, а
-даты истории выбираются через `Popover` и `Calendar` с русской локалью.
+даты выбираются через общий `DatePicker` на `Popover` и `Calendar` с русской
+локалью. Шкала состояний берега использует Radix `Slider` из того же слоя.
 Тема переключается одной компактной кнопкой в шапке по кругу:
 системная → светлая → тёмная → системная. Единственная видимая иконка
 (монитор, солнце или луна) показывает текущий режим; доступное имя сообщает
@@ -171,7 +172,7 @@ Desktop: навигация 240 px, контент гибкий. Mobile: Sheet �
 | Группа | Компоненты | Правила |
 | --- | --- | --- |
 | Действия | Button, DropdownMenu, Tooltip | Один primary на смысловую область; Tooltip не единственное имя |
-| Ввод | Label, Input, Textarea, Select, Checkbox, Switch | Label, helper, единицы, ограничение, inline error |
+| Ввод | Label, Input, Textarea, Select, DatePicker, Slider, Checkbox, Switch | Label, helper, единицы, ограничение, inline error |
 | Структура | Card, Separator, Tabs, Sidebar, Breadcrumb | Не помещать всё в дополнительные карточки |
 | Обратная связь | Alert, Skeleton, Progress, toast | Progress только с реальной метрикой; ошибки не исчезают сами |
 | Данные | Table, Badge, ScrollArea | Сортировка/пагинация только при поддержке API |

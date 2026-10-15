@@ -79,6 +79,19 @@ export interface ShorelineVisualizationChunkDto {
   }[];
 }
 
+/** Датированные наблюдения берега из проверенного GeoJSON в EPSG:4326. */
+export interface ObservedShorelineSeriesDto {
+  schemaVersion: 1;
+  bounds: [number, number, number, number];
+  frames: {
+    time: string;
+    satellite: string;
+    geoAccuracy: number | null;
+    cloudCover: number | null;
+    coordinates: [number, number][];
+  }[];
+}
+
 export interface CalculationJobDto {
   id: string;
   kind: string;
@@ -182,6 +195,7 @@ export interface CalculationMetadataExportV1 {
 export interface CalculationPageQueryDto {
   status?: CalculationStatus;
   kind?: CalculationKind;
+  visualization?: "shoreline";
   from?: string;
   to?: string;
   jobId?: string;
@@ -424,6 +438,7 @@ export interface DatasetDto {
 
 export type ScientificInputRole =
   | "coastline_geojson"
+  | "shoreline_timeseries_geojson"
   | "wave_climate"
   | "shoreline_observations_json"
   | "longshore_sediment_sources_json"

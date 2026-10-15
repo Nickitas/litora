@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { encodeHistoryCursor, parseHistoryPageQuery } from "./history-page.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -9,6 +10,7 @@ test("история принимает фильтры и cursor только д
   const query = {
     status: "succeeded",
     kind: "map",
+    visualization: "shoreline",
     from: "2026-09-01",
     to: "2026-09-30",
     jobId,
@@ -32,6 +34,12 @@ test("история принимает фильтры и cursor только д
   );
   assert.throws(() =>
     parseHistoryPageQuery(
+      { status: query.status, kind: query.kind, from: query.from, to: query.to, jobId, limit: query.limit, cursor },
+      userId,
+    ),
+  );
+  assert.throws(() =>
+    parseHistoryPageQuery(
       { ...query, cursor },
       "33333333-3333-4333-8333-333333333333",
     ),
@@ -43,6 +51,8 @@ test("история отвергает неизвестные, повторён
     { status: "other" },
     { status: "" },
     { kind: "shell" },
+    { visualization: "other" },
+    { visualization: "false" },
     { from: "2026-02-30" },
     { from: "2026-10-01", to: "2026-09-01" },
     { jobId: "part-of-name" },
@@ -60,4 +70,9 @@ test("пустая история получает размер страницы
   const parsed = parseHistoryPageQuery({}, userId);
   assert.equal(parsed.limit, 20);
   assert.equal(parsed.after, undefined);
+  const previousFingerprint = createHash("sha256")
+    .update(JSON.stringify([userId, undefined, undefined, undefined, undefined, undefined]))
+    .digest("hex")
+    .slice(0, 24);
+  assert.equal(parsed.fingerprint, previousFingerprint);
 });

@@ -8,6 +8,7 @@ import {
 import { AppProviders } from "./app/providers";
 import { routes, type AppRoute } from "./app/routes";
 import { RouteError } from "./app/route-error";
+import { registerModuleRecovery } from "./app/module-recovery";
 import { Layout } from "./shared/ui";
 
 import "./shared/styles/index.css";
@@ -38,6 +39,8 @@ function createRoute(route: AppRoute, nested = false): RouteObject {
 }
 
 const router = createBrowserRouter(routes.map((route) => createRoute(route)));
+
+registerModuleRecovery();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

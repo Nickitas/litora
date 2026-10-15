@@ -197,8 +197,7 @@ export function CalculationsPage() {
               Расчёты
             </h1>
             <p className="mt-2 max-w-2xl text-muted-foreground">
-              Открывайте полный отчёт, просматривайте ключевые сведения в
-              модальном окне и сопоставляйте два совместимых результата.
+              Полные отчеты, ключевые сведения и сопоставления между совместимыми результатами.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -370,10 +369,17 @@ export function CalculationsPage() {
         <div role="status" aria-live="polite"
           className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4 text-sm">
           <p>
-            {deletionRequest.status === "completed" ? "Удаление завершено." : "Удаление выполняется."}
+            {deletionRequest.status === "completed" ? "Удаление завершено."
+              : deletionRequest.status === "retrying" ? "Удаление отложено; worker повторит попытку."
+                : "Удаление поставлено в очередь worker."}
             {` Удалено ${deletionRequest.deletedCount} из ${deletionRequest.requestedCount}.`}
-            {deletionRequest.retryingCount > 0 && ` Ошибки хранилища: ${deletionRequest.retryingCount}; повторим автоматически.`}
+            {deletionRequest.retryingCount > 0 && ` Ошибок обработки: ${deletionRequest.retryingCount}.`}
           </p>
+          {deletionRequest.status === "pending" && (
+            <p className="basis-full text-muted-foreground">
+              Если прогресс долго не меняется, проверьте запуск и журнал worker. После изменения кода его нужно перезапустить.
+            </p>
+          )}
           {deletionRequest.status === "completed" && (
             <Button type="button" variant="ghost" size="sm" onClick={() => setDeletionRequest(undefined)}>
               Скрыть

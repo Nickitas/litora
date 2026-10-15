@@ -40,7 +40,7 @@ export const Hero = ({
     return (
       <section
         className={cn(
-          "item-center relative mx-auto mt-10 flex h-screen flex-col overflow-hidden",
+          "item-center relative mx-auto mt-10 flex min-h-screen flex-col overflow-hidden",
           className
         )}
       >

@@ -489,7 +489,7 @@ export function NewCalculationDialog({
         },
       });
       onOpenChange(false);
-      navigate(`/account/calculations/${job.id}`);
+      navigate(`/lab/calculations/${job.id}`);
     } catch (nextError) {
       setSubmitError(errorMessage(nextError));
     } finally {
@@ -1065,7 +1065,7 @@ export function NewCalculationDialog({
                         )}
                         {chosenArtifact && (
                           <p className="text-xs text-muted-foreground">
-                            Файл готового расчёта. <Link className="underline underline-offset-2" to={`/account/calculations/${chosenArtifact.jobId}`}>
+                            Файл готового расчёта. <Link className="underline underline-offset-2" to={`/lab/calculations/${chosenArtifact.jobId}`}>
                               Открыть исходный результат
                             </Link>
                           </p>

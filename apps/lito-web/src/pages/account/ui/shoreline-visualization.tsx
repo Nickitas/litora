@@ -1,19 +1,52 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { geoGraticule, geoMercator, geoPath } from "d3-geo";
+import { geoMercator, geoPath } from "d3-geo";
 import { scaleLinear, scaleUtc } from "d3-scale";
 import { line } from "d3-shape";
+import type { Map as MapLibreMap } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import type {
   ShorelinePointSeriesDto,
   ShorelineVisualizationChunkDto,
   ShorelineVisualizationIndexDto,
 } from "@litora/contracts";
 import { Button } from "@/shared/shadcn/components/ui/button";
+import { Input } from "@/shared/shadcn/components/ui/input";
+import { Label } from "@/shared/shadcn/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/shadcn/components/ui/select";
 
 type Frame = ShorelineVisualizationChunkDto["frames"][number];
+const distance = new Intl.NumberFormat("ru-RU", {
+  maximumFractionDigits: 7,
+});
+const coordinate = new Intl.NumberFormat("ru-RU", {
+  maximumFractionDigits: 6,
+});
+const gainNumber = new Intl.NumberFormat("ru-RU");
+const mapStyleUrl = import.meta.env.VITE_MAP_STYLE_URL || "https://tiles.openfreemap.org/styles/liberty";
+
+function changeKind(value: number) {
+  if (value < 0) return "landward";
+  if (value > 0) return "seaward";
+  return "zero";
+}
+
+function changeLabel(value: number) {
+  if (value < 0) return "смещение к суше";
+  if (value > 0) return "смещение к морю";
+  return "нулевое смещение";
+}
 
 function useChartWidth(active: boolean) {
   const ref = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(800);
+  const [width, setWidth] = useState(() => typeof window === "undefined"
+    ? 800 : Math.min(800, Math.max(280, window.innerWidth - 64)));
   useEffect(() => {
     const node = ref.current;
     if (!active || !node || typeof ResizeObserver === "undefined") return;
@@ -40,17 +73,98 @@ export function ShorelineMap({
   index,
   initial,
   current,
+  initialGain,
   selectedPoint,
   onSelectPoint,
 }: {
   index: ShorelineVisualizationIndexDto;
   initial: Frame;
   current: Frame;
+  initialGain: number;
   selectedPoint: number;
   onSelectPoint: (point: number) => void;
 }) {
+  const { ref: mapRef, width: mapWidth } = useChartWidth(true);
+  const compactMap = mapWidth < 600;
+  const mapHeight = compactMap ? 1500 : 440;
+  const mapPadding = compactMap ? 60 : 48;
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const [showChanges, setShowChanges] = useState(true);
+  const [showInitial, setShowInitial] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+  const [gain, setGain] = useState(initialGain);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const [basemap, setBasemap] = useState<MapLibreMap | null>(null);
+  const [basemapFailed, setBasemapFailed] = useState(false);
+  const [, setMapRevision] = useState(0);
+  useEffect(() => {
+    let active = true;
+    let instance: MapLibreMap | null = null;
+    let pendingFrame = 0;
+    let loaded = false;
+    let timeout = 0;
+    void import("maplibre-gl").then(({ Map, ScaleControl, setWorkerUrl }) => {
+      if (!active || !mapContainerRef.current) return;
+      setWorkerUrl(mapWorkerUrl);
+      const [west, south, east, north] = index.bounds;
+      try {
+        instance = new Map({
+          container: mapContainerRef.current,
+          style: mapStyleUrl,
+          center: [(west + east) / 2, (south + north) / 2],
+          zoom: 10,
+          attributionControl: { compact: false },
+          dragRotate: false,
+          pitchWithRotate: false,
+        });
+      } catch {
+        setBasemapFailed(true);
+        return;
+      }
+      const currentMap = instance;
+      currentMap.addControl(new ScaleControl({ maxWidth: 100, unit: "metric" }), "bottom-left");
+      const update = () => {
+        if (pendingFrame) return;
+        pendingFrame = window.requestAnimationFrame(() => {
+          pendingFrame = 0;
+          if (active) setMapRevision((value) => value + 1);
+        });
+      };
+      currentMap.on("load", () => {
+        if (!active) return;
+        loaded = true;
+        const lonPad = Math.max((east - west) * 0.25, 0.0002);
+        const latPad = Math.max((north - south) * 0.25, 0.0002);
+        currentMap.fitBounds(
+          [[west - lonPad, south - latPad], [east + lonPad, north + latPad]],
+          { padding: 40, maxZoom: 15, duration: 0 },
+        );
+        setBasemap(currentMap);
+      });
+      currentMap.on("move", update);
+      currentMap.on("resize", update);
+      currentMap.on("error", () => {
+        if (!loaded && active) setBasemapFailed(true);
+      });
+      timeout = window.setTimeout(() => {
+        if (!loaded && active) setBasemapFailed(true);
+      }, 12000);
+    }).catch(() => {
+      if (active) setBasemapFailed(true);
+    });
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      window.cancelAnimationFrame(pendingFrame);
+      instance?.remove();
+    };
+  }, [index.bounds]);
+
+  useEffect(() => {
+    if (!basemap) return;
+    basemap.resize();
+  }, [basemap, mapHeight, mapWidth]);
   const geometry = useMemo(() => {
     const [west, south, east, north] = index.bounds;
     const longitudePadding = Math.max((east - west) * 0.08, 0.0001);
@@ -63,8 +177,8 @@ export function ShorelineMap({
     ];
     const projection = geoMercator().fitExtent(
       [
-        [35, 35],
-        [765, 405],
+        [mapPadding, mapPadding],
+        [800 - mapPadding, mapHeight - mapPadding],
       ],
       {
         type: "MultiPoint",
@@ -75,30 +189,167 @@ export function ShorelineMap({
       }
     );
     const path = geoPath(projection);
-    const graticule = geoGraticule().extent([
-      [padded[0], padded[1]],
-      [padded[2], padded[3]],
-    ])();
-    return { projection, path, graticule };
-  }, [index.bounds]);
-  const selected = current.points[selectedPoint];
-  const screenPoint = selected
-    ? geometry.projection([selected.lon, selected.lat])
+    return { projection, path };
+  }, [index.bounds, mapHeight, mapPadding]);
+  const projectCoordinate = (coordinates: [number, number]): [number, number] | null => {
+    if (!basemap) return geometry.projection(coordinates);
+    const canvas = basemap.getCanvas();
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (!width || !height) return geometry.projection(coordinates);
+    const point = basemap.project(coordinates);
+    return [point.x * 800 / width, point.y * mapHeight / height];
+  };
+  const contourPath = (frame: Frame) => {
+    if (!basemap) return geometry.path(lineGeometry(frame)) ?? "";
+    const points = frame.points.map((point) => projectCoordinate([point.lon, point.lat]));
+    return line<[number, number]>().x((point) => point[0]).y((point) => point[1])(
+      points.filter((point): point is [number, number] => point !== null)
+    ) ?? "";
+  };
+  const gridPath = (() => {
+    const screenToCoordinate = (x: number, y: number): [number, number] | null => {
+      if (basemap) {
+        const canvas = basemap.getCanvas();
+        if (!canvas.clientWidth || !canvas.clientHeight) return null;
+        const point = basemap.unproject([
+          x * canvas.clientWidth / 800,
+          y * canvas.clientHeight / mapHeight,
+        ]);
+        return [point.lng, point.lat];
+      }
+      return geometry.projection.invert?.([
+        (x - view.x - 400) / view.scale + 400,
+        (y - view.y - mapHeight / 2) / view.scale + mapHeight / 2,
+      ]) ?? null;
+    };
+    const lowerLeft = screenToCoordinate(0, mapHeight);
+    const upperRight = screenToCoordinate(800, 0);
+    if (!lowerLeft || !upperRight) return "";
+    const screenPoint = (coordinates: [number, number]) => {
+      const point = projectCoordinate(coordinates);
+      if (!point) return null;
+      return basemap ? point : [
+        (point[0] - 400) * view.scale + 400 + view.x,
+        (point[1] - mapHeight / 2) * view.scale + mapHeight / 2 + view.y,
+      ];
+    };
+    const longitudeLines = scaleLinear().domain([lowerLeft[0], upperRight[0]]).ticks(7)
+      .map((longitude) => {
+        const point = screenPoint([longitude, (lowerLeft[1] + upperRight[1]) / 2]);
+        return point ? `M${point[0]},0V${mapHeight}` : "";
+      });
+    const latitudeLines = scaleLinear().domain([lowerLeft[1], upperRight[1]]).ticks(6)
+      .map((latitude) => {
+        const point = screenPoint([(lowerLeft[0] + upperRight[0]) / 2, latitude]);
+        return point ? `M0,${point[1]}H800` : "";
+      });
+    return [...longitudeLines, ...latitudeLines].join(" ");
+  })();
+  const amplifiedPoints = (() => {
+    if (gain === 1 || current.index === initial.index) return null;
+    const points: [number, number][] = [];
+    for (let pointIndex = 0; pointIndex < current.points.length; pointIndex++) {
+      const start = initial.points[pointIndex];
+      const end = current.points[pointIndex];
+      if (!start || !end) return null;
+      const projectedStart = projectCoordinate([start.lon, start.lat]);
+      const projectedEnd = projectCoordinate([end.lon, end.lat]);
+      if (!projectedStart || !projectedEnd) return null;
+      points.push([
+        projectedStart[0] + (projectedEnd[0] - projectedStart[0]) * gain,
+        projectedStart[1] + (projectedEnd[1] - projectedStart[1]) * gain,
+      ]);
+    }
+    return points;
+  })();
+  const amplifiedPath = amplifiedPoints
+    ? line<[number, number]>()
+        .x((point) => point[0])
+        .y((point) => point[1])(amplifiedPoints)
     : null;
+  const selected = current.points[selectedPoint];
+  const initialSelected = initial.points[selectedPoint];
+  const screenPoint = selected
+    ? projectCoordinate([selected.lon, selected.lat])
+    : null;
+  const initialScreenPoint = initialSelected
+    ? projectCoordinate([initialSelected.lon, initialSelected.lat])
+    : null;
+  const amplifiedSelectedPoint = amplifiedPoints?.[selectedPoint] ?? null;
+  const selectedDisplayPoint = amplifiedSelectedPoint ?? screenPoint;
+  const cellsByPoint = new Map(
+    current.cells.map((cell) => [cell.pointIndex, cell] as const)
+  );
+  const selectedCell = cellsByPoint.get(selectedPoint);
+  const markerRadius =
+    current.points.length > 60
+      ? compactMap
+        ? 6
+        : 3.5
+      : compactMap
+        ? 13
+        : 6;
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xl font-semibold">Положение береговой линии</h2>
-        <div className="flex gap-1" aria-label="Масштаб карты">
+        <div className="flex flex-wrap gap-1" aria-label="Управление картой">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="shoreline-map-gain">Усиление смещения</Label>
+            <Select
+              value={String(gain)}
+              onValueChange={(value) => setGain(Number(value))}
+            >
+              <SelectTrigger id="shoreline-map-gain" aria-label="Усиление смещения" className="min-h-9 w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1× · точно</SelectItem>
+                <SelectItem value="100">100×</SelectItem>
+                <SelectItem value="10000">10 000×</SelectItem>
+                <SelectItem value="100000">100 000×</SelectItem>
+                <SelectItem value="500000">500 000×</SelectItem>
+                <SelectItem value="1000000">1 000 000×</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant={showInitial ? "default" : "outline"}
+            aria-pressed={showInitial}
+            onClick={() => setShowInitial((value) => !value)}
+          >
+            Исходный контур
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={showGrid ? "default" : "outline"}
+            aria-pressed={showGrid}
+            onClick={() => setShowGrid((value) => !value)}
+          >
+            Координатная сетка
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={showChanges ? "default" : "outline"}
+            aria-pressed={showChanges}
+            onClick={() => setShowChanges((value) => !value)}
+          >
+            Смещения по узлам
+          </Button>
           <Button
             type="button"
             size="sm"
             variant="outline"
             aria-label="Увеличить карту"
-            onClick={() =>
-              setView((v) => ({ ...v, scale: Math.min(v.scale * 1.4, 8) }))
-            }
+            onClick={() => basemap
+              ? basemap.zoomIn()
+              : setView((v) => ({ ...v, scale: Math.min(v.scale * 1.4, 8) }))}
           >
             +
           </Button>
@@ -107,9 +358,9 @@ export function ShorelineMap({
             size="sm"
             variant="outline"
             aria-label="Уменьшить карту"
-            onClick={() =>
-              setView((v) => ({ ...v, scale: Math.max(v.scale / 1.4, 1) }))
-            }
+            onClick={() => basemap
+              ? basemap.zoomOut()
+              : setView((v) => ({ ...v, scale: Math.max(v.scale / 1.4, 1) }))}
           >
             −
           </Button>
@@ -117,24 +368,39 @@ export function ShorelineMap({
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => setView({ x: 0, y: 0, scale: 1 })}
+            onClick={() => {
+              if (basemap) {
+                const [west, south, east, north] = index.bounds;
+                const lonPad = Math.max((east - west) * 0.25, 0.0002);
+                const latPad = Math.max((north - south) * 0.25, 0.0002);
+                basemap.fitBounds(
+                  [[west - lonPad, south - latPad], [east + lonPad, north + latPad]],
+                  { padding: 40, maxZoom: 15, duration: 0 },
+                );
+              } else setView({ x: 0, y: 0, scale: 1 });
+            }}
           >
             Сбросить
           </Button>
         </div>
       </div>
-      <div className="overflow-hidden rounded-xl border bg-muted/40">
+      <div ref={mapRef} className="relative overflow-hidden rounded-xl border bg-muted/40">
+        <div className="absolute inset-0">
+          <div ref={mapContainerRef} className="h-full w-full" role="group" aria-label="Географическая подложка участка берега" />
+        </div>
         <svg
-          viewBox="0 0 800 440"
+          viewBox={`0 0 800 ${mapHeight}`}
           role="img"
-          aria-label={`Карта: исходная линия и положение после шага ${current.index}. Выбран узел ${selectedPoint + 1}.`}
-          className="block aspect-[800/440] w-full touch-none"
+          aria-label={`Карта: исходная линия и положение после шага ${current.index}. Выбран узел ${selectedPoint + 1}.${gain > 1 ? ` Наглядный контур усилен в ${gainNumber.format(gain)} раз.` : ""}`}
+          className={`relative block w-full touch-none ${basemap ? "pointer-events-none" : ""}`}
+          style={{ aspectRatio: `800 / ${mapHeight}` }}
           onPointerDown={(event) => {
+            if (basemap) return;
             event.currentTarget.setPointerCapture(event.pointerId);
             setDrag({ x: event.clientX, y: event.clientY });
           }}
           onPointerMove={(event) => {
-            if (!drag) return;
+            if (basemap || !drag) return;
             const rect = event.currentTarget.getBoundingClientRect();
             const ratio = 800 / rect.width;
             setView((v) => ({
@@ -147,61 +413,146 @@ export function ShorelineMap({
           onPointerUp={() => setDrag(null)}
           onPointerCancel={() => setDrag(null)}
         >
-          <rect width="800" height="440" fill="var(--card)" />
+          <rect width="800" height={mapHeight} fill={basemap ? "transparent" : "var(--card)"} />
+          {showGrid && (
+            <path data-map-grid="local" d={gridPath} fill="none"
+              stroke={basemap ? "#315362" : "var(--border)"}
+              strokeOpacity={basemap ? 0.5 : 1} strokeWidth="1" />
+          )}
           <g
-            transform={`translate(${view.x} ${view.y}) translate(400 220) scale(${view.scale}) translate(-400 -220)`}
+            transform={basemap ? undefined : `translate(${view.x} ${view.y}) translate(400 ${mapHeight / 2}) scale(${view.scale}) translate(-400 ${-mapHeight / 2})`}
           >
+            {showInitial && (
+              <path
+                d={contourPath(initial)}
+                fill="none"
+                stroke="var(--chart-2)"
+                strokeWidth="3"
+                strokeDasharray="8 5"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
             <path
-              d={geometry.path(geometry.graticule) ?? ""}
+              data-actual-contour="true"
+              d={contourPath(current)}
               fill="none"
-              stroke="var(--border)"
-              strokeWidth="1"
-            />
-            <path
-              d={geometry.path(lineGeometry(initial)) ?? ""}
-              fill="none"
-              stroke="var(--chart-2)"
-              strokeWidth="3"
-              strokeDasharray="8 5"
+              stroke="var(--background)"
+              strokeWidth="8"
               vectorEffect="non-scaling-stroke"
             />
             <path
-              d={geometry.path(lineGeometry(current)) ?? ""}
+              d={contourPath(current)}
               fill="none"
               stroke="var(--chart-1)"
               strokeWidth="4"
               vectorEffect="non-scaling-stroke"
             />
+            {amplifiedPath && (
+              <path
+                data-display-contour={gain}
+                d={amplifiedPath}
+                fill="none"
+                stroke="var(--chart-3)"
+                strokeWidth="4"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
             {current.points.length <= 500 &&
               current.points.map((point, pointIndex) => {
-                const projected = geometry.projection([point.lon, point.lat]);
+                const projected = amplifiedPoints?.[pointIndex] ?? projectCoordinate([point.lon, point.lat]);
                 if (!projected) return null;
+                const cell = cellsByPoint.get(pointIndex);
+                const kind = cell
+                  ? changeKind(cell.shorelineChangeM)
+                  : "missing";
+                const cellDescription = cell
+                  ? `${changeLabel(cell.shorelineChangeM)}, ${distance.format(cell.shorelineChangeM)} м/шаг`
+                  : "нет значения смещения";
                 return (
-                  <circle
+                  <g
                     key={pointIndex}
-                    cx={projected[0]}
-                    cy={projected[1]}
-                    r={pointIndex === selectedPoint ? 5 : 4}
-                    fill={
-                      pointIndex === selectedPoint
-                        ? "var(--chart-3)"
-                        : "transparent"
-                    }
-                    stroke={
-                      pointIndex === selectedPoint
-                        ? "var(--card)"
-                        : "transparent"
+                    data-change-kind={
+                      showChanges && kind !== "missing" ? kind : undefined
                     }
                     onClick={() => onSelectPoint(pointIndex)}
-                    className="cursor-pointer"
-                  />
+                    className="cursor-pointer pointer-events-auto"
+                  >
+                    <title>{`Узел ${pointIndex + 1}: ${cellDescription}`}</title>
+                    {showChanges && cell && (
+                      kind === "landward" ? (
+                        <rect
+                          x={projected[0] - markerRadius}
+                          y={projected[1] - markerRadius}
+                          width={markerRadius * 2}
+                          height={markerRadius * 2}
+                          fill="var(--chart-4)"
+                          stroke="var(--card)"
+                          strokeWidth="1.5"
+                        />
+                      ) : (
+                        <circle
+                          cx={projected[0]}
+                          cy={projected[1]}
+                          r={markerRadius}
+                          fill={
+                            kind === "seaward"
+                              ? "var(--chart-2)"
+                              : "var(--muted-foreground)"
+                          }
+                          stroke="var(--card)"
+                          strokeWidth="1.5"
+                        />
+                      )
+                    )}
+                    <circle
+                      cx={projected[0]}
+                      cy={projected[1]}
+                      r={compactMap ? 22 : 12}
+                      fill="transparent"
+                    />
+                  </g>
                 );
               })}
-            {screenPoint && (
+            {showInitial && current.index !== initial.index && initialScreenPoint && screenPoint && (
+              <g data-selected-displacement="actual">
+                <line
+                  x1={initialScreenPoint[0]}
+                  y1={initialScreenPoint[1]}
+                  x2={screenPoint[0]}
+                  y2={screenPoint[1]}
+                  stroke="var(--chart-3)"
+                  strokeWidth="2"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <circle
+                  cx={initialScreenPoint[0]}
+                  cy={initialScreenPoint[1]}
+                  r={compactMap ? 10 : 5}
+                  fill="var(--card)"
+                  stroke="var(--chart-2)"
+                  strokeWidth="2"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </g>
+            )}
+            {amplifiedSelectedPoint && initialScreenPoint && current.index !== initial.index && (
+              <line
+                data-selected-displacement="visual"
+                x1={initialScreenPoint[0]}
+                y1={initialScreenPoint[1]}
+                x2={amplifiedSelectedPoint[0]}
+                y2={amplifiedSelectedPoint[1]}
+                stroke="var(--chart-3)"
+                strokeWidth="2"
+                strokeDasharray="5 4"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            {selectedDisplayPoint && (
               <circle
-                cx={screenPoint[0]}
-                cy={screenPoint[1]}
-                r="7"
+                cx={selectedDisplayPoint[0]}
+                cy={selectedDisplayPoint[1]}
+                r={compactMap ? 16 : 7}
                 fill="none"
                 stroke="var(--chart-3)"
                 strokeWidth="2"
@@ -212,28 +563,118 @@ export function ShorelineMap({
           <text x="20" y="25" fill="var(--muted-foreground)" fontSize="14">
             Север ↑
           </text>
-          <text x="20" y="425" fill="var(--muted-foreground)" fontSize="12">
+          <text x="20" y={mapHeight - 15} fill="var(--muted-foreground)" fontSize="12">
             EPSG:4326 · координаты в градусах
           </text>
         </svg>
       </div>
+      {basemapFailed && !basemap && <p role="status" className="text-xs text-muted-foreground">
+        Географическая подложка недоступна. Контуры и полная координатная сетка остаются на карте.
+      </p>}
+      {basemap && <p className="text-xs text-muted-foreground">
+        Современная карта местности различает сушу и воду; она не показывает состояние на дату расчёта.
+        {!import.meta.env.VITE_MAP_STYLE_URL && " Голубая область — Чёрное море, светлая область — суша."}
+        {" "}{import.meta.env.VITE_MAP_STYLE_URL ? "Источники подложки указаны на карте." : <>
+          Фон: <a href="https://openfreemap.org/" target="_blank" rel="noreferrer" className="underline">OpenFreeMap</a>,
+          {" "}<a href="https://openmaptiles.org/" target="_blank" rel="noreferrer" className="underline">OpenMapTiles</a>,
+          {" "}<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">© OpenStreetMap</a>.
+        </>}
+      </p>}
       <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-        <span className="inline-flex items-center gap-2">
+        {showInitial && <span className="inline-flex items-center gap-2">
           <span className="w-7 border-t-[3px] border-dashed border-chart-2" />
           Исходная линия
-        </span>
+        </span>}
         <span className="inline-flex items-center gap-2">
           <span className="w-7 border-t-[3px] border-chart-1" />
-          Выбранное состояние
+          Точное положение после шага
         </span>
+        {amplifiedPath && (
+          <span className="inline-flex items-center gap-2">
+            <span className="w-7 border-t-[3px] border-chart-3" />
+            Наглядный контур · {gainNumber.format(gain)}×
+          </span>
+        )}
         <span className="inline-flex items-center gap-2">
           <span className="size-3 rounded-full bg-chart-3" />
           Выбранный узел
         </span>
+        {showChanges && current.cells.length > 0 && (
+          <>
+            <span className="inline-flex items-center gap-2">
+              <span className="size-3 bg-chart-4" />
+              К суше (отрицательное смещение)
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="size-3 rounded-full bg-chart-2" />
+              К морю (положительное смещение)
+            </span>
+          </>
+        )}
+      </div>
+      <p className="text-sm font-medium">
+        Узел {selectedPoint + 1}: {selectedCell
+          ? `${changeLabel(selectedCell.shorelineChangeM)}, ${distance.format(selectedCell.shorelineChangeM)} м/шаг`
+          : "для этого состояния смещение не рассчитано"}
+      </p>
+      {selected && (
+        <p className="text-xs text-muted-foreground">
+          Координаты узла: {coordinate.format(selected.lat)}° с. ш., {coordinate.format(selected.lon)}° в. д.
+        </p>
+      )}
+      {gain > 1 ? (
+        <p role="note" className="rounded-lg bg-warning-background p-3 text-sm text-warning">
+          Наглядный контур усилен в {gainNumber.format(gain)} раз только на экране. Метки узлов следуют за ним; их положение не является географической координатой. Точный контур и значения модели не изменены; сравнивайте кадры при одном коэффициенте.
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Геометрия показана без усиления. Малые изменения могут быть меньше толщины линии; точное значение дано в метрах за шаг.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Label htmlFor="shoreline-point">
+          Узел береговой линии
+        </Label>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={selectedPoint <= 0}
+          onClick={() => onSelectPoint(selectedPoint - 1)}
+          aria-label="Предыдущий узел"
+        >
+          ←
+        </Button>
+        <Input
+          id="shoreline-point"
+          type="number"
+          min="1"
+          max={index.pointCount}
+          value={selectedPoint + 1}
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            if (Number.isInteger(value) && value >= 1 && value <= index.pointCount)
+              onSelectPoint(value - 1);
+          }}
+          className="h-9 min-h-9 w-20"
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={selectedPoint >= index.pointCount - 1}
+          onClick={() => onSelectPoint(selectedPoint + 1)}
+          aria-label="Следующий узел"
+        >
+          →
+        </Button>
       </div>
       <p className="text-sm text-muted-foreground">
+        Метки показывают знак рассчитанного Go смещения за выбранный шаг; их
+        цвет и размер не показывают величину смещения. Это направление модели,
+        без проверки порога чувствительности и без вывода о наблюдаемом размыве.
         Перетаскивайте карту для перемещения. Масштаб меняется кнопками;
-        координаты и научные значения от масштаба не меняются.
+        координаты и значения от него не меняются.
       </p>
     </div>
   );

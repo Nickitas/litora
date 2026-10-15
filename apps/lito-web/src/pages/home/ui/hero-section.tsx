@@ -1,5 +1,4 @@
 import { Hero } from "@/shared/ui/hero";
-import { SITE_CONFIG } from "@/shared/config/site";
 import { Globe } from "@/shared/shadcn/components/ui/globe";
 import { homePageContent } from "../constants";
 
@@ -14,12 +13,11 @@ export const HeroSection = () => {
 
   return (
     <Hero
-      title={SITE_CONFIG.name}
+      title={hero.title}
       subtitle={hero.subtitle}
-      description={SITE_CONFIG.description}
+      description={hero.description}
       badges={hero.badges}
       ctaButtons={hero.ctaButtons}
-      version={SITE_CONFIG.version}
       visualContent={visualContent}
     />
   );

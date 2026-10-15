@@ -31,6 +31,12 @@ API, worker и nginx доступны лишь внутри Docker-сети, п�
 - [Caddyfile](examples/Caddyfile) — HTTPS и ограничение команды по IP.
 - [.env.example](examples/.env.example) — имена и placeholder, без действующих секретов.
 
+Web nginx отдаёт `index.html` с `Cache-Control: no-cache, must-revalidate`, а
+хешированные `/assets/*` — с длительным immutable-кешем. Отсутствующий asset
+должен возвращать 404, не SPA HTML. Это позволяет старой вкладке однократно
+получить новый бандл после смены образа; устойчивую ошибку web показывает явно.
+При публикации через другой frontend эти HTTP-правила надо воспроизвести.
+
 Не объединять эти файлы с dev Compose: там жёстко задан внутренний MinIO endpoint,
 другие init/ports/env_file. Пример не изменяет работу `pnpm up` и `.env.local`.
 
@@ -273,6 +279,17 @@ production-шаблона выставить `S3_AUTO_CREATE_BUCKET=false` вр�
 Для диагностики незавершённого удаления читать только очередь, не удалять её
 строки вручную:
 
+Перед обновлением worker примените миграцию `015_calculation_deletion_lock_token.sql`:
+она восстанавливает поле захвата очереди в базах, где ранняя `014` уже была
+отмечена применённой. Если `attempts=0` долго не меняется, проверьте запуск
+worker и его журнал; при `error_code` проверьте конкретную ошибку. Публикация
+только API/web без нового worker не начинает удаление.
+
+Перед включением импорта датированных контуров примените
+`016_observed_shoreline_series.sql`: она расширяет допустимые роли
+`scientific_inputs`, сохраняя прежние. Если миграция не применена, новый
+файл не сможет перейти в `ready`; сначала сверяйте журнал миграций БД.
+
 ```sql
 SELECT request_id, job_id, status, attempts, error_code, next_attempt_at
 FROM calculation_deletion_items
@@ -405,7 +422,7 @@ curl --fail --silent --show-error --output /dev/null https://litora.example.org/
    Не публиковать JSON с ключом в журнале приёмки. `/login`: регистрация с этим
    ключом, вход, reload, logout; повторное использование ключа запрещено.
    Cookie Secure/HttpOnly/SameSite, access token не в storage, нет mixed content.
-2. `/account`: последовательно dimension, map, erosion. Дождаться реального succeeded,
+2. `/lab`: последовательно dimension, map, erosion. Дождаться реального succeeded,
    открыть отчёт, скачать manifest, сопоставить размер/SHA-256 файла с реестром.
 3. Второй пользователь не получает job первого; отмена не становится success позже.
 4. URL без подписи не даёт файл, signed URL снаружи сервера работает только до срока.

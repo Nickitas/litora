@@ -220,6 +220,15 @@ export class CalculationsRepository {
     };
     if (options.status) add((n) => `status=$${n}`, options.status);
     if (options.kind) add((n) => `kind=$${n}`, options.kind);
+    if (options.visualization === "shoreline") {
+      values.push("erosion/visualization/index.json", this.storage.bucket);
+      conditions.push(
+        `status='succeeded' AND deletion_requested_at IS NULL AND EXISTS (` +
+          `SELECT 1 FROM calculation_artifacts a WHERE a.job_id=calculation_jobs.id ` +
+          `AND a.category='output' AND a.filename=$${values.length - 1} ` +
+          `AND a.bucket=$${values.length})`,
+      );
+    }
     if (options.from)
       add(
         (n) => `created_at >= $${n}::timestamptz`,

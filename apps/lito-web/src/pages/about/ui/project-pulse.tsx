@@ -1,17 +1,17 @@
 import { motion, useReducedMotion } from "motion/react";
-import { BarChart3, Boxes, Fingerprint, Sparkles } from "lucide-react";
+import { BarChart3, Boxes, Fingerprint, Waves } from "lucide-react";
 
 const signals = [
-  { icon: Boxes, value: "4 слоя", label: "данные → модель → расчёт → отчёт" },
+  { icon: Boxes, value: "Данные", label: "контур и научные входы" },
   {
     icon: BarChart3,
-    value: "12+ метрик",
-    label: "для контроля качества результата",
+    value: "Метод",
+    label: "параметры и версия ядра",
   },
   {
     icon: Fingerprint,
-    value: "1 паспорт",
-    label: "для воспроизводимости запуска",
+    value: "Результат",
+    label: "метрики, изображения и файлы",
   },
 ];
 
@@ -26,32 +26,33 @@ export function ProjectPulse() {
         />
         <div className="relative">
           <div className="mb-8 flex items-center gap-2 text-primary">
-            <Sparkles className="size-4" /> Внутри проекта
+            <Waves className="size-4" /> Исследовательский маршрут
           </div>
           <p className="font-mono text-sm leading-7 text-muted-foreground">
-            $ lito seabed check-full
+            От вопроса к результату
           </p>
           <div className="mt-5 space-y-3 font-mono text-sm">
-            <p className="text-primary">✓ Геометрия берега проверена</p>
-            <p className="text-primary">✓ Источник батиметрии проверен</p>
-            <p className="text-primary">✓ Адаптивная сетка принята</p>
-            <p className="text-foreground">→ Отчёт готов</p>
+            <p className="text-primary">01 / Подготовить входные данные</p>
+            <p className="text-primary">02 / Выбрать научный сценарий</p>
+            <p className="text-primary">03 / Запустить расчёт</p>
+            <p className="text-foreground">04 / Проверить результат</p>
           </div>
         </div>
       </div>
       <div className="rounded-2xl border bg-muted/20 p-5 sm:p-8">
         <p className="text-xs font-medium tracking-[0.2em] text-primary uppercase">
-          Сигналы качества
+          След расчёта
         </p>
         <h2 className="mt-2 text-2xl font-bold sm:text-3xl">
-          Каждый результат можно объяснить
+          К результату можно вернуться
         </h2>
         <p className="mt-3 leading-7 text-muted-foreground">
-          Litora не прячет вычисления за одной кнопкой. Структура данных,
-          параметры запуска и контрольные метрики остаются частью результата.
+          В личном кабинете остаются история заданий, параметры, версия ядра,
+          метрики и файлы. Они помогают понять, как был получен результат, и
+          сравнить совместимые расчёты.
         </p>
         <div className="mt-7 grid gap-3 sm:grid-cols-3">
-          {signals.map((signal, index) => {
+          {signals.map((signal) => {
             const Icon = signal.icon;
             return (
               <motion.div
@@ -65,18 +66,6 @@ export function ProjectPulse() {
                 <span className="mt-1 block text-xs leading-5 text-muted-foreground">
                   {signal.label}
                 </span>
-                <div className="mt-4 h-1 overflow-hidden rounded-full bg-muted">
-                  <motion.div
-                    initial={reduceMotion ? false : { width: 0 }}
-                    whileInView={{ width: `${55 + index * 18}%` }}
-                    viewport={{ once: true }}
-                    transition={{
-                      duration: reduceMotion ? 0 : 0.8,
-                      delay: reduceMotion ? 0 : index * 0.15,
-                    }}
-                    className="h-full rounded-full bg-primary"
-                  />
-                </div>
               </motion.div>
             );
           })}

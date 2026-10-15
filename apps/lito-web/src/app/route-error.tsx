@@ -1,11 +1,31 @@
+import { useEffect } from "react";
 import { useRouteError } from "react-router-dom";
 import { Button } from "@/shared/shadcn/components/ui/button";
+import {
+  canRecoverModule,
+  isModuleLoadError,
+  recoverModule,
+} from "./module-recovery";
 
 export function RouteError() {
   const error = useRouteError();
-  const moduleUnavailable =
-    error instanceof Error &&
-    /Failed to fetch dynamically imported module/.test(error.message);
+  const moduleUnavailable = isModuleLoadError(error);
+  const restoring = moduleUnavailable && canRecoverModule();
+
+  useEffect(() => {
+    if (restoring) recoverModule();
+  }, [restoring]);
+
+  if (restoring) {
+    return (
+      <main
+        role="status"
+        className="mx-auto flex min-h-screen max-w-xl items-center px-6 py-12 text-muted-foreground"
+      >
+        Восстанавливаем страницу…
+      </main>
+    );
+  }
 
   return (
     <main
@@ -17,7 +37,9 @@ export function RouteError() {
       </h1>
       <p className="text-muted-foreground">
         {moduleUnavailable
-          ? "Браузер не загрузил обновлённый модуль приложения. Обновите страницу и попробуйте снова."
+          ? navigator.onLine === false
+            ? "Нет соединения с сетью. Проверьте подключение и повторите попытку."
+            : "Не удалось загрузить часть приложения. Проверьте подключение и повторите попытку."
           : "Произошла неожиданная ошибка. Попробуйте обновить страницу."}
       </p>
       <div className="flex flex-wrap gap-3">
@@ -28,12 +50,6 @@ export function RouteError() {
           <a href="/">На главную</a>
         </Button>
       </div>
-      {moduleUnavailable && (
-        <p className="text-sm text-muted-foreground">
-          Если ошибка повторится, обновите вкладку без кеша: ⌘⇧R на macOS или
-          Ctrl+Shift+R на Windows и Linux.
-        </p>
-      )}
     </main>
   );
 }

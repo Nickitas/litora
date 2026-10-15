@@ -12,7 +12,9 @@ export const ScientificGoal = () => {
         {scientificGoal.description}
       </p>
       <div className="mt-4 space-y-2 text-sm text-muted-foreground sm:text-base">
-        <p>{scientificGoal.title}</p>
+        <p className="font-medium text-foreground">
+          {scientificGoal.practicalGoalsTitle}
+        </p>
         <ol className="ml-6 list-decimal space-y-1">
           {scientificGoal.practicalGoals.map((goal, i) => (
             <li key={i}>{goal}</li>

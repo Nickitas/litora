@@ -52,6 +52,16 @@ test("наблюдения для калибровки принимают тол
   ]) assert.throws(() => validateScientificInput(bad));
 });
 
+test("датированные контуры принимают только GeoJSON EPSG:4326 до 16 МиБ", () => {
+  const input = { ...valid, role: "shoreline_timeseries_geojson", filename: "coastsat.geojson" };
+  assert.deepEqual(validateScientificInput(input), input);
+  for (const bad of [
+    { ...input, filename: "coastsat.json" },
+    { ...input, sizeBytes: 16 * 1024 * 1024 + 1 },
+    { ...input, crs: "LAEA" },
+  ]) assert.throws(() => validateScientificInput(bad));
+});
+
 test("индексные профили CERC принимают только JSON до 1 МиБ без координатного CRS", () => {
   for (const role of ["longshore_sediment_sources_json", "longshore_structures_json"]) {
     const profile = { ...valid, role, filename: "profile.json", crs: "not-applicable", coordinateUnit: "not-applicable" };

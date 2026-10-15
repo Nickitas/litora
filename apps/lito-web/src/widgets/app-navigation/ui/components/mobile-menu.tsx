@@ -1,10 +1,20 @@
 import { Link } from "react-router";
 import { NAV_ITEMS } from "../../config";
 import { useAuth } from "@/features/auth";
-import { ROUTES } from "@/shared/config/routes";
+import { LAB_NAV_ITEMS, ROUTES } from "@/shared/config/routes";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useState, type Dispatch, type SetStateAction } from "react";
-import { ChevronRight, LogOut, User, UserRound } from "lucide-react";
+import {
+  Calculator,
+  ChartNoAxesCombined,
+  ChevronRight,
+  Database,
+  FlaskConical,
+  LogOut,
+  Plus,
+  User,
+  UserRound,
+} from "lucide-react";
 import { RippleButton } from "@/shared/shadcn/ui/ripple-button";
 import { Button } from "@/shared/shadcn/components/ui/button";
 
@@ -13,6 +23,13 @@ type MobileMenuProps = {
   isOpen: boolean;
   setMobileMenuOpen: Dispatch<SetStateAction<boolean>>;
 };
+
+const labIcons = [
+  FlaskConical,
+  Calculator,
+  Database,
+  ChartNoAxesCombined,
+] as const;
 
 export const MobileMenu = ({
   isActive,
@@ -66,7 +83,7 @@ export const MobileMenu = ({
       {isOpen && (
         <motion.div
           id="mobile-navigation"
-          className="overflow-hidden border-t border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:hidden"
+          className="max-h-[calc(100dvh-4rem)] overflow-y-auto border-t border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:hidden"
           initial={reduceMotion ? false : "closed"}
           animate="open"
           exit="closed"
@@ -106,7 +123,6 @@ export const MobileMenu = ({
               </motion.div>
             ))}
 
-            {/* User section with animation */}
             <motion.div
               custom={NAV_ITEMS.length}
               variants={itemVariants}
@@ -116,7 +132,6 @@ export const MobileMenu = ({
             >
               {isAuthenticated ? (
                 <div className="space-y-3">
-                  {/* User info */}
                   <div className="flex items-center gap-3 rounded-lg bg-muted/30 px-4 py-3">
                     <div className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
                       <User className="size-4" />
@@ -129,19 +144,57 @@ export const MobileMenu = ({
                     </div>
                   </div>
 
+                  <div
+                    role="group"
+                    aria-label="Разделы лаборатории"
+                    className="space-y-1"
+                  >
+                    <p className="px-4 text-xs font-medium text-muted-foreground">
+                      Лаборатория
+                    </p>
+                    <Link
+                      to={`${ROUTES.lab}?new=1`}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex min-h-11 items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+                    >
+                      <Plus aria-hidden="true" className="size-4" />
+                      Новый расчёт
+                    </Link>
+                    {LAB_NAV_ITEMS.map((item, index) => {
+                      const Icon = labIcons[index];
+                      return (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          onClick={() => setMobileMenuOpen(false)}
+                          aria-current={
+                            isActive(item.path) ? "page" : undefined
+                          }
+                          className="flex min-h-11 items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 aria-[current=page]:bg-accent aria-[current=page]:text-accent-foreground"
+                        >
+                          <Icon
+                            aria-hidden="true"
+                            className="size-4 text-primary"
+                          />
+                          {item.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+
                   <Link
                     to={ROUTES.account}
                     onClick={() => setMobileMenuOpen(false)}
-                    className="group flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-primary/10"
+                    aria-current={isActive(ROUTES.account) ? "page" : undefined}
+                    className="flex min-h-11 items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50"
                   >
-                    <span className="flex items-center gap-2">
-                      <UserRound className="size-4 text-primary" />
-                      Личный кабинет
-                    </span>
-                    <ChevronRight className="size-4 text-primary transition-transform group-hover:translate-x-0.5" />
+                    <UserRound
+                      aria-hidden="true"
+                      className="size-4 text-primary"
+                    />
+                    Аккаунт
                   </Link>
 
-                  {/* Logout button */}
                   {logoutError && (
                     <p role="alert" className="text-sm text-destructive">
                       {logoutError}

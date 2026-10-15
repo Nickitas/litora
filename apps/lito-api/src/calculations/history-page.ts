@@ -18,6 +18,7 @@ const kinds = new Set<CalculationKind>(calculationKinds.map((item) => item.kind)
 const queryKeys = new Set([
   "status",
   "kind",
+  "visualization",
   "from",
   "to",
   "jobId",
@@ -47,7 +48,7 @@ function fingerprint(
   userId: string,
   filters: Pick<
     CalculationPageQueryDto,
-    "status" | "kind" | "from" | "to" | "jobId"
+    "status" | "kind" | "visualization" | "from" | "to" | "jobId"
   >,
 ): string {
   return createHash("sha256")
@@ -59,6 +60,7 @@ function fingerprint(
         filters.from,
         filters.to,
         filters.jobId,
+        ...(filters.visualization ? [filters.visualization] : []),
       ]),
     )
     .digest("hex")
@@ -85,6 +87,7 @@ export function parseHistoryPageQuery(
     );
   const status = query.status as string | undefined;
   const kind = query.kind as string | undefined;
+  const visualization = query.visualization as string | undefined;
   const from = query.from as string | undefined;
   const to = query.to as string | undefined;
   const jobId = query.jobId as string | undefined;
@@ -94,6 +97,8 @@ export function parseHistoryPageQuery(
     throw new BadRequestException("Неизвестный статус расчёта");
   if (kind && !kinds.has(kind as CalculationKind))
     throw new BadRequestException("Неизвестный сценарий расчёта");
+  if (visualization && visualization !== "shoreline")
+    throw new BadRequestException("Неизвестный вид визуализации");
   if (
     (from && !validDay(from)) ||
     (to && !validDay(to)) ||
@@ -107,6 +112,7 @@ export function parseHistoryPageQuery(
   const filters = {
     status: status as CalculationStatus | undefined,
     kind: kind as CalculationKind | undefined,
+    visualization: visualization as "shoreline" | undefined,
     from,
     to,
     jobId: jobId?.toLowerCase(),

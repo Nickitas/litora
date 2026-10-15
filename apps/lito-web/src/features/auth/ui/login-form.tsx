@@ -16,7 +16,7 @@ export function LoginForm() {
   const auth = useAuth();
   const navigate = useNavigate();
   if (auth.loading) return <p role="status">Проверяем сессию…</p>;
-  if (auth.isAuthenticated) return <Navigate to="/account" replace />;
+  if (auth.isAuthenticated) return <Navigate to="/lab" replace />;
   async function submit(event: FormEvent) {
     event.preventDefault();
     setPending(true);
@@ -25,7 +25,7 @@ export function LoginForm() {
       if (registering)
         await auth.register({ name, email, password, invitationCode });
       else await auth.login({ email, password });
-      navigate("/account");
+      navigate("/lab");
     } catch (error) {
       setError(error instanceof Error ? error.message : "Не удалось войти");
     } finally {
@@ -38,8 +38,13 @@ export function LoginForm() {
         {registering ? "Создать аккаунт" : "Войти в Litora"}
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Запускайте расчёты и храните отчёты в личном кабинете.
+        Запускайте расчёты и храните отчёты в лаборатории.
       </p>
+      {auth.sessionEnded && (
+        <p role="alert" className="mt-4 text-sm text-destructive">
+          Сессия завершена. Войдите снова.
+        </p>
+      )}
       <form onSubmit={submit} className="mt-6 space-y-4" aria-busy={pending}>
         {registering && (
           <div className="space-y-2">

@@ -105,7 +105,7 @@ function ReportColumn({
         </CollapsibleContent>
       </Collapsible>
       <Link
-        to={`/account/calculations/${job.id}`}
+        to={`/lab/calculations/${job.id}`}
         onClick={onClose}
         className="inline-flex text-sm text-primary underline-offset-4 hover:underline"
       >

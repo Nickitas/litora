@@ -179,7 +179,7 @@ function Provenance({ value }: { value: unknown }) {
                     <p className="mt-1 text-muted-foreground">
                       Паспорт и права на исходные данные смотрите в{" "}
                       <Link className="text-primary underline underline-offset-2"
-                        to={`/account/calculations/${file.sourceJobId}`}>
+                        to={`/lab/calculations/${file.sourceJobId}`}>
                         исходном расчёте
                       </Link>.
                     </p>
@@ -248,7 +248,7 @@ function ArtifactList({ files }: { files: CalculationArtifactDto[] }) {
 
 export function CalculationDetailPage() {
   const { jobId } = useParams();
-  if (!jobId) return <Navigate to="/account/calculations" replace />;
+  if (!jobId) return <Navigate to="/lab/calculations" replace />;
   return <CalculationDetail key={jobId} jobId={jobId} />;
 }
 
@@ -274,7 +274,7 @@ function CalculationDetail({ jobId }: { jobId: string }) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <Link
-            to="/account/calculations"
+            to="/lab/calculations"
             className="text-sm text-primary underline-offset-4 hover:underline"
           >
             ← К истории расчётов
@@ -295,11 +295,11 @@ function CalculationDetail({ jobId }: { jobId: string }) {
             {job.status === "succeeded" && job.artifacts.some((file) =>
               file.category === "output" && file.filename === "erosion/visualization/index.json") && (
               <Button asChild variant="outline">
-                <Link to={`/account/shoreline?job=${job.id}`}>Открыть динамику берега</Link>
+                <Link to={`/lab/shoreline?job=${job.id}`}>Открыть динамику берега</Link>
               </Button>
             )}
             <Button asChild variant="outline">
-              <Link to={`/account/calculations?repeat=${job.id}`}>
+              <Link to={`/lab/calculations?repeat=${job.id}`}>
                 Создать на основе
               </Link>
             </Button>
@@ -596,7 +596,7 @@ function CalculationDetail({ jobId }: { jobId: string }) {
         <DeleteCalculationDialog
           target={job}
           onClose={() => setDeleteOpen(false)}
-          onQueued={() => navigate("/account/calculations")}
+          onQueued={() => navigate("/lab/calculations")}
           onRestoreFocus={() => deleteButtonRef.current?.focus()}
         />
       )}

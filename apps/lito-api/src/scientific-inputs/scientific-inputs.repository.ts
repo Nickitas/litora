@@ -119,6 +119,16 @@ export class ScientificInputsRepository {
     return result.rows.map(dto);
   }
 
+  async ownedObservedSeries(id: string, userId: string): Promise<ScientificInputRow> {
+    const result = await this.db.query<ScientificInputRow>(
+      `SELECT * FROM scientific_inputs
+       WHERE id=$1 AND owner_id=$2 AND role='shoreline_timeseries_geojson' AND status='ready'`,
+      [id, userId],
+    );
+    if (!result.rows[0]) throw new NotFoundException("Ряд наблюдений не найден");
+    return result.rows[0];
+  }
+
   async resolveOwnedSource(
     id: string, userId: string, role: ScientificInputRole, bucket: string,
   ): Promise<ResolvedScientificInput> {

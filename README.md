@@ -80,7 +80,8 @@ pnpm up
 
 | Сервис                | Адрес                               |
 | --------------------- | ----------------------------------- |
-| Сайт и личный кабинет | http://localhost:5173/account       |
+| Сайт и лаборатория | http://localhost:5173/lab       |
+| Аккаунт            | http://localhost:5173/account   |
 | Регистрация / вход    | http://localhost:5173/login         |
 | Swagger               | http://localhost:3000/api/docs      |
 | OpenAPI JSON          | http://localhost:3000/api/docs-json |

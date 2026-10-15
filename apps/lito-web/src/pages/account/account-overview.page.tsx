@@ -29,7 +29,7 @@ function JobLink({
   return (
     <li>
       <Link
-        to={`/account/calculations/${id}`}
+        to={`/lab/calculations/${id}`}
         className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 text-card-foreground transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         <span className="min-w-0">
@@ -83,7 +83,7 @@ export function AccountOverviewPage() {
           проиграйте их по времени и выберите узел на карте. Свой расчёт не требуется.
         </p>
         <Button asChild className="mt-4">
-          <Link to="/account/shoreline">Открыть карту и реплей</Link>
+          <Link to="/lab/shoreline">Открыть карту и реплей</Link>
         </Button>
       </section>
 
@@ -121,7 +121,7 @@ export function AccountOverviewPage() {
             Сейчас выполняются
           </h2>
           <Link
-            to="/account/calculations"
+            to="/lab/calculations"
             className="text-sm text-primary underline-offset-4 hover:underline"
           >
             Вся история

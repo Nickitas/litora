@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { createWriteStream } from "node:fs";
-import { mkdtemp, open, rm } from "node:fs/promises";
+import { mkdtemp, open, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Transform } from "node:stream";
@@ -31,10 +31,13 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { AuthGuard, type AuthRequest } from "../auth/auth.guard.js";
-import { ReusableScientificArtifactResponse, ScientificInputResponse } from "../http-models.js";
+import { ObservedShorelineSeriesResponse, ReusableScientificArtifactResponse, ScientificInputResponse } from "../http-models.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
 import { ScientificInputsRepository } from "./scientific-inputs.repository.js";
 import { validateScientificInput } from "./validation.js";
+import { parseObservedShorelines } from "./observed-shorelines.js";
+
+const maxObservedSeriesBytes = 16 * 1024 * 1024;
 
 @Controller("scientific-inputs")
 @ApiTags("Научные входные файлы")
@@ -53,6 +56,16 @@ export class ScientificInputsController {
   @ApiResponse({ status: 200, type: [ScientificInputResponse] })
   list(@Req() req: AuthRequest) {
     return this.inputs.list(req.user.id);
+  }
+
+  @Get(":id/shoreline-series")
+  @ApiOperation({ summary: "Датированные контуры своего набора наблюдений" })
+  @ApiResponse({ status: 200, type: ObservedShorelineSeriesResponse, description: "Проверенный ряд контуров в EPSG:4326" })
+  @Header("Cache-Control", "no-store")
+  async shorelineSeries(@Req() req: AuthRequest, @Param("id", new ParseUUIDPipe()) id: string) {
+    const input = await this.inputs.ownedObservedSeries(id, req.user.id);
+    const bytes = await this.storage.readObjectBytes(input.object_key, maxObservedSeriesBytes);
+    return parseObservedShorelines(bytes);
   }
 
   @Get("reusable-artifacts")
@@ -78,7 +91,7 @@ export class ScientificInputsController {
       additionalProperties: false,
       properties: {
         name: { type: "string", maxLength: 100 },
-        role: { type: "string", enum: ["coastline_geojson", "wave_climate", "shoreline_observations_json", "longshore_sediment_sources_json", "longshore_structures_json", "flat_mesh_msh", "seabed_msh", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "relief_reference_passport_json", "export_metadata_json", "bathymetry_source_json", "adaptive_field_csv", "adaptive_field_report_json", "mesh_comparison_report_json", "adaptive_comparison_report_json", "expert_organizer_key_json", "expert_ratings_tsv"] },
+        role: { type: "string", enum: ["coastline_geojson", "shoreline_timeseries_geojson", "wave_climate", "shoreline_observations_json", "longshore_sediment_sources_json", "longshore_structures_json", "flat_mesh_msh", "seabed_msh", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "relief_reference_passport_json", "export_metadata_json", "bathymetry_source_json", "adaptive_field_csv", "adaptive_field_report_json", "mesh_comparison_report_json", "adaptive_comparison_report_json", "expert_organizer_key_json", "expert_ratings_tsv"] },
         filename: { type: "string", maxLength: 160 },
         sizeBytes: { type: "integer", minimum: 1, maximum: 536870912 },
         source: { type: "string", maxLength: 200 },
@@ -139,9 +152,14 @@ export class ScientificInputsController {
       if ((record.role === "seabed_msh" || record.role === "flat_mesh_msh") && !prefix.startsWith("$MeshFormat"))
         throw new BadRequestException("Ожидается файл MSH с заголовком $MeshFormat");
       if (record.role.endsWith("json") || record.role === "coastline_geojson" ||
+          record.role === "shoreline_timeseries_geojson" ||
           (record.role === "wave_climate" && record.filename.toLowerCase().endsWith(".json"))) {
         if (!prefix.startsWith("{") && !prefix.startsWith("["))
           throw new BadRequestException("Ожидается JSON или GeoJSON");
+      }
+      if (record.role === "shoreline_timeseries_geojson") {
+        const bytes = await readFile(path);
+        parseObservedShorelines(bytes);
       }
       const contentType = record.role === "expert_ratings_tsv"
         ? "text/tab-separated-values"

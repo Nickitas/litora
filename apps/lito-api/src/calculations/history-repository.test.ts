@@ -50,6 +50,7 @@ test("страница ограничена владельцем, использ
     },
   } as unknown as DatabaseService;
   const storage = {
+    bucket: "private-test-bucket",
     downloadUrl: () => {
       throw new Error("Список не должен подписывать файлы");
     },
@@ -78,4 +79,37 @@ test("страница ограничена владельцем, использ
   }
   assert.match(calls[1].sql, /ORDER BY created_at DESC, id DESC/);
   assert.equal(calls[1].values.at(-1), 3);
+});
+
+test("фильтр карт выбирает только готовый индекс в приватном bucket владельца", async () => {
+  const calls: { sql: string; values: unknown[] }[] = [];
+  const database = {
+    query: async (sql: string, values: unknown[]) => {
+      calls.push({ sql, values });
+      return sql.includes("count(*)")
+        ? { rows: [{ total: "1" }] }
+        : { rows: [row("22222222-2222-4222-8222-222222222222")] };
+    },
+  } as unknown as DatabaseService;
+  const storage = { bucket: "private-test-bucket" } as ObjectStorageService;
+  const repository = new CalculationsRepository(database, storage);
+  const options = parseHistoryPageQuery(
+    { visualization: "shoreline", kind: "erosion_file" },
+    userId,
+  );
+  const result = await repository.listPage(userId, options);
+  assert.equal(result.totalCount, 1);
+  assert.equal(result.items.length, 1);
+  for (const call of calls) {
+    assert.match(call.sql, /user_id=\$1/);
+    assert.match(call.sql, /deletion_requested_at IS NULL/);
+    assert.match(call.sql, /a\.job_id=calculation_jobs\.id/);
+    assert.match(call.sql, /a\.category='output'/);
+    assert.deepEqual(call.values.slice(0, 3), [
+      userId,
+      "erosion_file",
+      "erosion/visualization/index.json",
+    ]);
+    assert.ok(call.values.includes("private-test-bucket"));
+  }
 });

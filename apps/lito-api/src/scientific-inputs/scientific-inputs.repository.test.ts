@@ -3,6 +3,19 @@ import { test } from "node:test";
 import type { DatabaseService } from "../infrastructure/database.service.js";
 import { ScientificInputsRepository } from "./scientific-inputs.repository.js";
 
+test("ряд контуров выдаётся только владельцу готового файла нужной роли", async () => {
+  const database = {
+    query: async (sql: string, params: unknown[]) => {
+      assert.match(sql, /owner_id=\$2 AND role='shoreline_timeseries_geojson' AND status='ready'/);
+      return { rows: params[0] === "series" && params[1] === "owner"
+        ? [{ id: "series", role: "shoreline_timeseries_geojson", status: "ready" }] : [] };
+    },
+  } as unknown as DatabaseService;
+  const repository = new ScientificInputsRepository(database);
+  assert.equal((await repository.ownedObservedSeries("series", "owner")).id, "series");
+  await assert.rejects(repository.ownedObservedSeries("series", "other"));
+});
+
 test("повторная загрузка получает новый ключ, а завершение проверяет именно его", async () => {
   const calls: { sql: string; params: unknown[] }[] = [];
   const database = {

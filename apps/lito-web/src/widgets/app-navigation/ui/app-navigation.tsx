@@ -4,13 +4,18 @@ import { Menu, X } from "lucide-react";
 import { ROUTES } from "@/shared/config/routes";
 import { DesktopNavigation } from "./components/desktop-navigation";
 import { Brand } from "./components/brand";
-import { DesktopActions } from "./components/desktop-actions";
 import { Button } from "@/shared/shadcn/components/ui/button";
 import { ScrollProgress } from "@/shared/shadcn/ui/scroll-progress";
 
 const ThemeSwitcher = lazy(() =>
   import("@/shared/ui/theme-switcher").then((module) => ({
     default: module.ThemeSwitcher,
+  }))
+);
+
+const DesktopActions = lazy(() =>
+  import("./components/desktop-actions").then((module) => ({
+    default: module.DesktopActions,
   }))
 );
 
@@ -37,7 +42,10 @@ export function Navbar() {
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [mobileMenuOpen]);
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) =>
+    location.pathname === path ||
+    (path === ROUTES.labCalculations &&
+      location.pathname.startsWith(`${ROUTES.labCalculations}/`));
 
   return (
     <nav
@@ -66,7 +74,16 @@ export function Navbar() {
             >
               <ThemeSwitcher />
             </Suspense>
-            <DesktopActions />
+            <Suspense
+              fallback={
+                <div
+                  aria-hidden="true"
+                  className="hidden size-10 animate-pulse rounded-xl bg-muted md:block"
+                />
+              }
+            >
+              <DesktopActions />
+            </Suspense>
           </div>
 
           {/* Animated Mobile Menu Button */}

@@ -2,9 +2,9 @@ import { motion, useReducedMotion } from "motion/react";
 import { Activity, CheckCircle2, CircleDot, Waves } from "lucide-react";
 
 const metrics = [
-  { label: "Данные", value: "GEBCO + coastline", icon: CircleDot },
-  { label: "Сетка", value: "adaptive / full-quad", icon: Activity },
-  { label: "Отчёт", value: "SVG · VTU · CSV", icon: CheckCircle2 },
+  { label: "Линия берега", value: "контур · размерность", icon: CircleDot },
+  { label: "Рельеф дна", value: "сетка · карта · профиль", icon: Activity },
+  { label: "Динамика", value: "CERC · баланс наносов", icon: CheckCircle2 },
 ];
 
 export const ObservatorySection = () => {
@@ -18,14 +18,15 @@ export const ObservatorySection = () => {
       <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
         <div>
           <div className="mb-4 flex items-center gap-2 text-sm text-primary">
-            <Waves className="size-4" /> Научная обсерватория
+            <Waves className="size-4" /> Внутри лаборатории
           </div>
           <h2 className="text-2xl font-bold sm:text-3xl">
-            Смотрите, как меняется берег
+            Изучайте форму, рельеф и изменение берега
           </h2>
           <p className="mt-3 max-w-xl leading-7 text-muted-foreground">
-            Каждый запуск оставляет читаемый цифровой след: от исходного набора
-            данных до визуального отчёта и контрольных метрик.
+            Сценарии объединяет одно вычислительное ядро. В кабинете можно
+            просмотреть результаты и сравнить совместимые расчёты; исходные
+            данные и ограничения метода остаются частью их интерпретации.
           </p>
         </div>
         <div className="relative space-y-3">

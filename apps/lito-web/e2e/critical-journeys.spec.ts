@@ -4,6 +4,7 @@ import type {
   AuthDto,
   CalculationJobDto,
   CalculationKindDto,
+  CalculationDeletionRequestDto,
   CalculationMetadataExportV1,
   DatasetDto,
   ReusableScientificArtifactDto,
@@ -137,6 +138,8 @@ async function mockApi(
       if (!result && method === "GET" &&
           (path === "/api/scientific-inputs" || path === "/api/scientific-inputs/reusable-artifacts"))
         result = { body: [] };
+      if (!result && path === "/api/calculations/deletions-current" && method === "GET")
+        result = { body: null };
       if (!result) {
         unexpected.push(`${method} ${path}`);
         await route.abort("blockedbyclient");
@@ -153,7 +156,7 @@ async function mockApi(
 }
 
 async function openNewCalculation(page: Page, theme?: "light" | "dark") {
-  await page.goto("/account");
+  await page.goto("/lab");
   if (theme) await chooseTheme(page, theme);
   await page.getByRole("button", { name: "Новый расчёт", exact: true }).click();
   await expect(
@@ -213,7 +216,7 @@ test("каталог показывает паспорт набора, поис�
     if (path === "/api/datasets" && method === "GET") return { body: [dataset, second] };
   });
 
-  await page.goto("/account/datasets");
+  await page.goto("/lab/datasets");
   await chooseTheme(page, "dark");
   await expect(page.getByRole("heading", { name: "Наборы данных" })).toBeVisible();
   await expect(page.getByRole("heading", { name: dataset.name })).toBeVisible();
@@ -239,7 +242,7 @@ test("каталог создаёт набор отдельно от запус�
     }
   });
 
-  await page.goto("/account/datasets");
+  await page.goto("/lab/datasets");
   await expect(page.getByText("Пока нет сохранённых наборов")).toBeVisible();
   await page.getByRole("button", { name: "Добавить набор" }).click();
   await page.getByLabel("Файл GeoJSON").setInputFiles({
@@ -272,7 +275,7 @@ test("каталог различает ошибку API и пустой рез�
     }
   });
 
-  await page.goto("/account/datasets");
+  await page.goto("/lab/datasets");
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByText("Пока нет сохранённых наборов")).toHaveCount(0);
   allowSuccess = true;
@@ -293,8 +296,8 @@ test("устаревшая ссылка на создание возвращае
     if (path === "/api/calculations" && method === "GET") return { body: [] };
   });
 
-  await page.goto("/account/calculations/new");
-  await expect(page).toHaveURL(/\/account$/);
+  await page.goto("/lab/calculations/new");
+  await expect(page).toHaveURL(/\/lab$/);
   await expect(
     page.getByRole("heading", { name: "Обзор исследований" })
   ).toBeVisible();
@@ -323,7 +326,7 @@ test("расчёт из истории открывает редактируем
     }
   });
 
-  await page.goto(`/account/calculations/${original.id}`);
+  await page.goto(`/lab/calculations/${original.id}`);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog).toBeVisible();
@@ -337,7 +340,7 @@ test("расчёт из истории открывает редактируем
   await dialog.getByLabel("Сохранить анимацию GIF").check();
   await dialog.getByLabel("Кадров в секунду (1–30)").fill("8");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "erosion", input: {
     ...erosionDemoDefaults, steps: 5, cercCoefficient: 0.5,
     outputCsv: true, csvFormat: "wide", outputGif: true, gifFps: 8,
@@ -366,7 +369,7 @@ test("полный демо-конвейер позволяет настроит
   });
 
   await page.setViewportSize({ width: 360, height: 780 });
-  await page.goto(`/account/calculations/${original.id}`);
+  await page.goto(`/lab/calculations/${original.id}`);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog.getByText("Демонстрационный сценарий")).toBeVisible();
@@ -375,7 +378,7 @@ test("полный демо-конвейер позволяет настроит
   await dialog.getByLabel("Кадров в секунду (1–30)").fill("12");
   await dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)").fill("300");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "all_demo", input: {
     ...allDemoDefaults, steps: 4, outputGif: true, gifFps: 12, gifSkip: 2, modelMaxPoints: 300,
   } });
@@ -424,7 +427,7 @@ test("свой CERC выбирает приватные файлы и необя
   await dialog.getByLabel("Поток через правую границу, м³/с").fill("-0.01");
   await dialog.getByLabel("Сохранить анимацию GIF").check();
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "erosion_file", input: {
     ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
     sedimentSourcesInputId: inputs[4].id,
@@ -474,7 +477,7 @@ test("свой CERC запускает весь ряд с ограниченно
   await expect(dialog.getByLabel("Сохранить анимацию GIF")).not.toBeChecked();
   await dialog.getByLabel("Максимум SVG эрозии (2–128)").fill("24");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "erosion_file", input: created.input });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -509,7 +512,7 @@ test("полный конвейер по своим файлам повторя�
     }
   });
   await page.setViewportSize({ width: 360, height: 780 });
-  await page.goto(`/account/calculations/${original.id}`);
+  await page.goto(`/lab/calculations/${original.id}`);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog.getByText("Демонстрационный сценарий")).toHaveCount(0);
@@ -523,7 +526,7 @@ test("полный конвейер по своим файлам повторя�
   await expect(dialog.getByLabel("Поток через левую границу, м³/с")).toHaveValue("0.04");
   await expect(dialog.getByLabel("Поток через правую границу, м³/с")).toHaveValue("-0.03");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "all_file", input: original.input });
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
@@ -566,7 +569,7 @@ test("повтор не отбрасывает недоступный индек
       return { status: 201, body: created };
     }
   });
-  await page.goto(`/account/calculations/${original.id}`);
+  await page.goto(`/lab/calculations/${original.id}`);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog.getByText("Часть исходных данных больше недоступна.", { exact: false })).toBeVisible();
@@ -575,7 +578,7 @@ test("повтор не отбрасывает недоступный индек
   expect(submitted).toBeUndefined();
   await dialog.getByRole("button", { name: "Продолжить без недоступного профиля" }).click();
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "erosion_file", input: {
     ...erosionFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
   } });
@@ -619,7 +622,7 @@ test("калибровка CERC требует наблюдения и факт�
     await page.getByRole("option", { name: new RegExp(`Вход калибровки ${index + 1}`) }).click();
   }
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "calibrate_cerc", input: created.input });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -646,7 +649,7 @@ test("результат калибровки показывает рейтин�
     if (path === `/api/calculations/${completed.id}` && method === "GET") return { body: completed };
   });
   await page.setViewportSize({ width: 360, height: 780 });
-  await page.goto(`/account/calculations/${completed.id}`);
+  await page.goto(`/lab/calculations/${completed.id}`);
   const rating = page.getByRole("region", { name: "Рейтинг коэффициентов CERC" });
   await expect(rating.getByRole("row")).toHaveCount(3);
   await expect(rating.getByRole("row").nth(1)).toContainText("0,125");
@@ -688,7 +691,7 @@ test("отсутствующий исходный набор не заменяе
     }
   });
 
-  await page.goto(`/account/calculations/${original.id}`);
+  await page.goto(`/lab/calculations/${original.id}`);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog.getByText("Исходный набор больше недоступен.", { exact: false })).toBeVisible();
@@ -698,7 +701,7 @@ test("отсутствующий исходный набор не заменяе
   expect(submitted).toBeUndefined();
   await dialog.getByRole("button", { name: "Использовать встроенный пример вместо исходного" }).click();
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${created.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(datasetCreated).toBe(true);
   expect(submitted).toEqual({ kind: "dimension_dataset", input: { datasetId: dataset.id } });
   expect(observed.unexpected).toEqual([]);
@@ -725,7 +728,7 @@ test("недоступный научный файл требует нового
     }
   });
 
-  await page.goto(`/account/calculations/${original.id}`);
+  await page.goto(`/lab/calculations/${original.id}`);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog.getByText("Часть исходных данных больше недоступна.", { exact: false })).toBeVisible();
@@ -733,8 +736,8 @@ test("недоступный научный файл требует нового
   await expect(dialog.getByRole("alert")).toContainText("Выберите все научные входные файлы");
   expect(submitted).toBe(false);
   await dialog.getByRole("button", { name: "Закрыть окно нового расчёта" }).click();
-  await expect(page).toHaveURL(/\/account\/calculations$/);
-  await expect(page.getByRole("link", { name: "Расчёты" })).toBeFocused();
+  await expect(page).toHaveURL(/\/lab\/calculations$/);
+  await expect(page.getByRole("link", { name: "Расчёты и отчёты" })).toBeFocused();
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -753,7 +756,7 @@ test("модальный запуск сохраняет фокус и не пе
     if (path === "/api/calculations" && method === "GET") return { body: [] };
   });
 
-  await page.goto("/account");
+  await page.goto("/lab");
   await page.evaluate(() => {
     document.body.style.minHeight = "300vh";
   });
@@ -852,7 +855,7 @@ test("модальный запуск сохраняет фокус и не пе
   await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
 
-  await page.getByRole("link", { name: "Расчёты", exact: true }).click();
+  await page.getByRole("link", { name: "Расчёты и отчёты", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Расчёты", exact: true })
   ).toBeVisible();
@@ -881,7 +884,7 @@ test("кабинет и запуск доступны в эквиваленте 
     if (path === "/api/calculations" && method === "GET") return { body: [] };
   });
 
-  await page.goto("/account");
+  await page.goto("/lab");
   const trigger = page.getByRole("button", {
     name: "Новый расчёт",
     exact: true,
@@ -1048,7 +1051,7 @@ test("принятая адаптивная MSH выбирается как вх
   await dialog.locator("#scientific-flatMeshInputId").click();
   await page.getByRole("option", { name: /black-sea-adaptive\.msh/ }).click();
   await expect(dialog.getByRole("link", { name: "Открыть исходный результат" }))
-    .toHaveAttribute("href", `/account/calculations/${adaptive.jobId}`);
+    .toHaveAttribute("href", `/lab/calculations/${adaptive.jobId}`);
   await dialog.locator("#scientific-bathymetryInputId").click();
   await page.getByRole("option", { name: /Архивный вход 1/ }).click();
   await dialog.locator("#scientific-bathymetryMetadataInputId").click();
@@ -1210,7 +1213,7 @@ test("рисунок 5 отображается как приватный SVG-а
     contentType: "image/svg+xml",
     body: `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1800" height="760"><image xlink:href="data:image/svg+xml;base64,${card}" width="600" height="600"/></svg>`,
   }));
-  await page.goto(`/account/calculations/${figureJob.id}`);
+  await page.goto(`/lab/calculations/${figureJob.id}`);
   const preview = page.getByRole("img", { name: `Отчёт: ${filename}` });
   await expect(preview).toBeVisible();
   await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(1800);
@@ -1247,7 +1250,7 @@ test("AI-01 сохраняется в паспорте и восстанавли
     }
   });
   await page.setViewportSize({ width: 360, height: 780 });
-  await page.goto(`/account/calculations/${job.id}`);
+  await page.goto(`/lab/calculations/${job.id}`);
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
   const passport = JSON.parse(await readFile(await (await downloadPromise).path(), "utf8")) as CalculationMetadataExportV1;
@@ -1424,7 +1427,7 @@ test("форма запускает только сценарий, предло�
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
   await expect(dialog.getByLabel("Что рассчитать")).toContainText("Карта");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${job.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${job.id}$`));
   expect(submissions).toEqual([{ kind: "map", input: {} }]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -1503,7 +1506,7 @@ test("история листается сервером и сохраняет �
     }
   });
 
-  await page.goto("/account/calculations");
+  await page.goto("/lab/calculations");
   await expect(page.getByText("Найдено расчётов: 21")).toBeVisible();
   const history = page.getByRole("region", { name: "История расчётов" });
   await expect(
@@ -1536,7 +1539,7 @@ test("история листается сервером и сохраняет �
   await expect(page).toHaveURL(/limit=10/);
   await page.setViewportSize({ width: 360, height: 780 });
   await page.goto(
-    "/account/calculations?from=2026-10-01&to=2026-10-31&cursor=older-page"
+    "/lab/calculations?from=2026-10-01&to=2026-10-31&cursor=older-page"
   );
   await chooseTheme(page, "dark");
   const searchWidth = await page
@@ -1570,7 +1573,47 @@ test("история листается сервером и сохраняет �
   await toDatePicker.getByRole("button", { name: "Очистить дату" }).click();
   await expect(page).not.toHaveURL(/to=/);
   await page.getByRole("button", { name: "Сбросить фильтры" }).click();
-  await expect(page).toHaveURL(/\/account\/calculations$/);
+  await expect(page).toHaveURL(/\/lab\/calculations$/);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("история различает ожидание worker, повтор ошибки и завершение удаления", async ({ page }) => {
+  const requestId = "77777777-7777-4777-8777-777777777777";
+  const request = {
+    id: requestId,
+    scope: "single",
+    requestedCount: 1,
+    deletedCount: 0,
+    retryingCount: 0,
+    status: "pending",
+    createdAt: "2026-10-14T08:00:00.000Z",
+  } satisfies CalculationDeletionRequestDto;
+  let checks = 0;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
+    if (path === "/api/calculations/page" && method === "GET") return {
+      body: { items: checks >= 2 ? [] : [{ ...job, status: "succeeded", deletionRequestedAt: request.createdAt }], nextCursor: null, totalCount: checks >= 2 ? 0 : 1 },
+    };
+    if (path === "/api/calculations/deletions-current" && method === "GET") return { body: request };
+    if (path === `/api/calculations/deletions/${requestId}` && method === "GET") {
+      checks++;
+      return { body: checks === 1
+        ? { ...request, status: "retrying", retryingCount: 1 }
+        : { ...request, status: "completed", deletedCount: 1 } };
+    }
+  });
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto("/lab/calculations");
+  await expect(page.getByText("Удаление поставлено в очередь worker.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Если прогресс долго не меняется", { exact: false })).toBeVisible();
+  await expect(page.getByText("Удаление отложено; worker повторит попытку.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Ошибок обработки: 1.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Удаление завершено.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Найдено расчётов: 0")).toBeVisible();
+  await expect(page.getByText("Пока нет расчётов.", { exact: false })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -1606,7 +1649,7 @@ test("ошибка подгрузки истории не теряет стро�
     }
   });
 
-  await page.goto("/account/calculations");
+  await page.goto("/lab/calculations");
   const history = page.getByRole("region", { name: "История расчётов" });
   await expect(history.getByRole("table").locator("tbody tr")).toHaveCount(20);
   await page
@@ -1673,6 +1716,8 @@ test("кабинет требует вход; регистрация требу�
     if (path === "/api/calculations" && method === "GET") return { body: [] };
   });
 
+  await page.goto("/lab");
+  await expect(page).toHaveURL(/\/login$/);
   await page.goto("/account");
   await expect(page).toHaveURL(/\/login$/);
   await page
@@ -1693,9 +1738,9 @@ test("кабинет требует вход; регистрация требу�
 
   await invitation.fill("LITORA-TEST-INVITATION");
   await page.getByRole("button", { name: "Зарегистрироваться" }).click();
-  await expect(page).toHaveURL(/\/account$/);
+  await expect(page).toHaveURL(/\/lab$/);
   await expect(
-    page.getByText("Личный кабинет · Тестовый исследователь")
+    page.getByText("Лаборатория · Тестовый исследователь")
   ).toBeVisible();
   expect(registrations).toEqual([
     {
@@ -1743,7 +1788,7 @@ test("ошибка входа видна; повторный вход откры
     .locator("form")
     .getByRole("button", { name: "Войти", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/account$/);
+  await expect(page).toHaveURL(/\/lab$/);
   await expect(
     page.getByRole("heading", { name: "Обзор исследований" })
   ).toBeVisible();
@@ -1788,7 +1833,7 @@ test("кабинет показывает ошибку расчёта и поз�
   );
   await expect(page.getByRole("alert")).toContainText("Параметры сохранены");
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${job.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${job.id}$`));
   await expect(
     page.getByRole("region", { name: "Результат расчёта" })
   ).toContainText(job.id);
@@ -1931,7 +1976,7 @@ test("встроенный пример GeoJSON сохраняется при з
     page.getByText("Пример Сочи (OpenStreetMap, ODbL)", { exact: false })
   ).toBeVisible();
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${job.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${job.id}$`));
 
   expect(uploads).toEqual([defaultCoastlineDataset]);
   expect(jobs).toEqual([
@@ -1977,7 +2022,7 @@ test("расчёт своего контура без загруженного �
     "Встроенный пример Сочи"
   );
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(new RegExp(`/account/calculations/${job.id}$`));
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${job.id}$`));
   await expect(
     page.getByRole("region", { name: "Результат расчёта" })
   ).toContainText(job.id);
@@ -2008,7 +2053,7 @@ test("отмена расчёта требует подтверждения и �
     }
   });
 
-  await page.goto("/account/calculations");
+  await page.goto("/lab/calculations");
   const cancelTrigger = page.getByRole("button", {
     name: "Отменить",
     exact: true,
@@ -2083,7 +2128,7 @@ test("реестр открывает краткий просмотр и соп�
     route.fulfill({ status: 403, body: "Ссылка истекла" })
   );
 
-  await page.goto("/account/calculations");
+  await page.goto("/lab/calculations");
   const quickTrigger = page
     .getByRole("button", { name: "Кратко", exact: true })
     .first();
@@ -2223,7 +2268,7 @@ test("полный паспорт показывает происхождени�
   });
 
   await page.setViewportSize({ width: 360, height: 780 });
-  await page.goto(`/account/calculations/${first.id}`);
+  await page.goto(`/lab/calculations/${first.id}`);
   await chooseTheme(page, "light");
   await expect(page.locator("html")).toHaveClass(/light/);
   const detail = page.getByRole("region", { name: "Результат расчёта" });
@@ -2300,7 +2345,7 @@ test("полный паспорт показывает происхождени�
   }
 
   await page.evaluate((id) => {
-    window.history.pushState({}, "", `/account/calculations/${id}`);
+    window.history.pushState({}, "", `/lab/calculations/${id}`);
     window.dispatchEvent(new PopStateEvent("popstate"));
   }, second.id);
   await expect(detail).toContainText("Загружаем расчёт…");
@@ -2361,12 +2406,12 @@ test("полный паспорт показывает происхождени�
   });
   const oldRequest = page.waitForRequest(`**/api/calculations/${first.id}`);
   await page.evaluate((id) => {
-    window.history.pushState({}, "", `/account/calculations/${id}`);
+    window.history.pushState({}, "", `/lab/calculations/${id}`);
     window.dispatchEvent(new PopStateEvent("popstate"));
   }, first.id);
   await oldRequest;
   await page.evaluate((id) => {
-    window.history.pushState({}, "", `/account/calculations/${id}`);
+    window.history.pushState({}, "", `/lab/calculations/${id}`);
     window.dispatchEvent(new PopStateEvent("popstate"));
   }, second.id);
   await expect(detail).toContainText(second.id);
@@ -2400,7 +2445,7 @@ test("экспорт старого расчёта не подменяет не�
     if (path === `/api/calculations/${legacy.id}` && method === "GET")
       return { body: legacy };
   });
-  await page.goto(`/account/calculations/${legacy.id}`);
+  await page.goto(`/lab/calculations/${legacy.id}`);
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
   const download = await downloadPromise;
@@ -2492,7 +2537,7 @@ test("предпросмотр изображения восстанавлива
     });
   });
 
-  await page.goto(`/account/calculations/${initial.id}`, {
+  await page.goto(`/lab/calculations/${initial.id}`, {
     waitUntil: "domcontentloaded",
   });
   await chooseTheme(page, "dark");

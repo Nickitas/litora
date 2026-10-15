@@ -28,14 +28,14 @@ export function ScientificInputUpload({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(existing?.id ?? null);
-  const crs = role === "coastline_geojson" || role === "bathymetry_grid_json" || role === "shoreline_observations_json"
+  const crs = role === "coastline_geojson" || role === "shoreline_timeseries_geojson" || role === "bathymetry_grid_json" || role === "shoreline_observations_json"
     ? "EPSG:4326" : role === "seabed_msh" || role === "flat_mesh_msh" ? "LAEA" : "not-applicable";
-  const coordinateUnit = role === "coastline_geojson" || role === "bathymetry_grid_json" || role === "shoreline_observations_json"
+  const coordinateUnit = role === "coastline_geojson" || role === "shoreline_timeseries_geojson" || role === "bathymetry_grid_json" || role === "shoreline_observations_json"
     ? "degrees" : role === "seabed_msh" || role === "flat_mesh_msh" ? "meters" : "not-applicable";
   const isCercProfile = role === "longshore_sediment_sources_json" || role === "longshore_structures_json";
   const isAIInput = role === "adaptive_comparison_report_json" || role === "expert_organizer_key_json" || role === "expert_ratings_tsv";
   const maximum = isCercProfile ? 1 : role === "mesh_comparison_report_json" || isAIInput ? 2
-    : role === "wave_climate" || role === "shoreline_observations_json" ? 16 : 512;
+    : role === "wave_climate" || role === "shoreline_observations_json" || role === "shoreline_timeseries_geojson" ? 16 : 512;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -78,14 +78,16 @@ export function ScientificInputUpload({
         <p className="mt-1 text-sm text-muted-foreground">
           {existing
             ? `Продолжение загрузки: ${existing.filename} · ${existing.sizeBytes} байт. Выберите исходный файл снова.`
-            : "Файл остаётся приватным. Источник и лицензию указываете вы; научную совместимость проверит Go при расчёте."}
+            : role === "shoreline_timeseries_geojson"
+              ? "Файл остаётся приватным. API проверит формат и координаты; качество спутникового выделения берега оценивайте по исходным данным."
+              : "Файл остаётся приватным. Источник и лицензию указываете вы; научную совместимость проверит Go при расчёте."}
         </p>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="space-y-2">
         <Label htmlFor="scientific-file">Файл (до {maximum} МиБ)</Label>
         <Input id="scientific-file" type="file" required disabled={busy}
-          accept={role === "wave_climate" ? ".json,.csv" : role === "expert_ratings_tsv" ? ".tsv" : role === "shoreline_observations_json" || role === "mesh_comparison_report_json" || role === "adaptive_comparison_report_json" || role === "expert_organizer_key_json" || isCercProfile ? ".json" : undefined}
+          accept={role === "wave_climate" ? ".json,.csv" : role === "shoreline_timeseries_geojson" ? ".geojson" : role === "expert_ratings_tsv" ? ".tsv" : role === "shoreline_observations_json" || role === "mesh_comparison_report_json" || role === "adaptive_comparison_report_json" || role === "expert_organizer_key_json" || isCercProfile ? ".json" : undefined}
           onChange={(event) => {
             const selected = event.target.files?.[0] ?? null;
             setFile(selected);

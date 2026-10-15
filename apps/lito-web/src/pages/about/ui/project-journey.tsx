@@ -6,20 +6,20 @@ const milestones = [
   {
     icon: Compass,
     label: "01",
-    title: "Увидеть форму",
-    text: "Береговая линия становится измеряемой геометрией, а не просто контуром на карте.",
+    title: "Описать форму",
+    text: "Контур проходит геометрическую проверку и становится основой для измерений и анализа размерности.",
   },
   {
     icon: Waves,
     label: "02",
-    title: "Понять движение",
-    text: "Батиметрия, литология и волновые сценарии объясняют изменение прибрежной системы.",
+    title: "Изучить связи",
+    text: "Модель дна, сетка и волновые условия задают разные вопросы о форме и изменении берега.",
   },
   {
     icon: FileCheck2,
     label: "03",
     title: "Проверить вывод",
-    text: "Метрики и отчёты сохраняют путь от исходных данных до результата эксперимента.",
+    text: "Метрики, изображения и паспорта помогают сопоставить результат с исходными данными и допущениями.",
   },
 ];
 
@@ -29,14 +29,15 @@ export function ProjectJourney() {
     <section className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/[0.08] via-background to-accent/60 p-5 sm:p-8">
       <div className="mb-8 max-w-2xl">
         <p className="text-xs font-medium tracking-[0.2em] text-primary uppercase">
-          Философия Litora
+          Подход Litora
         </p>
         <h2 className="mt-2 text-2xl font-bold sm:text-3xl">
-          От наблюдения к проверяемой модели
+          От линии на карте к исследовательскому вопросу
         </h2>
         <p className="mt-3 leading-7 text-muted-foreground">
-          Проект соединяет географические данные, численные методы и визуальные
-          отчёты в один понятный исследовательский маршрут.
+          Берег нельзя описать одним числом или рисунком. Litora предлагает
+          несколько способов исследовать его форму, рельеф и динамику — и
+          сохраняет основания для каждого вывода.
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
@@ -71,7 +72,8 @@ export function ProjectJourney() {
         to="/gallery"
         className="mt-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary hover:gap-3"
       >
-        Посмотреть результаты <ArrowRight className="size-4 transition-all" />
+        Посмотреть примеры результатов{" "}
+        <ArrowRight className="size-4 transition-all" />
       </Link>
     </section>
   );

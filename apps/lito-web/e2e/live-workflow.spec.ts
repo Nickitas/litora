@@ -19,7 +19,7 @@ test("реальный кабинет: регистрация, GeoJSON по ум
       serverErrors.push(`${response.status()} ${response.url()}`);
   });
 
-  await page.goto("/account");
+  await page.goto("/lab");
   await expect(page).toHaveURL(/\/login$/);
   await page
     .getByRole("button", { name: "Нет аккаунта? Зарегистрироваться" })
@@ -31,7 +31,7 @@ test("реальный кабинет: регистрация, GeoJSON по ум
     .getByLabel("Ключ приглашения")
     .fill(process.env.LITORA_E2E_INVITATION!);
   await page.getByRole("button", { name: "Зарегистрироваться" }).click();
-  await expect(page).toHaveURL(/\/account$/);
+  await expect(page).toHaveURL(/\/lab$/);
   await page.getByRole("button", { name: "Новый расчёт" }).click();
   await expect(
     page.getByRole("dialog", { name: "Новый расчёт" })
@@ -44,7 +44,7 @@ test("реальный кабинет: регистрация, GeoJSON по ум
     "Встроенный пример Сочи"
   );
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page).toHaveURL(/\/account\/calculations\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/\/lab\/calculations\/[0-9a-f-]{36}$/);
   const result = page.getByRole("region", { name: "Результат расчёта" });
   await expect(result.getByText("Завершён", { exact: true })).toBeVisible({
     timeout: 60_000,
@@ -62,7 +62,7 @@ test("реальный кабинет: регистрация, GeoJSON по ум
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Расчёт" })).toBeVisible();
-  await page.getByRole("link", { name: "Расчёты", exact: true }).click();
+  await page.getByRole("link", { name: "Расчёты и отчёты", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "История расчётов" })
   ).toContainText("Размерность своей береговой линии");

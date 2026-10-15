@@ -1,7 +1,7 @@
 import { HeroSection } from "./ui/hero-section";
 import { FeaturesSection } from "./ui/features-section";
 import { ScientificSection } from "./ui/scientific-section";
-import { CommandsSection } from "./ui/commands-section";
+import { AccessSection } from "./ui/access-section";
 import { Meteors } from "@/shared/shadcn/ui/meteors";
 import { WorkflowSection } from "./ui/workflow-section";
 import { ObservatorySection } from "./ui/observatory-section";
@@ -15,7 +15,7 @@ export function HomePage() {
       </div>
       <FeaturesSection />
       <ScientificSection />
-      <CommandsSection />
+      <AccessSection />
       <WorkflowSection />
       <ObservatorySection />
     </div>

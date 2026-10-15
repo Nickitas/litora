@@ -15,7 +15,7 @@ export const BrandColumn = () => {
       </p>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-medium">
-          {SITE_CONFIG.version}
+          CLI {SITE_CONFIG.version}
         </span>
       </div>
     </div>

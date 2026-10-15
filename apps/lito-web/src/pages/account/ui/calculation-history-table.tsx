@@ -116,7 +116,7 @@ export function CalculationHistoryTable({
                 Кратко
               </Button>
               <Button asChild variant="outline" size="sm" className="min-h-9">
-                <Link to={`/account/calculations/${job.id}`}>Открыть</Link>
+                <Link to={`/lab/calculations/${job.id}`}>Открыть</Link>
               </Button>
               {isActiveCalculation(job) && (
                 <Button
