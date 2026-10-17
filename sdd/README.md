@@ -17,6 +17,7 @@ Development**: сначала фиксируем поведение и пров�
 | [Бизнес-логика](buisnec-logic.md) | Пользователи, сущности, сценарии и ограничения |
 | [Дизайн-система](design-system.md) | Тема «Чёрное море», shadcn, компоненты и доступность |
 | [Развёртывание](deployment.md) | Сервер, S3, TLS, секреты, backup/restore и обновления |
+| [Aeza и CI/CD](aeza-deployment.md) | Выбор VPS, GHCR, готовые образы и первый запуск стенда |
 | [Локальная разработка](development.md) | Зависимости, hot reload, CLI, API, worker, web и диагностика |
 | [Решения](decisions.md) | ADR и причины выбора технологий |
 | [План развития](../todo/maintenance.md) | Этапы объединения CLI, API и web |

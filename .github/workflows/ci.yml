@@ -42,3 +42,125 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm env:init
       - run: pnpm verify
+
+  publish:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      api_image: ${{ steps.references.outputs.api_image }}
+      web_image: ${{ steps.references.outputs.web_image }}
+      heavy_image: ${{ steps.references.outputs.heavy_image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: names
+        shell: bash
+        run: |
+          repository="${GITHUB_REPOSITORY,,}"
+          echo "api=ghcr.io/${repository}-api" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/${repository}-web" >> "$GITHUB_OUTPUT"
+          echo "heavy=ghcr.io/${repository}-heavy" >> "$GITHUB_OUTPUT"
+      - id: api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/lito-api/Dockerfile
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.names.outputs.api }}:sha-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+      - id: heavy
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/lito-api/Dockerfile
+          target: heavy
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.names.outputs.heavy }}:sha-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+      - id: web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/lito-web/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.names.outputs.web }}:sha-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+      - id: references
+        run: |
+          echo "api_image=${{ steps.names.outputs.api }}@${{ steps.api.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          echo "web_image=${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          echo "heavy_image=${{ steps.names.outputs.heavy }}@${{ steps.heavy.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Опубликованные образы'
+            echo '| Компонент | Неизменяемый образ |'
+            echo '| --- | --- |'
+            echo '| API и standard worker | `${{ steps.names.outputs.api }}@${{ steps.api.outputs.digest }}` |'
+            echo '| Web | `${{ steps.names.outputs.web }}@${{ steps.web.outputs.digest }}` |'
+            echo '| Heavy worker | `${{ steps.names.outputs.heavy }}@${{ steps.heavy.outputs.digest }}` |'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-staging:
+    if: vars.STAGING_ENABLED == 'true'
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    concurrency:
+      group: litora-staging
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Установить SSH-доступ к стенду
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Передать конфигурацию и развернуть digest
+        env:
+          STAGING_HOST: ${{ vars.STAGING_HOST }}
+          STAGING_USER: ${{ vars.STAGING_USER }}
+          STAGING_PORT: ${{ vars.STAGING_PORT }}
+          STAGING_HEAVY_ENABLED: ${{ vars.STAGING_HEAVY_ENABLED }}
+          API_IMAGE: ${{ needs.publish.outputs.api_image }}
+          WEB_IMAGE: ${{ needs.publish.outputs.web_image }}
+          HEAVY_IMAGE: ${{ needs.publish.outputs.heavy_image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${STAGING_HOST:?Не задан STAGING_HOST}"
+          : "${STAGING_USER:?Не задан STAGING_USER}"
+          port="${STAGING_PORT:-22}"
+          heavy="${STAGING_HEAVY_ENABLED:-false}"
+          [[ "$port" =~ ^[0-9]{1,5}$ && "$heavy" =~ ^(true|false)$ ]]
+          scp -P "$port" -o StrictHostKeyChecking=yes \
+            sdd/examples/compose.production.yaml sdd/examples/Caddyfile \
+            scripts/deploy-prebuilt.sh \
+            "$STAGING_USER@$STAGING_HOST:/opt/litora/staging/"
+          ssh -p "$port" -o StrictHostKeyChecking=yes \
+            "$STAGING_USER@$STAGING_HOST" \
+            bash /opt/litora/staging/deploy-prebuilt.sh staging \
+            "$API_IMAGE" "$WEB_IMAGE" "$HEAVY_IMAGE" "$heavy"

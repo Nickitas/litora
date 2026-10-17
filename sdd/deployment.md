@@ -1,14 +1,17 @@
 # Развёртывание и эксплуатация на реальном сервере
 
-Дата проверки: 25.09.2026. Это runbook и проверяемые шаблоны, **не отчёт о выполненном
+Дата проверки: 17.10.2026. Это runbook и проверяемые шаблоны, **не отчёт о выполненном
 развёртывании**. Команды выполняет оператор на выделенном сервере после заполнения
 параметров и проверки staging. Локальный запуск остаётся в [README](../README.md).
+Выбор Aeza, выпуск готовых образов и первый запуск без сборки на VPS — в
+[инструкции CI/CD](aeza-deployment.md).
 
 ## 1. Что именно разворачиваем
 
 Рекомендуемый первый сервер: Ubuntu Server 24.04 LTS, Docker Engine + Compose v2,
 PostgreSQL 17, отдельные API/worker, nginx web, Caddy для TLS, внешний приватный S3.
-Node/pnpm/Go на production-хосте не обязательны: приложения собираются в Docker.
+Node/pnpm/Go на production-хосте не нужны: приложения собираются в GitHub Actions,
+а готовые образы хранятся в GHCR.
 Это закрытый пилот для небольшой команды за IP-allowlist/VPN, не HA-кластер.
 
 ```text
@@ -82,19 +85,18 @@ AWS S3 в регионе `eu-central-1` (Франкфурт)
 
 ## 2. Железо: минимум и достаточная конфигурация
 
-Ниже **планировочная оценка**, не результат нагрузочного теста. Применима только
-к стандартным HTTP-сценариям на встроенных данных, один worker, файлы во внешнем S3.
+Ниже **планировочная оценка**, не результат нагрузочного теста. Первые две строки
+применимы к стандартным сценариям с одним worker и внешним S3.
 Количество зарегистрированных пользователей само по себе не определяет нагрузку.
 
 | Режим | CPU | RAM | Локальный SSD/NVMe | Пояснение |
 | --- | --- | --- | --- | --- |
 | Минимально разумный пилот | 4 vCPU | 8 ГБ | 100 ГБ | Один worker 2 CPU / 2 ГБ, без сборки под нагрузкой |
-| Достаточный старт с запасом | 8 vCPU | 16 ГБ | 200 ГБ | API, БД, сборка в окно обслуживания; второй worker только после замеров |
-| Тяжёлые mesh/seabed, полные растры | От 8–16 vCPU | От 32–64 ГБ | От 500 ГБ временного NVMe | Отдельная оценка по датасету; текущий лимит 2 ГБ не подходит автоматически |
+| Достаточный старт с запасом | 8 vCPU | 16 ГБ | 200 ГБ | API, БД и standard worker; второй worker только после замеров |
+| Тяжёлые mesh/seabed, полные растры | От 16 vCPU | От 32 ГБ | Около 500 ГБ NVMe, далее по замерам | Отдельный heavy worker: 4 CPU, 12 ГБ; проверить фактические temp/output |
 
-Локальный `worker-heavy` из `infra/compose.yaml` (12 ГБ, 4 CPU, Gmsh) —
-только стенд разработки. Production-шаблон не включает его автоматически:
-перед доступом к `mesh`/`seabed_*` нужны отдельные замеры памяти/диска,
+Production-шаблон содержит `worker-heavy` как opt-in Compose profile.
+На 16-ГБ VPS его не включать. Перед доступом к `mesh`/`seabed_*` нужны замеры памяти/диска,
 политика параллелизма и хранения, ограничения размера/времени upload в edge,
 проверенная версия Gmsh и контрольный сквозной расчёт с приватным S3.
 
@@ -107,8 +109,8 @@ S3/registry/GitHub обязателен; 100 Мбит/с — нижний пра
 
 Бюджет RAM примера: PostgreSQL ≤2 ГБ, API ≤1 ГБ, worker ≤2 ГБ, nginx/Caddy суммарно
 ≤0.5 ГБ, остальное OS/cache/резерв. Лимиты не являются резервированием памяти.
-Сборка Go/Node требует дополнительного пика: на 8 ГБ собирать отдельно или остановить
-нагрузку. Swap 2–4 ГБ — страховка OS, не замена памяти для научного расчёта.
+Сборка Go/Node вынесена в GitHub Actions. Swap 2–4 ГБ — страховка OS,
+не замена памяти для научного расчёта.
 
 Ёмкость считать, а не угадывать: OS+образы+две версии релиза+БД+WAL+журналы+
 локальные backup+`workers × максимальный временный job` + минимум 25% свободного.
@@ -129,64 +131,44 @@ upload, p95 API и очередь на 1, затем 2 worker. Не повыша
 1. Сервер и домен, DNS A на реальный IPv4; AAAA только если IPv6 действительно работает.
 2. SSH-ключи, отдельный оператор, актуальные security updates, синхронизация времени.
    Не отключать парольный вход до проверки второго ключевого SSH-сеанса.
-3. Docker Engine из официального apt-репозитория, Compose plugin, Git, Git LFS,
-   curl, openssl. Установка: [Docker для Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
+3. Docker Engine из официального apt-репозитория и Compose plugin.
+   Установка: [Docker для Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
    Не запускать случайный `curl | sh`. Доступ к Docker group эквивалентен высокому
    привилегированному доступу — выдавать только оператору.
-4. Внешний firewall: SSH с IP оператора, 80/443 для ACME/HTTPS; все остальные
-   входящие закрыты. Docker-порты могут обходить ожидания UFW, поэтому проверять
+4. Внешний firewall: 80/443 для ACME/HTTPS; SSH с IP оператора при ручной поставке.
+   Для автоматического SSH с GitHub hosted runner отдельное решение описано в
+   [инструкции CI/CD](aeza-deployment.md). Все остальные входящие закрыты.
+   Docker-порты могут обходить ожидания UFW, поэтому проверять
    с внешней машины и использовать firewall провайдера/DOCKER-USER по ситуации.
 5. Bucket и сервисная учётная запись S3, отдельный backup bucket/account.
 6. Проверенный release SHA монорепозитория, результаты CI и тестовый стенд.
-   CI сейчас проверяет код, но не публикует образы и не выполняет автоматический deploy.
+   Workflow публикует образы в GHCR после проверок и может доставить их на
+   подготовленный staging при `STAGING_ENABLED=true`; production — вручную.
 
 Проверка инструментов (после установки):
 
 ```bash
 docker version
 docker compose version
-git lfs version
 timedatectl status
 ```
 
-Полезно разделять сборочную машину и production. Для первого закрытого пилота
-допустима сборка на сервере в maintenance window; шаги ниже показывают этот вариант.
+Сборка выполняется на GitHub runner. VPS скачивает готовые образы; bootstrap
+и настройка доступа описаны в [инструкции CI/CD](aeza-deployment.md).
 
 ## 4. Подготовка файлов релиза и секретов
 
-Пример путей: `/opt/litora/repository`, `/opt/litora/deploy`, `/etc/litora`,
-`/var/backups/litora`. Создать их администратором и выдать владельцу-оператору
-необходимые права; `/etc/litora` и backup каталог — 0700. Не клонировать поверх
-существующей установки и не удалять её каталоги без инвентаризации.
-
-```bash
-git clone https://github.com/Nickitas/litora.git /opt/litora/repository
-cd /opt/litora/repository
-git checkout --detach <ПРОВЕРЕННЫЙ_RELEASE_SHA>
-git lfs install --local
-git lfs pull
-git lfs fsck
-git status --short
-```
-
-`<...>` заменяется конкретным значением, это не готовая команда. Релиз берётся по SHA,
-не по плавающей development. До выпуска текущих документов нужен коммит пользователя;
-не пытаться клонировать ещё не опубликованные файлы.
-
-Скопировать только шаблоны (ниже предполагается новый deployment-каталог):
-
-```bash
-install -m 0644 sdd/examples/compose.production.yaml /opt/litora/deploy/compose.production.yaml
-install -m 0644 sdd/examples/Caddyfile /opt/litora/deploy/Caddyfile
-install -m 0600 sdd/examples/.env.example /etc/litora/production.env
-```
+Файлы Compose/Caddy/скрипт поставки копируются из проверенного release SHA
+в `/opt/litora/<staging|production>/`. Исходники и Git на VPS не требуются.
+Защищённые env находятся в `/etc/litora/`; каталог backup —
+`/var/backups/litora`. Подробные команды — в [инструкции CI/CD](aeza-deployment.md).
 
 Заполнить `production.env` защищённым редактором. Два разных пароля PostgreSQL
 генерировать `openssl rand -hex 32`; hex исключает проблемы URL-encoding в DATABASE_URL.
 Внести их в password manager. Не публиковать вывод, не передавать пароль аргументом
 команды и не запускать shell с `set -x`. Не `source` произвольный env: его читает Compose.
 
-Задать реальные domain/email/IP allowlist, S3 настройки и образы. Env хранится вне
+Задать реальные domain/email/IP allowlist и S3 настройки. Env хранится вне
 Git и Docker build context. Приложению передаётся только нужный набор env: пароль
 администратора БД не передаётся API/worker. `COOKIE_SECURE=true` и оба Origin заданы
 Compose как `https://<domain>` без завершающего `/`; web ходит к `/api` того же origin.
@@ -314,41 +296,36 @@ query или path уже подписанного URL. Он даёт досту�
 JS-чтение файлов, разрешить GET/HEAD только origin сайта и нужные response headers,
 а не wildcard с credentials. API CORS не настраивает CORS bucket.
 
-## 6. Сборка и фиксация образов
+## 6. Выпуск и фиксация образов
 
-```bash
-cd /opt/litora/repository
-LITORA_RELEASE=$(git rev-parse HEAD)
-docker build -f apps/lito-api/Dockerfile -t "litora-api:$LITORA_RELEASE" .
-docker build -f apps/lito-web/Dockerfile -t "litora-web:$LITORA_RELEASE" .
-docker pull 'postgres:17.10-alpine3.24@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193'
-docker pull 'caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b'
-```
+GitHub Actions после `pnpm verify` собирает `linux/amd64` API, heavy worker и web,
+публикует их в GHCR с тегом `sha-<commit SHA>-<run ID>-<attempt>` и передаёт на сервер три точных
+`image@sha256:...`. Порядок настройки registry, доступа и первого запуска — в
+[инструкции CI/CD](aeza-deployment.md). Сборка на VPS не предусмотрена.
 
 Индексные digest PostgreSQL и Caddy записаны в примере production env; они
 проверены для amd64 и arm64 на дату подготовки. Перед развёртыванием перепроверить
-их доступность и поддерживаемость, не заменяя на плавающий тег. API_IMAGE и WEB_IMAGE
-— уникальные теги с release SHA. Сохранить image IDs, дату, release SHA и результаты
-сканирования образов в журнал релиза. Тег не пересобирать под тем же именем.
-Для повторяемого выпуска из CI публиковать проверенные образы в private registry
-и использовать `image@sha256:...`; это следующий шаг, registry pipeline пока нет.
+их доступность и поддерживаемость, не заменяя на плавающий тег. Сохранить digest,
+дату, release SHA и результаты сканирования образов в журнал релиза.
+Тег не пересобирать под тем же именем.
 
 В Dockerfile base images Go, Node и nginx закреплены multi-arch digest.
 Это не делает сборку полностью воспроизводимой: внешние npm/Go-зависимости и
 пакетный реестр могут измениться или стать недоступны. Хранить готовые образы
-API/web и их digest; перед публичным production нужны сборка на целевой платформе,
+API/web/heavy и их digest; перед публичным production нужны сборка на целевой платформе,
 сканирование и SBOM. Обновление digest — отдельный проверяемый release-процесс.
 Большие web gallery-файлы требуют Git LFS при сборке; LFS pointer вместо SVG — ошибка.
-Локальные сборки обоих Dockerfile с указанными base digest прошли 25.09.2026;
-это не проверка production-хоста и не подтверждение доступа к AWS S3.
+Локальные сборки обоих Dockerfile прошли 25.09.2026; новый pipeline и heavy-образ
+ещё требуют проверки в GitHub Actions и на staging.
 
 Функция для всех последующих команд, выполнить в текущем shell оператора:
 
 ```bash
 dc() {
-  docker compose --project-name litora-production \
+  docker compose --project-name litora-production --profile heavy \
     --env-file /etc/litora/production.env \
-    -f /opt/litora/deploy/compose.production.yaml "$@"
+    --env-file /etc/litora/production.release.env \
+    -f /opt/litora/production/compose.production.yaml "$@"
 }
 dc config --quiet
 ```
@@ -383,6 +360,8 @@ Postgres admin нужен для bootstrap/backup, приложение испо
 dc up -d --wait api
 dc exec -T postgres psql -U litora_admin -d litora -c 'SELECT name, applied_at FROM schema_migrations ORDER BY name;'
 dc up -d --wait worker web
+# Только на VPS с достаточной памятью и LITO_HEAVY_ENABLED=true:
+dc up -d --wait worker-heavy
 dc run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 dc up -d caddy
 dc ps
@@ -554,7 +533,8 @@ backup с согласованными контрольными точками, 
 
 Шифрованно сохранить env/Caddy/Compose, image manifest и checksum вне сервера;
 доступ к резервным копиям только оператору. Не отправлять env в незащищённый bucket.
-После успешной копии `dc up -d --wait api worker web`, затем `dc up -d caddy` и smoke.
+После успешной копии `dc up -d --wait api worker web`, при включённом heavy также
+`dc up -d --wait worker-heavy`, затем `dc up -d caddy` и smoke.
 Политика: например 7 ежедневных + 4 еженедельных копии, ежемесячный restore drill;
 утвердить с владельцем объём/стоимость/сроки до автоматизации.
 
@@ -596,8 +576,9 @@ dc exec -T postgres pg_restore -U litora_admin -d litora --exit-on-error < /path
 ## 11. Обновление, откат и наблюдение
 
 **Обновление:** CI/staging → backup → drain → остановка writers → загрузка проверенных
-образов → изменить API_IMAGE/WEB_IMAGE в защищённом env → `dc config --quiet` →
-`dc up -d --wait api` (применяет миграции) → сверка схемы → worker/web → Caddy → smoke.
+образов → изменить API_IMAGE/WEB_IMAGE/HEAVY_IMAGE в защищённом release env →
+`dc config --quiet` → `dc up -d --wait api` (применяет миграции) → сверка схемы →
+worker/worker-heavy при включённом профиле/web → Caddy → smoke.
 Обычная остановка сохраняет volumes. **`down -v`, `volume prune`, `system prune --volumes`
 на сервере запрещены без отдельного решения об удалении данных.**
 
