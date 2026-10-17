@@ -47,11 +47,14 @@ test("наблюдаемые контуры переключаются по да
     }
     if (path === `/api/calculations/${auditId}`) return route.fulfill({ contentType: "application/json", body: JSON.stringify({
       id: auditId, status: "succeeded", input: { observationsInputId: inputId, validationStart: "2024-01-01" }, resultSummary: { metrics: { "shoreline-data-audit.json": {
-        schemaVersion: 2, observationCount: 2, firstObservation: "2020-01-01T00:00:00Z",
+        schemaVersion: 3, observationCount: 2, firstObservation: "2020-01-01T00:00:00Z",
         lastObservation: "2024-09-01T00:00:00Z", longestObservationGapDays: 1705,
         temporalSplit: { validationStart: "2024-01-01T00:00:00Z", trainingCount: 1, validationCount: 1,
           trainingLastTime: "2020-01-01T00:00:00Z", validationFirstTime: "2024-09-01T00:00:00Z", boundaryGapDays: 1705 },
         years: [{ year: 2020, count: 1 }, { year: 2021, count: 0 }, { year: 2024, count: 1 }],
+        pilotCoverage: { bounds: [39.667927, 43.585476, 39.7129247, 43.6442458],
+          intersectingCount: 1, outsideCount: 1, unknownGeometryCount: 0,
+          years: [{ year: 2020, count: 1 }, { year: 2021, count: 0 }, { year: 2024, count: 0 }] },
         missingUncertaintyCount: 2, missingGeoAccuracyCount: 0,
         unknownTideStatusCount: 2, limitations: ["Недостаточно данных для прогноза"], waves: null,
       } } },
@@ -82,6 +85,8 @@ test("наблюдаемые контуры переключаются по да
   await expect(observations.getByText("Годы без снимков")).toBeVisible({ timeout: 8000 });
   await expect(observations.getByRole("definition").filter({ hasText: "2021" })).toBeVisible();
   await expect(observations.getByText("Временное разделение для будущей проверки модели")).toBeVisible();
+  await expect(observations.getByText("Покрытие пилотного участка Сочи")).toBeVisible();
+  await expect(observations.getByText("Пересекают стартовую рамку: 1 из 2 контуров", { exact: false })).toBeVisible();
   await page.reload();
   await expect(observations.getByText("Годы без снимков")).toBeVisible();
   await expect(observations.getByLabel("Начало отложенной проверки UTC (необязательно)")).toHaveValue("2024-01-01");

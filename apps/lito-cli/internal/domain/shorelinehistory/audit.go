@@ -14,15 +14,19 @@ import (
 
 const maxObservationBytes = 16 << 20
 
+// Начальная рамка поиска данных для пилота Сочи, EPSG:4326: запад, юг, восток, север.
+var sochiPilotBounds = [4]float64{39.6679270, 43.5854760, 39.7129247, 43.6442458}
+
 var wgs84Name = regexp.MustCompile(`(?i)(?:EPSG:|EPSG::)4326$`)
 
 // Observation описывает дату и качество одного измеренного контура.
 type Observation struct {
-	Time          time.Time
-	Satellite     string
-	GeoAccuracy   *float64
-	UncertaintyM  *float64
-	TideCorrected *bool
+	Time              time.Time
+	Satellite         string
+	GeoAccuracy       *float64
+	UncertaintyM      *float64
+	TideCorrected     *bool
+	PilotIntersection *bool
 }
 
 // WaveInterval описывает датированный интервал волнового воздействия.
@@ -60,6 +64,17 @@ type TemporalSplit struct {
 	BoundaryGapDays     float64   `json:"boundaryGapDays"`
 }
 
+// PilotCoverage описывает только пересечение геометрии с начальной рамкой пилота.
+type PilotCoverage struct {
+	Bounds               [4]float64  `json:"bounds"`
+	Reference            string      `json:"reference"`
+	ReferenceSHA256      string      `json:"referenceSha256"`
+	IntersectingCount    int         `json:"intersectingCount"`
+	OutsideCount         int         `json:"outsideCount"`
+	UnknownGeometryCount int         `json:"unknownGeometryCount"`
+	Years                []YearCount `json:"years"`
+}
+
 // Audit описывает проверяемые свойства входных рядов без вывода о точности прогноза.
 type Audit struct {
 	SchemaVersion             int            `json:"schemaVersion"`
@@ -74,6 +89,7 @@ type Audit struct {
 	UnknownTideStatusCount    int            `json:"unknownTideStatusCount"`
 	Waves                     *WaveAudit     `json:"waves"`
 	TemporalSplit             *TemporalSplit `json:"temporalSplit,omitempty"`
+	PilotCoverage             PilotCoverage  `json:"pilotCoverage"`
 	Limitations               []string       `json:"limitations"`
 }
 
@@ -156,9 +172,10 @@ func LoadObservations(path string) ([]Observation, error) {
 		}
 		observations = append(observations, Observation{
 			Time: when, Satellite: feature.Properties.Satellite,
-			GeoAccuracy:   feature.Properties.GeoAccuracy,
-			UncertaintyM:  feature.Properties.UncertaintyM,
-			TideCorrected: feature.Properties.TideCorrected,
+			GeoAccuracy:       feature.Properties.GeoAccuracy,
+			UncertaintyM:      feature.Properties.UncertaintyM,
+			TideCorrected:     feature.Properties.TideCorrected,
+			PilotIntersection: boolPointer(lineIntersectsBounds(feature.Geometry.Coordinates, sochiPilotBounds)),
 		})
 	}
 	sort.Slice(observations, func(i, j int) bool { return observations[i].Time.Before(observations[j].Time) })
@@ -168,6 +185,49 @@ func LoadObservations(path string) ([]Observation, error) {
 		}
 	}
 	return observations, nil
+}
+
+func boolPointer(value bool) *bool { return &value }
+
+// lineIntersectsBounds считает касание границы пересечением.
+func lineIntersectsBounds(points [][]float64, bounds [4]float64) bool {
+	inside := func(point []float64) bool {
+		return point[0] >= bounds[0] && point[0] <= bounds[2] && point[1] >= bounds[1] && point[1] <= bounds[3]
+	}
+	for index, point := range points {
+		if inside(point) {
+			return true
+		}
+		if index == 0 {
+			continue
+		}
+		previous := points[index-1]
+		dx, dy := point[0]-previous[0], point[1]-previous[1]
+		low, high := 0.0, 1.0
+		for _, edge := range [4][2]float64{{-dx, previous[0] - bounds[0]}, {dx, bounds[2] - previous[0]}, {-dy, previous[1] - bounds[1]}, {dy, bounds[3] - previous[1]}} {
+			p, q := edge[0], edge[1]
+			if p == 0 {
+				if q < 0 {
+					low, high = 1, 0
+					break
+				}
+				continue
+			}
+			ratio := q / p
+			if p < 0 {
+				low = math.Max(low, ratio)
+			} else {
+				high = math.Min(high, ratio)
+			}
+			if low > high {
+				break
+			}
+		}
+		if low <= high {
+			return true
+		}
+	}
+	return false
 }
 
 func finiteInRange(value, minimum, maximum float64) bool {
@@ -199,11 +259,17 @@ func AnalyzeWithTemporalSplit(observations []Observation, waveSource string, wav
 	ordered := append([]Observation(nil), observations...)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Time.Before(ordered[j].Time) })
 	report := Audit{
-		SchemaVersion: 2, ObservationCount: len(ordered),
+		SchemaVersion: 3, ObservationCount: len(ordered),
 		FirstObservation: ordered[0].Time, LastObservation: ordered[len(ordered)-1].Time,
 		Years: []YearCount{}, Limitations: []string{},
+		PilotCoverage: PilotCoverage{
+			Bounds: sochiPilotBounds, Reference: "OSM way 59530506, 2026-08-17",
+			ReferenceSHA256: "5fc2e8625fc57021fb760cccc63cb6ff20848edd70e159453f34402faa99129a",
+			Years:           []YearCount{},
+		},
 	}
 	counts := map[int]int{}
+	pilotCounts := map[int]int{}
 	for index, observation := range ordered {
 		if observation.Time.IsZero() {
 			return Audit{}, fmt.Errorf("наблюдение %d не имеет даты", index+1)
@@ -216,6 +282,15 @@ func AnalyzeWithTemporalSplit(observations []Observation, waveSource string, wav
 			report.LongestObservationGapDays = math.Max(report.LongestObservationGapDays, gap)
 		}
 		counts[observation.Time.UTC().Year()]++
+		switch {
+		case observation.PilotIntersection == nil:
+			report.PilotCoverage.UnknownGeometryCount++
+		case *observation.PilotIntersection:
+			report.PilotCoverage.IntersectingCount++
+			pilotCounts[observation.Time.UTC().Year()]++
+		default:
+			report.PilotCoverage.OutsideCount++
+		}
 		if observation.GeoAccuracy == nil {
 			report.MissingGeoAccuracyCount++
 		}
@@ -230,6 +305,13 @@ func AnalyzeWithTemporalSplit(observations []Observation, waveSource string, wav
 	}
 	for year := report.FirstObservation.UTC().Year(); year <= report.LastObservation.UTC().Year(); year++ {
 		report.Years = append(report.Years, YearCount{Year: year, Count: counts[year]})
+		report.PilotCoverage.Years = append(report.PilotCoverage.Years, YearCount{Year: year, Count: pilotCounts[year]})
+	}
+	if report.PilotCoverage.IntersectingCount == 0 {
+		report.Limitations = append(report.Limitations, "Не подтверждено пересечение наблюдаемых контуров со стартовой рамкой пилота Сочи.")
+	}
+	if report.PilotCoverage.OutsideCount > 0 || report.PilotCoverage.UnknownGeometryCount > 0 {
+		report.Limitations = append(report.Limitations, "Часть контуров вне рамки пилота Сочи или без проверенной геометрии; временное покрытие всего ряда не равно покрытию пилота.")
 	}
 	if validationStart != nil {
 		if validationStart.Location() != time.UTC || validationStart.Hour() != 0 || validationStart.Minute() != 0 || validationStart.Second() != 0 || validationStart.Nanosecond() != 0 {

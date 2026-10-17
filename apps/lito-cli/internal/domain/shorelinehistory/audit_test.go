@@ -100,7 +100,7 @@ func TestTemporalSplitSeparatesDatesWithoutFutureLeakage(t *testing.T) {
 		t.Fatal(err)
 	}
 	split := report.TemporalSplit
-	if report.SchemaVersion != 2 || split == nil || split.TrainingCount != 2 || split.ValidationCount != 2 ||
+	if report.SchemaVersion != 3 || split == nil || split.TrainingCount != 2 || split.ValidationCount != 2 ||
 		!split.TrainingLastTime.Equal(second) || !split.ValidationFirstTime.Equal(third) ||
 		split.BoundaryGapDays <= 0 {
 		t.Fatalf("хронологическое разделение некорректно: %+v", report)
@@ -112,5 +112,35 @@ func TestTemporalSplitSeparatesDatesWithoutFutureLeakage(t *testing.T) {
 		if _, err := AnalyzeWithTemporalSplit(observations, "", nil, &invalid); err == nil {
 			t.Fatalf("ожидалась ошибка границы %s", invalid)
 		}
+	}
+}
+
+func TestPilotCoverageUsesLineIntersectionAndYears(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pilot.geojson")
+	data := `{"type":"FeatureCollection","features":[` +
+		`{"type":"Feature","geometry":{"type":"LineString","coordinates":[[39.60,43.60],[39.80,43.60]]},"properties":{"date":"2020-01-01T00:00:00Z","satname":"L8"}},` +
+		`{"type":"Feature","geometry":{"type":"LineString","coordinates":[[39.60,43.64],[39.68,43.70]]},"properties":{"date":"2021-01-01T00:00:00Z","satname":"L8"}},` +
+		`{"type":"Feature","geometry":{"type":"LineString","coordinates":[[40.00,43.60],[40.10,43.70]]},"properties":{"date":"2022-01-01T00:00:00Z","satname":"S2"}}]}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	observations, err := LoadObservations(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := Analyze(observations, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.PilotCoverage.IntersectingCount != 1 || report.PilotCoverage.OutsideCount != 2 ||
+		report.PilotCoverage.UnknownGeometryCount != 0 || report.PilotCoverage.Years[0].Count != 1 ||
+		report.PilotCoverage.Years[1].Count != 0 {
+		t.Fatalf("пространственное покрытие пилота неверно: %+v", report.PilotCoverage)
+	}
+	if !lineIntersectsBounds([][]float64{{39.6, 43.6}, {sochiPilotBounds[0], 43.6}}, sochiPilotBounds) {
+		t.Fatal("касание границы должно считаться пересечением")
+	}
+	if lineIntersectsBounds([][]float64{{39.60, 43.64}, {39.68, 43.70}}, sochiPilotBounds) {
+		t.Fatal("пересечение только прямоугольников охвата не является пересечением линии")
 	}
 }

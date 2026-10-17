@@ -75,6 +75,9 @@ pnpm up
 `pnpm up` создаёт отсутствующий `.env.local` со случайными локальными паролями,
 собирает приложения и поднимает PostgreSQL, MinIO, API, worker и web. Существующий
 `.env.local` сохраняется. Первое скачивание образов и сборка могут занять несколько минут.
+Локальные контейнеры называются `lito-infra-*`; прежние volumes проекта `infra`
+сохраняются. После обновления конфигурации остановите старые контейнеры через
+`pnpm down` (или `pnpm infra:down`) и запустите нужный режим снова, без `-v`.
 Если pnpm ещё не установлен: `npm install --global pnpm@10.15.0`.
 При конфликте с Corepack сначала выполните `corepack disable pnpm`.
 
@@ -245,7 +248,7 @@ pnpm --filter litora-api invitations revoke --id UUID_ПРИГЛАШЕНИЯ
 При Docker-запуске вместо pnpm:
 
 ```bash
-docker compose --env-file .env.local -f infra/compose.yaml exec -T api node dist/scripts/invitations.js create --expires-hours 168
+docker compose --env-file .env.local -f infra/compose.yaml -f infra/compose.local.yaml exec -T api node dist/scripts/invitations.js create --expires-hours 168
 ```
 
 Команда возвращает JSON с `id`, `code`, `expiresAt`. Передайте `code` получателю

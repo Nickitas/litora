@@ -330,6 +330,7 @@ test("селектор фильтрует сценарии и открывает
 });
 
 test("загрузка соседнего chunk сохраняет положение карты", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
   const delayedIndex: ShorelineVisualizationIndexDto = {
     ...index,
     frames: [...index.frames, {
@@ -360,12 +361,26 @@ test("загрузка соседнего chunk сохраняет положе�
   await page.goto(`/lab/shoreline?job=${id}`);
   const map = page.getByRole("img", { name: /положение после шага 3/ });
   await expect(map).toBeVisible();
+  const mapPanel = page.getByRole("region", { name: "Реплей береговой линии" });
+  const chartPanel = page.getByRole("region", { name: "Графики реплея" });
+  await expect(chartPanel.getByRole("heading", { name: "Смещение узла 1 во времени" })).toBeVisible();
+  const mapPanelBox = await mapPanel.boundingBox();
+  const chartPanelBox = await chartPanel.boundingBox();
+  expect(mapPanelBox).not.toBeNull();
+  expect(chartPanelBox).not.toBeNull();
+  expect(chartPanelBox!.x).toBeGreaterThan(mapPanelBox!.x + mapPanelBox!.width - 1);
+  expect(Math.abs(chartPanelBox!.y - mapPanelBox!.y)).toBeLessThan(2);
+  await expect(map).toHaveAttribute("viewBox", "0 0 800 440");
   const stableMap = await map.elementHandle();
   await page.getByRole("button", { name: "Предыдущий кадр" }).click();
   await expect(page.getByText("пока показан предыдущий контур", { exact: false })).toBeVisible();
+  await expect(chartPanel.getByRole("img", { name: /Выбран шаг 3/ })).toBeVisible();
   expect(await stableMap?.evaluate((element) => element.isConnected)).toBe(true);
   await expect(page.getByRole("img", { name: /положение после шага 2/ })).toBeVisible();
   expect(await stableMap?.evaluate((element) => element.isConnected)).toBe(true);
+  expect((await mapPanel.boundingBox())?.width).toBe(mapPanelBox!.width);
+  await expect(chartPanel.getByRole("img", { name: /Выбран шаг 2/ })).toBeVisible();
+  await expect(chartPanel.getByText("-0,4 м", { exact: true })).toBeVisible();
 });
 
 test("карта показывает фактический кадр и не подставляет его в день без данных", async ({
@@ -410,6 +425,11 @@ test("карта показывает фактический кадр и не п
   await expect(
     page.getByRole("heading", { name: "Смещение узла 1 во времени" })
   ).toBeVisible();
+  const mapPanelBox = await page.getByRole("region", { name: "Реплей береговой линии" }).boundingBox();
+  const chartPanelBox = await page.getByRole("region", { name: "Графики реплея" }).boundingBox();
+  expect(mapPanelBox).not.toBeNull();
+  expect(chartPanelBox).not.toBeNull();
+  expect(chartPanelBox!.y).toBeGreaterThan(mapPanelBox!.y);
   await expect(
     page.getByRole("img", { name: /Точечный график смещения узла 1/ })
   ).toHaveAttribute("viewBox", /0 0 2\d\d 200/);

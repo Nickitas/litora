@@ -103,12 +103,17 @@ volume. При несоответствии либо восстановите и
 
 ```bash
 pnpm infra:up
-docker compose --env-file .env.local -f infra/compose.yaml ps
+docker compose --env-file .env.local -f infra/compose.yaml -f infra/compose.local.yaml ps
 ```
 
 Compose поднимет PostgreSQL, MinIO и однократную инициализацию схемы. Дождитесь
 `healthy` у PostgreSQL/MinIO и успешного завершения `postgres-init`. API/worker
 дополнительно проверяют и применяют новые SQL-миграции при запуске.
+Локальные контейнеры называются `lito-infra-*`. Файл `compose.local.yaml` меняет
+только их имена: Compose-проект остаётся `infra`, поэтому старые Docker volumes с
+данными PostgreSQL и MinIO используются без переноса. Для появления новых имён
+остановите текущий профиль (`pnpm infra:down` или `pnpm down`) и запустите его снова.
+Не используйте `down -v`: эта команда удалит volumes с данными.
 
 Если сервисы не готовы:
 

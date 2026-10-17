@@ -15,7 +15,7 @@ function record(value: unknown): Record<string, unknown> | null {
 function reportFrom(job: CalculationJobDto): Record<string, unknown> | null {
   const metrics = record(record(job.resultSummary)?.metrics);
   const report = record(metrics?.["shoreline-data-audit.json"]);
-  return report?.schemaVersion === 1 || report?.schemaVersion === 2 ? report : null;
+  return report?.schemaVersion === 1 || report?.schemaVersion === 2 || report?.schemaVersion === 3 ? report : null;
 }
 
 function number(value: unknown) {
@@ -93,6 +93,11 @@ export function ShorelineDataAudit({ observationsInputId, inputs }: {
   const gaps = years.filter((item) => number(item.count) === 0).map((item) => number(item.year));
   const waveReport = record(report?.waves);
   const split = record(report?.temporalSplit);
+  const pilot = record(report?.pilotCoverage);
+  const pilotYears = Array.isArray(pilot?.years)
+    ? pilot.years.map(record).filter((item): item is Record<string, unknown> => item !== null) : [];
+  const pilotYearLabels = pilotYears.filter((item) => (number(item.count) ?? 0) > 0)
+    .map((item) => `${number(item.year)} (${number(item.count)})`);
   const limitations = Array.isArray(report?.limitations)
     ? report.limitations.filter((item): item is string => typeof item === "string") : [];
 
@@ -133,6 +138,12 @@ export function ShorelineDataAudit({ observationsInputId, inputs }: {
         <p className="font-medium">Временное разделение для будущей проверки модели</p>
         <p>До {date(split.validationStart)}: {number(split.trainingCount) ?? "—"} контуров; с этой даты: {number(split.validationCount) ?? "—"} контуров.</p>
         <p className="text-muted-foreground">Последнее раннее наблюдение: {date(split.trainingLastTime)}. Первое отложенное: {date(split.validationFirstTime)}. Промежуток: {number(split.boundaryGapDays)?.toFixed(1) ?? "—"} суток.</p>
+      </div>}
+      {pilot && <div className="space-y-2 rounded-lg border bg-card p-3">
+        <p className="font-medium">Покрытие пилотного участка Сочи</p>
+        <p>Пересекают стартовую рамку: {number(pilot.intersectingCount) ?? "—"} из {number(report.observationCount) ?? "—"} контуров. Вне рамки: {number(pilot.outsideCount) ?? "—"}; геометрия не проверена: {number(pilot.unknownGeometryCount) ?? "—"}.</p>
+        <p>Годы с контурами в рамке: {pilotYearLabels.length ? pilotYearLabels.join(", ") : "нет"}.</p>
+        <p className="text-muted-foreground">Рамка — только начальная область поиска данных. Пересечение не подтверждает качество линии, поправку уровня воды или пригодность для прогноза.</p>
       </div>}
       <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <div><dt className="text-muted-foreground">Контуров</dt><dd className="font-medium">{number(report.observationCount) ?? "—"}</dd></div>

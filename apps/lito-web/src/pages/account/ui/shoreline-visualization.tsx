@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { geoMercator, geoPath } from "d3-geo";
 import { scaleLinear, scaleUtc } from "d3-scale";
 import { line } from "d3-shape";
@@ -39,13 +39,16 @@ function useChartWidth(active: boolean) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(() => typeof window === "undefined"
     ? 800 : Math.min(800, Math.max(280, window.innerWidth - 64)));
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = ref.current;
-    if (!active || !node || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => {
-      const next = Math.max(280, Math.round(entry.contentRect.width));
+    if (!active || !node) return;
+    const updateWidth = (value: number) => {
+      const next = Math.max(280, Math.round(value));
       setWidth((current) => (current === next ? current : next));
-    });
+    };
+    updateWidth(node.getBoundingClientRect().width);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => updateWidth(entry.contentRect.width));
     observer.observe(node);
     return () => observer.disconnect();
   }, [active]);
@@ -75,7 +78,8 @@ export function ShorelineMap({
   onSelectPoint: (point: number) => void;
 }) {
   const { ref: mapRef, width: mapWidth } = useChartWidth(true);
-  const compactMap = mapWidth < 600;
+  const compactMap = mapWidth < 600 && typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 767px)").matches;
   const mapHeight = compactMap ? 1500 : 440;
   const mapPadding = compactMap ? 60 : 48;
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
@@ -613,6 +617,7 @@ export function WaveTimelineChart({
   index: ShorelineVisualizationIndexDto;
   selectedIndex: number;
 }) {
+  const { ref, width } = useChartWidth(true);
   const values = index.frames.filter((frame) => frame.waveHeightM !== null);
   if (values.length === 0) return null;
   const xValue = (frame: (typeof values)[number]) =>
@@ -625,9 +630,9 @@ export function WaveTimelineChart({
     index.mode === "calendar"
       ? scaleUtc(
           [new Date(first), new Date(last === first ? last + 1 : last)],
-          [50, 750]
+          [50, width - 15]
         )
-      : scaleLinear([first, last === first ? last + 1 : last], [50, 750]);
+      : scaleLinear([first, last === first ? last + 1 : last], [50, width - 15]);
   const maxHeight = Math.max(
     ...values.map((frame) => frame.waveHeightM ?? 0),
     1
@@ -639,20 +644,21 @@ export function WaveTimelineChart({
       <h2 id="wave-chart-title" className="text-lg font-semibold">
         Высота волны по состояниям
       </h2>
-      <svg
-        viewBox="0 0 800 200"
-        role="img"
-        aria-label="Точечный график высоты волны в метрах; пропуски времени не соединены линией"
-        className="w-full rounded-lg border bg-card"
-      >
-        <path d="M50 25V165H750" fill="none" stroke="var(--muted-foreground)" />
+      <div ref={ref}>
+        <svg
+          viewBox={`0 0 ${width} 200`}
+          role="img"
+          aria-label="Точечный график высоты волны в метрах; пропуски времени не соединены линией"
+          className="h-[200px] w-full rounded-lg border bg-card"
+        >
+        <path d={`M50 25V165H${width - 15}`} fill="none" stroke="var(--muted-foreground)" />
         <text x="5" y="30" fill="var(--muted-foreground)" fontSize="13">
           м
         </text>
         <text x="48" y="190" fill="var(--muted-foreground)" fontSize="13">
           {index.mode === "calendar" ? "Начало периода" : "Шаг 1"}
         </text>
-        <text x="670" y="190" fill="var(--muted-foreground)" fontSize="13">
+        <text x={width - 15} y="190" textAnchor="end" fill="var(--muted-foreground)" fontSize="13">
           {index.mode === "calendar" ? "Конец периода" : `Шаг ${last}`}
         </text>
         {values
@@ -681,7 +687,8 @@ export function WaveTimelineChart({
               <title>{`Шаг ${frame.index}: ${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(frame.waveHeightM ?? 0)} м${frame.time ? ` · ${frame.time}` : ""}`}</title>
             </circle>
           ))}
-      </svg>
+        </svg>
+      </div>
       <p className="text-sm text-muted-foreground">
         Точки — значения волновых условий для рассчитанных шагов модели;
         промежуточные состояния берега не рассчитаны.
@@ -816,6 +823,7 @@ export function ShorelineChangeChart({
   frame: Frame;
   selectedPoint: number;
 }) {
+  const { ref, width } = useChartWidth(frame.cells.length > 0);
   if (frame.cells.length === 0)
     return (
       <p className="text-sm text-muted-foreground">
@@ -827,7 +835,7 @@ export function ShorelineChangeChart({
     ...values.map((cell) => Math.abs(cell.shorelineChangeM)),
     0.000001
   );
-  const x = scaleLinear([0, Math.max(values.length - 1, 1)], [50, 750]);
+  const x = scaleLinear([0, Math.max(values.length - 1, 1)], [50, width - 15]);
   const y = scaleLinear([-extent, extent], [165, 25]);
   const path = line<(typeof values)[number]>()
     .x((_, i) => x(i))
@@ -838,15 +846,16 @@ export function ShorelineChangeChart({
       <h2 id="shoreline-chart-title" className="text-lg font-semibold">
         Смещение по ячейкам на выбранном шаге
       </h2>
-      <svg
-        viewBox="0 0 800 200"
-        role="img"
-        aria-label="Профиль рассчитанного смещения береговой линии по индексам ячеек, в метрах"
-        className="w-full rounded-lg border bg-card"
-      >
-        <path d="M50 25V165H750" fill="none" stroke="var(--muted-foreground)" />
+      <div ref={ref}>
+        <svg
+          viewBox={`0 0 ${width} 200`}
+          role="img"
+          aria-label="Профиль рассчитанного смещения береговой линии по индексам ячеек, в метрах"
+          className="h-[200px] w-full rounded-lg border bg-card"
+        >
+        <path d={`M50 25V165H${width - 15}`} fill="none" stroke="var(--muted-foreground)" />
         <path
-          d={`M50 ${y(0)}H750`}
+          d={`M50 ${y(0)}H${width - 15}`}
           fill="none"
           stroke="var(--border)"
           strokeDasharray="4 4"
@@ -871,10 +880,11 @@ export function ShorelineChangeChart({
         <text x="50" y="190" fill="var(--muted-foreground)" fontSize="13">
           Начало участка
         </text>
-        <text x="655" y="190" fill="var(--muted-foreground)" fontSize="13">
+        <text x={width - 15} y="190" textAnchor="end" fill="var(--muted-foreground)" fontSize="13">
           Конец участка
         </text>
-      </svg>
+        </svg>
+      </div>
       <p className="text-sm text-muted-foreground">
         Положительное и отрицательное смещение показаны относительно нулевой
         линии. Значение выбранной ячейки приведено в таблице ниже.

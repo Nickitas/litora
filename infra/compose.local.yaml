@@ -1,0 +1,17 @@
+# Локальные имена контейнеров. Имя Compose-проекта и существующие volumes не меняются.
+# Production/staging используют только compose.yaml и собственные имена проектов.
+services:
+  postgres:
+    container_name: lito-infra-postgres
+  minio:
+    container_name: lito-infra-minio
+  postgres-init:
+    container_name: lito-infra-postgres-init
+  api:
+    container_name: lito-infra-api
+  worker:
+    container_name: lito-infra-worker
+  worker-heavy:
+    container_name: lito-infra-worker-heavy
+  web:
+    container_name: lito-infra-web

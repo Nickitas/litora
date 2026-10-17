@@ -222,6 +222,9 @@ export function ShorelineVisualizationPage() {
   const displayedView = view ?? (
     viewLoading && viewResult?.key.startsWith(`${requestKey}:`) ? viewResult.view : null
   );
+  const displayedFrame = displayedView?.current ?? null;
+  const displayedCell = displayedFrame?.cells.find((cell) => cell.pointIndex === selectedPoint);
+  const displayedMeta = displayedFrame ? index?.frames[displayedFrame.index] : null;
   const seriesKey = `${requestKey}:${selectedPoint}:${seriesRevision}`;
   const activeSeries = seriesResult?.key === seriesKey ? seriesResult : null;
   const series = activeSeries?.series ?? null;
@@ -585,7 +588,8 @@ export function ShorelineVisualizationPage() {
         </div>
       ) : (
         <>
-          <section className="space-y-4 rounded-xl border bg-card p-4" aria-label="Реплей береговой линии">
+          <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]" aria-label="Рабочая область реплея">
+          <section className="min-w-0 space-y-4 rounded-xl border bg-card p-4" aria-label="Реплей береговой линии">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-semibold">Реплей береговой линии</h2>
@@ -654,20 +658,12 @@ export function ShorelineVisualizationPage() {
                 </div>}
               </div>
             </div>
-            {isDemo && (
-              <div className="rounded-lg bg-warning-background p-3 text-sm text-warning">
-                <p>Демонстрационный расчёт за 7 суток по сохранённому оперативному прогнозу волн.
-                  Это не наблюдение изменения берега и не прогноз на годы; карта показывает только рассчитанные координаты.</p>
-                <p className="mt-2">Реплей по умолчанию показывает суточные переходы. Выберите «Каждый час» для подробного просмотра; все кадры доступны на шкале.</p>
-                <p className="mt-2">
-                  Для исследования за год нужны датированные наблюдения берега, архив волн не менее 8766 часов,
-                  батиметрия и параметры активного профиля. Сначала калибруйте CERC по наблюдениям,
-                  затем запускайте свой полный волновой ряд с числом шагов 0. Такой результат требует
-                  независимой проверки; приливы и подъём уровня моря CERC автоматически не учитывает.
-                  {" "}<Link to="/lab" className="underline">Создать расчёт по своим данным</Link>.
-                </p>
-              </div>
-            )}
+            {isDemo && <div className="rounded-lg bg-warning-background p-3 text-sm text-warning">
+              Демонстрационный расчёт за 7 суток: это состояния модели по сохранённым волнам, не наблюдения и не годовой прогноз.
+              <details className="mt-1"><summary className="cursor-pointer font-medium">Как исследовать более длинный период</summary>
+                <p className="mt-2">По умолчанию реплей показывает суточные переходы; все часы доступны на шкале. Для исследования за год нужны датированные наблюдения, архив волн не менее 8766 часов, батиметрия и параметры активного профиля. Сначала калибруйте CERC по наблюдениям, затем запускайте полный волновой ряд с числом шагов 0. Результат требует независимой проверки; приливы и подъём уровня моря CERC автоматически не учитывает. <Link to="/lab" className="underline">Создать расчёт по своим данным</Link>.</p>
+              </details>
+            </div>}
             {frameIndex === null ? (
               <p role="status" className="text-sm text-muted-foreground">Выберите период с сохранённым состоянием.</p>
             ) : viewError ? (
@@ -717,6 +713,33 @@ export function ShorelineVisualizationPage() {
                 onSelectPosition={chooseFrame} label="Охват расчётных состояний по годам" />
             )}
           </section>
+
+          <section className="min-w-0 space-y-5 rounded-xl border bg-card p-4" aria-label="Графики реплея">
+            <div>
+              <h2 className="text-xl font-semibold">Графики выбранного кадра</h2>
+              <p className="text-sm text-muted-foreground">{displayedFrame ? frameLabel(index, displayedFrame.index) : frameIndex === null ? "Выберите кадр на шкале карты" : "Загружаем выбранный кадр"} · узел {selectedPoint + 1}</p>
+            </div>
+            <dl className="grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg bg-muted/50 p-3">
+                <dt className="text-muted-foreground">Смещение узла за шаг</dt>
+                <dd className="mt-1 font-semibold tabular-nums">{displayedCell ? `${smallDistance.format(displayedCell.shorelineChangeM)} м` : "Нет значения"}</dd>
+              </div>
+              <div className="rounded-lg bg-muted/50 p-3">
+                <dt className="text-muted-foreground">Высота волны</dt>
+                <dd className="mt-1 font-semibold tabular-nums">{displayedMeta?.waveHeightM == null ? "Нет значения" : `${number.format(displayedMeta.waveHeightM)} м`}</dd>
+              </div>
+            </dl>
+            {index.pointSeries ? (
+              seriesLoading ? <p role="status">Загружаем временной ряд выбранного узла…</p>
+                : seriesError ? <div role="alert" className="rounded-xl border border-destructive p-4 text-destructive">
+                  {seriesError} <Button variant="link" onClick={() => setSeriesRevision((value) => value + 1)}>Повторить</Button>
+                </div>
+                  : series && displayedFrame ? <ShorelinePointTimelineChart index={index} series={series} selectedIndex={displayedFrame.index} /> : null
+            ) : <p className="text-sm text-muted-foreground">Для этого результата временной график узла не создан.</p>}
+            {displayedFrame && <WaveTimelineChart index={index} selectedIndex={displayedFrame.index} />}
+            {displayedFrame && <ShorelineChangeChart frame={displayedFrame} selectedPoint={selectedPoint} />}
+          </section>
+          </div>
 
           <section
             className="space-y-3 rounded-xl border bg-card p-4"
@@ -883,46 +906,9 @@ export function ShorelineVisualizationPage() {
             )}
           </section>
 
-          {currentMeta && (
-            <WaveTimelineChart
-              index={index}
-              selectedIndex={currentMeta.index}
-            />
-          )}
           {view && currentFrame ? (
-            <div className="space-y-6 rounded-xl border bg-card p-4">
-              {index.pointSeries ? (
-                seriesLoading ? (
-                  <p role="status">Загружаем временной ряд выбранного узла…</p>
-                ) : seriesError ? (
-                  <div
-                    role="alert"
-                    className="rounded-xl border border-destructive p-4 text-destructive"
-                  >
-                    {seriesError}{" "}
-                    <Button
-                      variant="link"
-                      onClick={() => setSeriesRevision((value) => value + 1)}
-                    >
-                      Повторить
-                    </Button>
-                  </div>
-                ) : series ? (
-                  <ShorelinePointTimelineChart
-                    index={index}
-                    series={series}
-                    selectedIndex={currentFrame.index}
-                  />
-                ) : null
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Для этого результата временной график узла не создан.
-                </p>
-              )}
-              <ShorelineChangeChart
-                frame={currentFrame}
-                selectedPoint={selectedPoint}
-              />
+            <section className="space-y-3 rounded-xl border bg-card p-4" aria-label="Значения кадра и узла">
+              <h2 className="text-xl font-semibold">Точные значения кадра и узла</h2>
               <div className="space-y-3">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[480px] text-left text-sm">
@@ -1015,7 +1001,7 @@ export function ShorelineVisualizationPage() {
                   </table>
                 </div>
               </div>
-            </div>
+            </section>
           ) : null}
         </>
       )}

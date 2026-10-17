@@ -112,6 +112,8 @@ func runShorelineDataAudit(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(table, "Период UTC\t%s — %s\n", audit.FirstObservation.Format("2006-01-02"), audit.LastObservation.Format("2006-01-02"))
 		fmt.Fprintf(table, "Максимальный пробел, дни\t%.1f\n", audit.LongestObservationGapDays)
 		fmt.Fprintf(table, "Без uncertainty_m\t%d\n", audit.MissingUncertaintyCount)
+		fmt.Fprintf(table, "Контуров в рамке пилота Сочи\t%d\n", audit.PilotCoverage.IntersectingCount)
+		fmt.Fprintf(table, "Контуров вне рамки пилота Сочи\t%d\n", audit.PilotCoverage.OutsideCount)
 		if audit.TemporalSplit != nil {
 			fmt.Fprintf(table, "Ранняя часть / проверка\t%d / %d контуров\n", audit.TemporalSplit.TrainingCount, audit.TemporalSplit.ValidationCount)
 		}
