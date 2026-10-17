@@ -79,6 +79,13 @@ export interface ShorelineVisualizationChunkDto {
   }[];
 }
 
+/** Заявленный источником метод поправки уровня воды для одного контура. */
+export interface WaterLevelCorrectionDto {
+  method: string;
+  source: string;
+  verticalDatum: string;
+}
+
 /** Датированные наблюдения берега из проверенного GeoJSON в EPSG:4326. */
 export interface ObservedShorelineSeriesDto {
   schemaVersion: 1;
@@ -88,6 +95,9 @@ export interface ObservedShorelineSeriesDto {
     satellite: string;
     geoAccuracy: number | null;
     cloudCover: number | null;
+    uncertaintyM?: number | null;
+    tideCorrected?: boolean | null;
+    waterLevelCorrection?: WaterLevelCorrectionDto | null;
     coordinates: [number, number][];
   }[];
 }

@@ -15,7 +15,7 @@ function record(value: unknown): Record<string, unknown> | null {
 function reportFrom(job: CalculationJobDto): Record<string, unknown> | null {
   const metrics = record(record(job.resultSummary)?.metrics);
   const report = record(metrics?.["shoreline-data-audit.json"]);
-  return report?.schemaVersion === 1 || report?.schemaVersion === 2 || report?.schemaVersion === 3 ? report : null;
+  return report?.schemaVersion === 1 || report?.schemaVersion === 2 || report?.schemaVersion === 3 || report?.schemaVersion === 4 ? report : null;
 }
 
 function number(value: unknown) {
@@ -100,6 +100,10 @@ export function ShorelineDataAudit({ observationsInputId, inputs }: {
     .map((item) => `${number(item.year)} (${number(item.count)})`);
   const limitations = Array.isArray(report?.limitations)
     ? report.limitations.filter((item): item is string => typeof item === "string") : [];
+  const verticalDatums = Array.isArray(report?.verticalDatums)
+    ? report.verticalDatums.filter((item): item is string => typeof item === "string") : [];
+  const correctionMethods = Array.isArray(report?.correctionMethods)
+    ? report.correctionMethods.filter((item): item is string => typeof item === "string") : [];
 
   return <section className="space-y-3 rounded-lg border bg-muted/30 p-4" aria-labelledby="shoreline-audit-heading">
     <div>
@@ -154,8 +158,17 @@ export function ShorelineDataAudit({ observationsInputId, inputs }: {
         <div><dt className="text-muted-foreground">Без показателя геопривязки</dt><dd className="font-medium">{number(report.missingGeoAccuracyCount) ?? "—"}</dd></div>
         <div><dt className="text-muted-foreground">Без сведений о поправке уровня воды</dt><dd className="font-medium">{number(report.unknownTideStatusCount) ?? "—"}</dd></div>
         <div><dt className="text-muted-foreground">Без поправки уровня воды</dt><dd className="font-medium">{number(report.uncorrectedTideCount) ?? "—"}</dd></div>
+        {report.schemaVersion === 4 && <>
+          <div><dt className="text-muted-foreground">Поправка заявлена с паспортом</dt><dd className="font-medium">{number(report.correctionPassportCount) ?? "—"}</dd></div>
+          <div><dt className="text-muted-foreground">Поправка заявлена без паспорта</dt><dd className="font-medium">{number(report.missingCorrectionPassportCount) ?? "—"}</dd></div>
+        </>}
         <div><dt className="text-muted-foreground">Непокрыто волнами</dt><dd className="font-medium">{number(waveReport?.missingObservationHours)?.toFixed(1) ?? "неизвестно"} ч</dd></div>
       </dl>
+      {report.schemaVersion === 4 && <p className="text-sm text-muted-foreground">
+        Заявленные методы: {correctionMethods.length ? correctionMethods.join(", ") : "нет сведений"}.
+        Вертикальные датумы: {verticalDatums.length ? verticalDatums.join(", ") : "нет сведений"}.
+        Паспорт не подтверждает правильность поправки.
+      </p>}
       {limitations.length > 0 && <div><p className="font-medium">Ограничения данных</p><ul className="list-disc pl-5 text-muted-foreground">{limitations.map((item) => <li key={item}>{item}</li>)}</ul></div>}
     </div>}
   </section>;

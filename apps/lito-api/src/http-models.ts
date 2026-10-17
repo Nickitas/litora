@@ -152,6 +152,12 @@ export class ObservedShorelineSeriesResponse implements ObservedShorelineSeriesD
       satellite: { type: "string" },
       geoAccuracy: { type: "number", nullable: true },
       cloudCover: { type: "number", nullable: true, minimum: 0, maximum: 1 },
+      uncertaintyM: { type: "number", nullable: true, minimum: 0, exclusiveMinimum: true },
+      tideCorrected: { type: "boolean", nullable: true },
+      waterLevelCorrection: { type: "object", nullable: true, required: ["method", "source", "verticalDatum"],
+        properties: {
+          method: { type: "string" }, source: { type: "string" }, verticalDatum: { type: "string" },
+        } },
       coordinates: { type: "array", items: { type: "array", items: { type: "number" }, minItems: 2 } },
     } } })
   frames!: ObservedShorelineSeriesDto["frames"];

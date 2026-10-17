@@ -17,6 +17,8 @@ const series = {
   bounds: [39.7, 43.5, 39.8, 43.6],
   frames: [
     { time: "2020-01-01T00:00:00Z", satellite: "L8", geoAccuracy: 5, cloudCover: 0.1,
+      tideCorrected: true, uncertaintyM: 4,
+      waterLevelCorrection: { method: "по уровенному посту", source: "пост А", verticalDatum: "датум А" },
       coordinates: [[39.7, 43.5], [39.8, 43.6]] },
     { time: "2024-09-01T00:00:00Z", satellite: "S2", geoAccuracy: 1, cloudCover: 0.2,
       coordinates: [[39.71, 43.5], [39.79, 43.6]] },
@@ -47,7 +49,7 @@ test("наблюдаемые контуры переключаются по да
     }
     if (path === `/api/calculations/${auditId}`) return route.fulfill({ contentType: "application/json", body: JSON.stringify({
       id: auditId, status: "succeeded", input: { observationsInputId: inputId, validationStart: "2024-01-01" }, resultSummary: { metrics: { "shoreline-data-audit.json": {
-        schemaVersion: 3, observationCount: 2, firstObservation: "2020-01-01T00:00:00Z",
+        schemaVersion: 4, observationCount: 2, firstObservation: "2020-01-01T00:00:00Z",
         lastObservation: "2024-09-01T00:00:00Z", longestObservationGapDays: 1705,
         temporalSplit: { validationStart: "2024-01-01T00:00:00Z", trainingCount: 1, validationCount: 1,
           trainingLastTime: "2020-01-01T00:00:00Z", validationFirstTime: "2024-09-01T00:00:00Z", boundaryGapDays: 1705 },
@@ -57,6 +59,8 @@ test("наблюдаемые контуры переключаются по да
           years: [{ year: 2020, count: 1 }, { year: 2021, count: 0 }, { year: 2024, count: 0 }] },
         missingUncertaintyCount: 2, missingGeoAccuracyCount: 0,
         unknownTideStatusCount: 2, limitations: ["Недостаточно данных для прогноза"], waves: null,
+        correctionPassportCount: 1, missingCorrectionPassportCount: 0,
+        correctionMethods: ["по уровенному посту"], verticalDatums: ["датум А"],
       } } },
     }) });
     return route.abort("blockedbyclient");
@@ -71,6 +75,7 @@ test("наблюдаемые контуры переключаются по да
   await expect(years.getByRole("button", { name: "2021: 0 дат" })).toBeDisabled();
   await years.getByRole("button", { name: "2020: 1 дат" }).click();
   await expect(observations.getByText("Снимок 1 из 2", { exact: false })).toBeVisible();
+  await expect(observations.getByText("вертикальный датум — датум А", { exact: false })).toBeVisible();
   await years.getByRole("button", { name: "2024: 1 дат" }).click();
   await expect(observations.getByText("Снимок 2 из 2", { exact: false })).toBeVisible();
   await observations.getByRole("button", { name: "Предыдущий снимок" }).click();
@@ -86,6 +91,7 @@ test("наблюдаемые контуры переключаются по да
   await expect(observations.getByRole("definition").filter({ hasText: "2021" })).toBeVisible();
   await expect(observations.getByText("Временное разделение для будущей проверки модели")).toBeVisible();
   await expect(observations.getByText("Покрытие пилотного участка Сочи")).toBeVisible();
+  await expect(observations.getByText("Поправка заявлена с паспортом")).toBeVisible();
   await expect(observations.getByText("Пересекают стартовую рамку: 1 из 2 контуров", { exact: false })).toBeVisible();
   await page.reload();
   await expect(observations.getByText("Годы без снимков")).toBeVisible();

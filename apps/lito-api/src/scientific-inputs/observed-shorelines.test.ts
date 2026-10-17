@@ -35,3 +35,27 @@ test("проектные координаты, неизвестный CRS и п�
     feature("2020-02-31 00:00:00", coast), valid[1],
   ])), /календарная/);
 });
+
+test("паспорт поправки уровня воды передаётся вместе с датой и проверяется", () => {
+  const corrected = {
+    ...feature("2020-01-01 00:00:00", coast),
+    properties: { date: "2020-01-01 00:00:00", satname: "S2", tide_corrected: true,
+      water_level_correction: { method: "по уровенному посту", source: "пост А", vertical_datum: "датум А" } },
+  };
+  const legacy = feature("2021-01-01 00:00:00", coast);
+  const parsed = parseObservedShorelines(series([corrected, legacy]));
+  assert.equal(parsed.frames[0].tideCorrected, true);
+  assert.equal(parsed.frames[0].waterLevelCorrection?.verticalDatum, "датум А");
+  assert.equal(parsed.frames[1].waterLevelCorrection, null);
+  assert.throws(() => parseObservedShorelines(series([
+    { ...corrected, properties: { ...corrected.properties, tide_corrected: false } }, legacy,
+  ])), /tide_corrected=true/);
+  assert.throws(() => parseObservedShorelines(series([
+    { ...corrected, properties: { ...corrected.properties,
+      water_level_correction: { ...corrected.properties.water_level_correction, vertical_datum: "" } } }, legacy,
+  ])), /vertical_datum/);
+  assert.throws(() => parseObservedShorelines(series([
+    { ...corrected, properties: { ...corrected.properties,
+      water_level_correction: { ...corrected.properties.water_level_correction, method: "метод".repeat(40) } } }, legacy,
+  ])), /method/);
+});

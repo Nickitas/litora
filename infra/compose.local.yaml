@@ -5,8 +5,6 @@ services:
     container_name: lito-infra-postgres
   minio:
     container_name: lito-infra-minio
-  postgres-init:
-    container_name: lito-infra-postgres-init
   api:
     container_name: lito-infra-api
   worker:

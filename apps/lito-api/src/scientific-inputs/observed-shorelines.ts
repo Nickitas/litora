@@ -32,6 +32,20 @@ function optionalNumber(value: unknown, label: string): number | null {
   return value;
 }
 
+function waterLevelCorrection(value: unknown) {
+  if (value === undefined || value === null) return null;
+  const input = record(value);
+  if (Object.keys(input).some((key) => !["method", "source", "vertical_datum"].includes(key)))
+    return invalid("неизвестное поле water_level_correction");
+  const text = (field: "method" | "source" | "vertical_datum") => {
+    const item = input[field];
+    if (typeof item !== "string" || !item.trim() || Buffer.byteLength(item, "utf8") > 160 || /\p{Cc}/u.test(item))
+      return invalid(`некорректное поле water_level_correction.${field}`);
+    return item.trim();
+  };
+  return { method: text("method"), source: text("source"), verticalDatum: text("vertical_datum") };
+}
+
 /** Проверяет структуру наблюдений; не выполняет научных расчётов. */
 export function parseObservedShorelines(bytes: Buffer): ObservedShorelineSeriesDto {
   let source: unknown;
@@ -89,11 +103,23 @@ export function parseObservedShorelines(bytes: Buffer): ObservedShorelineSeriesD
     const cloudCover = optionalNumber(properties.cloud_cover, "cloud_cover");
     if (cloudCover !== null && cloudCover > 1)
       return invalid("cloud_cover должен быть долей от 0 до 1");
+    const tideCorrected = properties.tide_corrected === undefined || properties.tide_corrected === null
+      ? null : properties.tide_corrected;
+    if (tideCorrected !== null && typeof tideCorrected !== "boolean")
+      return invalid("tide_corrected должен быть логическим значением");
+    const correction = waterLevelCorrection(properties.water_level_correction);
+    if (correction && tideCorrected !== true)
+      return invalid("water_level_correction требует tide_corrected=true");
+    const uncertaintyM = optionalNumber(properties.uncertainty_m, "uncertainty_m");
+    if (uncertaintyM === 0) return invalid("uncertainty_m должна быть положительной");
     frames.push({
       time: acquisitionTime(properties.date),
       satellite,
       geoAccuracy: optionalNumber(properties.geoaccuracy, "geoaccuracy"),
       cloudCover,
+      uncertaintyM,
+      tideCorrected,
+      waterLevelCorrection: correction,
       coordinates,
     });
   }

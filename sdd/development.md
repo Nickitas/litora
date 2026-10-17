@@ -106,9 +106,10 @@ pnpm infra:up
 docker compose --env-file .env.local -f infra/compose.yaml -f infra/compose.local.yaml ps
 ```
 
-Compose поднимет PostgreSQL, MinIO и однократную инициализацию схемы. Дождитесь
-`healthy` у PostgreSQL/MinIO и успешного завершения `postgres-init`. API/worker
-дополнительно проверяют и применяют новые SQL-миграции при запуске.
+Compose поднимет PostgreSQL и MinIO. Дождитесь `healthy` у обоих сервисов.
+После `pnpm infra:up` схема БД ещё не создаётся: API или worker при своём запуске
+применит все SQL-миграции через `DatabaseService.initialize()` под блокировкой
+PostgreSQL. Повторный запуск пропускает уже применённые файлы.
 Локальные контейнеры называются `lito-infra-*`. Файл `compose.local.yaml` меняет
 только их имена: Compose-проект остаётся `infra`, поэтому старые Docker volumes с
 данными PostgreSQL и MinIO используются без переноса. Для появления новых имён

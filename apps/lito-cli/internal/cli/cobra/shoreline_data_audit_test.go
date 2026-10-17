@@ -52,7 +52,7 @@ func TestRunShorelineDataAuditWritesProvenance(t *testing.T) {
 	if err := json.Unmarshal(result, &report); err != nil {
 		t.Fatal(err)
 	}
-	if report.SchemaVersion != 3 || len(report.ObservationSHA256) != 64 || len(report.Years) != 3 || report.Years[1].Count != 0 || report.TemporalSplit.TrainingCount != 1 || report.TemporalSplit.ValidationCount != 1 || report.PilotCoverage.IntersectingCount != 2 || report.PilotCoverage.OutsideCount != 0 {
+	if report.SchemaVersion != 4 || len(report.ObservationSHA256) != 64 || len(report.Years) != 3 || report.Years[1].Count != 0 || report.TemporalSplit.TrainingCount != 1 || report.TemporalSplit.ValidationCount != 1 || report.PilotCoverage.IntersectingCount != 2 || report.PilotCoverage.OutsideCount != 0 {
 		t.Fatalf("неполный отчёт аудита: %+v", report)
 	}
 }

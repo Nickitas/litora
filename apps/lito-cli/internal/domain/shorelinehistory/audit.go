@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const maxObservationBytes = 16 << 20
@@ -21,12 +22,20 @@ var wgs84Name = regexp.MustCompile(`(?i)(?:EPSG:|EPSG::)4326$`)
 
 // Observation описывает дату и качество одного измеренного контура.
 type Observation struct {
-	Time              time.Time
-	Satellite         string
-	GeoAccuracy       *float64
-	UncertaintyM      *float64
-	TideCorrected     *bool
-	PilotIntersection *bool
+	Time                 time.Time
+	Satellite            string
+	GeoAccuracy          *float64
+	UncertaintyM         *float64
+	TideCorrected        *bool
+	WaterLevelCorrection *WaterLevelCorrection
+	PilotIntersection    *bool
+}
+
+// WaterLevelCorrection хранит заявленный источником паспорт поправки уровня воды.
+type WaterLevelCorrection struct {
+	Method        string `json:"method"`
+	Source        string `json:"source"`
+	VerticalDatum string `json:"vertical_datum"`
 }
 
 // WaveInterval описывает датированный интервал волнового воздействия.
@@ -77,20 +86,24 @@ type PilotCoverage struct {
 
 // Audit описывает проверяемые свойства входных рядов без вывода о точности прогноза.
 type Audit struct {
-	SchemaVersion             int            `json:"schemaVersion"`
-	ObservationCount          int            `json:"observationCount"`
-	FirstObservation          time.Time      `json:"firstObservation"`
-	LastObservation           time.Time      `json:"lastObservation"`
-	Years                     []YearCount    `json:"years"`
-	LongestObservationGapDays float64        `json:"longestObservationGapDays"`
-	MissingGeoAccuracyCount   int            `json:"missingGeoAccuracyCount"`
-	MissingUncertaintyCount   int            `json:"missingUncertaintyCount"`
-	UncorrectedTideCount      int            `json:"uncorrectedTideCount"`
-	UnknownTideStatusCount    int            `json:"unknownTideStatusCount"`
-	Waves                     *WaveAudit     `json:"waves"`
-	TemporalSplit             *TemporalSplit `json:"temporalSplit,omitempty"`
-	PilotCoverage             PilotCoverage  `json:"pilotCoverage"`
-	Limitations               []string       `json:"limitations"`
+	SchemaVersion                  int            `json:"schemaVersion"`
+	ObservationCount               int            `json:"observationCount"`
+	FirstObservation               time.Time      `json:"firstObservation"`
+	LastObservation                time.Time      `json:"lastObservation"`
+	Years                          []YearCount    `json:"years"`
+	LongestObservationGapDays      float64        `json:"longestObservationGapDays"`
+	MissingGeoAccuracyCount        int            `json:"missingGeoAccuracyCount"`
+	MissingUncertaintyCount        int            `json:"missingUncertaintyCount"`
+	UncorrectedTideCount           int            `json:"uncorrectedTideCount"`
+	UnknownTideStatusCount         int            `json:"unknownTideStatusCount"`
+	CorrectionPassportCount        int            `json:"correctionPassportCount"`
+	MissingCorrectionPassportCount int            `json:"missingCorrectionPassportCount"`
+	CorrectionMethods              []string       `json:"correctionMethods"`
+	VerticalDatums                 []string       `json:"verticalDatums"`
+	Waves                          *WaveAudit     `json:"waves"`
+	TemporalSplit                  *TemporalSplit `json:"temporalSplit,omitempty"`
+	PilotCoverage                  PilotCoverage  `json:"pilotCoverage"`
+	Limitations                    []string       `json:"limitations"`
 }
 
 type featureCollection struct {
@@ -107,11 +120,12 @@ type featureCollection struct {
 			Coordinates [][]float64 `json:"coordinates"`
 		} `json:"geometry"`
 		Properties struct {
-			Date          string   `json:"date"`
-			Satellite     string   `json:"satname"`
-			GeoAccuracy   *float64 `json:"geoaccuracy"`
-			UncertaintyM  *float64 `json:"uncertainty_m"`
-			TideCorrected *bool    `json:"tide_corrected"`
+			Date                 string          `json:"date"`
+			Satellite            string          `json:"satname"`
+			GeoAccuracy          *float64        `json:"geoaccuracy"`
+			UncertaintyM         *float64        `json:"uncertainty_m"`
+			TideCorrected        *bool           `json:"tide_corrected"`
+			WaterLevelCorrection json.RawMessage `json:"water_level_correction"`
 		} `json:"properties"`
 	} `json:"features"`
 }
@@ -170,12 +184,20 @@ func LoadObservations(path string) ([]Observation, error) {
 		if feature.Properties.UncertaintyM != nil && !finiteInRange(*feature.Properties.UncertaintyM, math.SmallestNonzeroFloat64, math.MaxFloat64) {
 			return nil, fmt.Errorf("контур %d: некорректная uncertainty_m", index+1)
 		}
+		correction, err := parseWaterLevelCorrection(feature.Properties.WaterLevelCorrection)
+		if err != nil {
+			return nil, fmt.Errorf("контур %d: %w", index+1, err)
+		}
+		if correction != nil && (feature.Properties.TideCorrected == nil || !*feature.Properties.TideCorrected) {
+			return nil, fmt.Errorf("контур %d: water_level_correction требует tide_corrected=true", index+1)
+		}
 		observations = append(observations, Observation{
 			Time: when, Satellite: feature.Properties.Satellite,
-			GeoAccuracy:       feature.Properties.GeoAccuracy,
-			UncertaintyM:      feature.Properties.UncertaintyM,
-			TideCorrected:     feature.Properties.TideCorrected,
-			PilotIntersection: boolPointer(lineIntersectsBounds(feature.Geometry.Coordinates, sochiPilotBounds)),
+			GeoAccuracy:          feature.Properties.GeoAccuracy,
+			UncertaintyM:         feature.Properties.UncertaintyM,
+			TideCorrected:        feature.Properties.TideCorrected,
+			WaterLevelCorrection: correction,
+			PilotIntersection:    boolPointer(lineIntersectsBounds(feature.Geometry.Coordinates, sochiPilotBounds)),
 		})
 	}
 	sort.Slice(observations, func(i, j int) bool { return observations[i].Time.Before(observations[j].Time) })
@@ -185,6 +207,51 @@ func LoadObservations(path string) ([]Observation, error) {
 		}
 	}
 	return observations, nil
+}
+
+func parseWaterLevelCorrection(raw json.RawMessage) (*WaterLevelCorrection, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
+		return nil, fmt.Errorf("water_level_correction должен быть объектом")
+	}
+	if len(fields) != 3 {
+		return nil, fmt.Errorf("water_level_correction требует method, source и vertical_datum")
+	}
+	for key := range fields {
+		if key != "method" && key != "source" && key != "vertical_datum" {
+			return nil, fmt.Errorf("неизвестное поле water_level_correction.%s", key)
+		}
+	}
+	read := func(key string) (string, error) {
+		var value string
+		if err := json.Unmarshal(fields[key], &value); err != nil {
+			return "", fmt.Errorf("water_level_correction.%s должен быть строкой", key)
+		}
+		if len(value) > 160 || strings.IndexFunc(value, unicode.IsControl) >= 0 {
+			return "", fmt.Errorf("некорректное поле water_level_correction.%s", key)
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return "", fmt.Errorf("некорректное поле water_level_correction.%s", key)
+		}
+		return value, nil
+	}
+	method, err := read("method")
+	if err != nil {
+		return nil, err
+	}
+	source, err := read("source")
+	if err != nil {
+		return nil, err
+	}
+	datum, err := read("vertical_datum")
+	if err != nil {
+		return nil, err
+	}
+	return &WaterLevelCorrection{Method: method, Source: source, VerticalDatum: datum}, nil
 }
 
 func boolPointer(value bool) *bool { return &value }
@@ -259,9 +326,9 @@ func AnalyzeWithTemporalSplit(observations []Observation, waveSource string, wav
 	ordered := append([]Observation(nil), observations...)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Time.Before(ordered[j].Time) })
 	report := Audit{
-		SchemaVersion: 3, ObservationCount: len(ordered),
+		SchemaVersion: 4, ObservationCount: len(ordered),
 		FirstObservation: ordered[0].Time, LastObservation: ordered[len(ordered)-1].Time,
-		Years: []YearCount{}, Limitations: []string{},
+		Years: []YearCount{}, CorrectionMethods: []string{}, VerticalDatums: []string{}, Limitations: []string{},
 		PilotCoverage: PilotCoverage{
 			Bounds: sochiPilotBounds, Reference: "OSM way 59530506, 2026-08-17",
 			ReferenceSHA256: "5fc2e8625fc57021fb760cccc63cb6ff20848edd70e159453f34402faa99129a",
@@ -270,9 +337,14 @@ func AnalyzeWithTemporalSplit(observations []Observation, waveSource string, wav
 	}
 	counts := map[int]int{}
 	pilotCounts := map[int]int{}
+	methods := map[string]bool{}
+	datums := map[string]bool{}
 	for index, observation := range ordered {
 		if observation.Time.IsZero() {
 			return Audit{}, fmt.Errorf("наблюдение %d не имеет даты", index+1)
+		}
+		if observation.WaterLevelCorrection != nil && (observation.TideCorrected == nil || !*observation.TideCorrected) {
+			return Audit{}, fmt.Errorf("наблюдение %d: паспорт поправки требует tide_corrected=true", index+1)
 		}
 		if index > 0 {
 			gap := observation.Time.Sub(ordered[index-1].Time).Hours() / 24
@@ -301,8 +373,22 @@ func AnalyzeWithTemporalSplit(observations []Observation, waveSource string, wav
 			report.UnknownTideStatusCount++
 		} else if !*observation.TideCorrected {
 			report.UncorrectedTideCount++
+		} else if observation.WaterLevelCorrection == nil {
+			report.MissingCorrectionPassportCount++
+		} else {
+			report.CorrectionPassportCount++
+			methods[observation.WaterLevelCorrection.Method] = true
+			datums[observation.WaterLevelCorrection.VerticalDatum] = true
 		}
 	}
+	for method := range methods {
+		report.CorrectionMethods = append(report.CorrectionMethods, method)
+	}
+	for datum := range datums {
+		report.VerticalDatums = append(report.VerticalDatums, datum)
+	}
+	sort.Strings(report.CorrectionMethods)
+	sort.Strings(report.VerticalDatums)
 	for year := report.FirstObservation.UTC().Year(); year <= report.LastObservation.UTC().Year(); year++ {
 		report.Years = append(report.Years, YearCount{Year: year, Count: counts[year]})
 		report.PilotCoverage.Years = append(report.PilotCoverage.Years, YearCount{Year: year, Count: pilotCounts[year]})
@@ -338,7 +424,16 @@ func AnalyzeWithTemporalSplit(observations []Observation, waveSource string, wav
 	if report.UnknownTideStatusCount > 0 || report.UncorrectedTideCount > 0 {
 		report.Limitations = append(report.Limitations, "Поправка уровня воды не подтверждена для всех контуров; смещение линии может быть неморфологическим.")
 	}
-	report.Limitations = append(report.Limitations, "Поле tide_corrected декларируется источником; аудит не проверяет величину поправки и вертикальный датум.")
+	if report.MissingCorrectionPassportCount > 0 {
+		report.Limitations = append(report.Limitations, "Для части контуров с tide_corrected=true не указан метод, источник уровня воды и вертикальный датум.")
+	}
+	if len(report.VerticalDatums) > 1 {
+		report.Limitations = append(report.Limitations, "В ряду заявлены разные вертикальные датумы; контуры нельзя объединять без согласования уровней.")
+	}
+	if len(report.CorrectionMethods) > 1 {
+		report.Limitations = append(report.Limitations, "В ряду заявлены разные методы поправки уровня воды; их результаты требуют отдельной проверки сопоставимости.")
+	}
+	report.Limitations = append(report.Limitations, "Паспорт поправки декларируется источником; аудит не проверяет величину поправки и правильность вертикального датума.")
 	if len(waves) == 0 {
 		report.Limitations = append(report.Limitations, "Волновой ряд не предоставлен; воздействие за период наблюдений не проверено.")
 	} else {

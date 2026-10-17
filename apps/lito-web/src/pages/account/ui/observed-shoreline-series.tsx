@@ -140,6 +140,8 @@ export function ObservedShorelineSeries() {
         <p className="mb-3 text-sm text-muted-foreground">
           CoastSat запускается отдельно от Litora. Экспортируйте из него линии с полями date и satname;
           cloud_cover и geoaccuracy будут показаны, если есть. Преобразуйте GeoJSON в EPSG:4326.
+          Для поправленной линии укажите tide_corrected=true и water_level_correction
+          с method, source и vertical_datum. Без этих полей поправка останется без паспорта.
           Допустимы 2–2500 дат и файл до 16 МиБ.
         </p>
         <ScientificInputUpload role="shoreline_timeseries_geojson"
@@ -201,6 +203,15 @@ export function ObservedShorelineSeries() {
               }}>{playing ? "Пауза" : "▶ Воспроизвести"}</Button>
             </div>
           </div>
+          <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+            <p className="font-medium">Поправка уровня воды для выбранного контура</p>
+            <p>{frame.tideCorrected === true
+              ? frame.waterLevelCorrection
+                ? `Заявлена источником: ${frame.waterLevelCorrection.method}; источник уровня — ${frame.waterLevelCorrection.source}; вертикальный датум — ${frame.waterLevelCorrection.verticalDatum}.`
+                : "Заявлена источником, но метод, источник уровня и вертикальный датум не указаны."
+              : frame.tideCorrected === false ? "Источник указал, что поправки нет." : "Источник не указал, была ли поправка."}</p>
+            <p className="text-muted-foreground">Неопределённость положения: {frame.uncertaintyM == null ? "не указана" : `${frame.uncertaintyM} м`}. Паспорт не подтверждает правильность поправки.</p>
+          </div>
           <Slider aria-label="Дата спутникового наблюдения" min={0} max={series.frames.length - 1}
             step={1} value={[position]} onValueChange={([value]) => choose(value)} />
           <div className="flex justify-between gap-3 text-xs text-muted-foreground">
@@ -247,8 +258,8 @@ export function ObservedShorelineSeries() {
             При экспорте из CoastSat линия обычно описывает границу песка и воды. Приливы, волны,
             облака и качество геопривязки влияют на её положение; показанные контуры не являются
             непрерывным мониторингом или прогнозом эрозии. Смысл geoaccuracy уточняйте у источника;
-            это поле не заменяет неопределённость положения линии. Сведения о поправке уровня воды
-            пока не входят в контракт карты, поэтому сравнение разных дат требует проверки исходного ряда.
+            это поле не заменяет неопределённость положения линии. Даже при заполненном паспорте
+            поправки сравнение разных дат требует научной проверки исходного ряда.
           </p>
         </> : null}
         {selected && <ShorelineDataAudit key={selected.id} observationsInputId={selected.id} inputs={inputs} />}

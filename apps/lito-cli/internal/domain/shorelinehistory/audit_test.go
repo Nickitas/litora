@@ -100,7 +100,7 @@ func TestTemporalSplitSeparatesDatesWithoutFutureLeakage(t *testing.T) {
 		t.Fatal(err)
 	}
 	split := report.TemporalSplit
-	if report.SchemaVersion != 3 || split == nil || split.TrainingCount != 2 || split.ValidationCount != 2 ||
+	if report.SchemaVersion != 4 || split == nil || split.TrainingCount != 2 || split.ValidationCount != 2 ||
 		!split.TrainingLastTime.Equal(second) || !split.ValidationFirstTime.Equal(third) ||
 		split.BoundaryGapDays <= 0 {
 		t.Fatalf("хронологическое разделение некорректно: %+v", report)
@@ -112,6 +112,43 @@ func TestTemporalSplitSeparatesDatesWithoutFutureLeakage(t *testing.T) {
 		if _, err := AnalyzeWithTemporalSplit(observations, "", nil, &invalid); err == nil {
 			t.Fatalf("ожидалась ошибка границы %s", invalid)
 		}
+	}
+}
+
+func TestCorrectionPassportAndMixedDatums(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "corrected.geojson")
+	data := `{"type":"FeatureCollection","features":[` +
+		`{"type":"Feature","geometry":{"type":"LineString","coordinates":[[39.6,43.6],[39.8,43.6]]},"properties":{"date":"2020-01-01T00:00:00Z","satname":"L8","tide_corrected":true,"water_level_correction":{"method":"поправка по уклону","source":"пост А","vertical_datum":"датум А"}}},` +
+		`{"type":"Feature","geometry":{"type":"LineString","coordinates":[[39.6,43.6],[39.8,43.6]]},"properties":{"date":"2021-01-01T00:00:00Z","satname":"L8","tide_corrected":true,"water_level_correction":{"method":"поправка по уклону","source":"пост Б","vertical_datum":"датум Б"}}},` +
+		`{"type":"Feature","geometry":{"type":"LineString","coordinates":[[39.6,43.6],[39.8,43.6]]},"properties":{"date":"2022-01-01T00:00:00Z","satname":"S2","tide_corrected":true}}]}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	observations, err := LoadObservations(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := Analyze(observations, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.CorrectionPassportCount != 2 || report.MissingCorrectionPassportCount != 1 ||
+		len(report.VerticalDatums) != 2 || report.VerticalDatums[0] != "датум А" || len(report.CorrectionMethods) != 1 {
+		t.Fatalf("паспорт поправки не отражён: %+v", report)
+	}
+	invalid := strings.Replace(data, `"vertical_datum":"датум А"`, `"vertical_datum":""`, 1)
+	if err := os.WriteFile(path, []byte(invalid), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadObservations(path); err == nil || !strings.Contains(err.Error(), "vertical_datum") {
+		t.Fatalf("пустой датум принят: %v", err)
+	}
+	contradictory := strings.Replace(data, `"tide_corrected":true`, `"tide_corrected":false`, 1)
+	if err := os.WriteFile(path, []byte(contradictory), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadObservations(path); err == nil || !strings.Contains(err.Error(), "tide_corrected=true") {
+		t.Fatalf("противоречивый паспорт принят: %v", err)
 	}
 }
 
