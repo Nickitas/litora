@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/shared/shadcn/components/ui/slider";
 import { periodLabel, periodStart, shiftPeriod, type ShorelineTimeUnit } from "../model/shoreline-time";
 import { ScientificInputUpload } from "./scientific-input-upload";
+import { ShorelineYearNavigator } from "./shoreline-year-navigator";
+import { ShorelineDataAudit } from "./shoreline-data-audit";
 
 const dateTime = new Intl.DateTimeFormat("ru-RU", {
   dateStyle: "medium", timeStyle: "short", timeZone: "UTC",
@@ -45,7 +47,7 @@ export function ObservedShorelineSeries() {
     api.scientificInputs().then((result) => {
       if (!active) return;
       const ready = result.filter((item) => item.role === "shoreline_timeseries_geojson" && item.status === "ready");
-      setInputs(ready);
+      setInputs(result);
       setSelectedId((current) => current || ready[0]?.id || "");
       setListError("");
     }).catch((error: unknown) => {
@@ -106,7 +108,8 @@ export function ObservedShorelineSeries() {
     if (last >= 0) setPosition(last);
   }
 
-  const selected = inputs.find((item) => item.id === selectedId);
+  const observedInputs = inputs.filter((item) => item.role === "shoreline_timeseries_geojson" && item.status === "ready");
+  const selected = observedInputs.find((item) => item.id === selectedId);
   const frame = series?.frames[position];
   const from = periodStart(anchor, unit).getTime();
   const to = shiftPeriod(anchor, unit, 1).getTime();
@@ -153,7 +156,7 @@ export function ObservedShorelineSeries() {
         <p role="alert" className="text-destructive">{listError}{" "}
           <Button variant="link" onClick={() => { setListLoading(true); setReload((value) => value + 1); }}>Повторить</Button>
         </p>
-      ) : inputs.length === 0 ? (
+      ) : observedInputs.length === 0 ? (
         <p className="rounded-lg border p-4 text-sm text-muted-foreground">
           Сохранённых рядов пока нет. Загрузите датированные наблюдения GeoJSON, чтобы увидеть изменения по датам.
         </p>
@@ -164,7 +167,7 @@ export function ObservedShorelineSeries() {
             setSelectedId(value); setSeries(null); setSeriesLoading(true); setPlaying(false);
           }}>
             <SelectTrigger id="observed-series"><SelectValue /></SelectTrigger>
-            <SelectContent>{inputs.map((item) => <SelectItem key={item.id} value={item.id}>
+            <SelectContent>{observedInputs.map((item) => <SelectItem key={item.id} value={item.id}>
               {item.name} · {item.source}
             </SelectItem>)}</SelectContent>
           </Select>
@@ -204,6 +207,8 @@ export function ObservedShorelineSeries() {
             <span>{dateTime.format(new Date(series.frames[0].time))} UTC</span>
             <span>{dateTime.format(new Date(series.frames.at(-1)!.time))} UTC</span>
           </div>
+          <ShorelineYearNavigator frames={series.frames} selectedPosition={position}
+            onSelectPosition={choose} label="Охват наблюдений по годам" />
           <div className="flex flex-wrap items-end gap-3 rounded-lg border p-3">
             <div className="space-y-1"><Label htmlFor="observation-time-unit">Масштаб времени</Label>
               <Select value={unit} onValueChange={(value) => setUnit(value as ShorelineTimeUnit)}>
@@ -241,9 +246,12 @@ export function ObservedShorelineSeries() {
           <p className="text-xs text-muted-foreground">
             При экспорте из CoastSat линия обычно описывает границу песка и воды. Приливы, волны,
             облака и качество геопривязки влияют на её положение; показанные контуры не являются
-            непрерывным мониторингом или прогнозом эрозии. Смысл geoaccuracy уточняйте у источника.
+            непрерывным мониторингом или прогнозом эрозии. Смысл geoaccuracy уточняйте у источника;
+            это поле не заменяет неопределённость положения линии. Сведения о поправке уровня воды
+            пока не входят в контракт карты, поэтому сравнение разных дат требует проверки исходного ряда.
           </p>
         </> : null}
+        {selected && <ShorelineDataAudit key={selected.id} observationsInputId={selected.id} inputs={inputs} />}
       </>}
     </section>
   );

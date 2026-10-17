@@ -26,6 +26,7 @@ x-app-environment: &app-environment
   S3_AUTO_CREATE_BUCKET: "false"
   LITO_CLI_BINARY: /usr/local/bin/lito
   JOB_TIMEOUT_MS: ${JOB_TIMEOUT_MS:-300000}
+  LITO_HEAVY_ENABLED: ${LITO_HEAVY_ENABLED:-false}
 
 services:
   postgres:
@@ -82,6 +83,27 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  worker-heavy:
+    profiles: [heavy]
+    image: ${HEAVY_IMAGE:?release heavy image required}
+    command: ["node", "dist/worker/main.js"]
+    environment:
+      <<: *app-environment
+      LITO_WORKER_PROFILE: heavy
+      JOB_TIMEOUT_MS: ${HEAVY_JOB_TIMEOUT_MS:-14400000}
+    depends_on:
+      api: { condition: service_healthy }
+    volumes:
+      - heavy-jobs:/workspace/.litora/jobs
+    mem_limit: 12g
+    cpus: 4
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    init: true
+    stop_grace_period: 60s
+    restart: unless-stopped
+    logging: *logging
+
   web:
     image: ${WEB_IMAGE:?release web image required}
     depends_on:
@@ -115,6 +137,7 @@ volumes:
   postgres-data:
   caddy-data:
   caddy-config:
+  heavy-jobs:
 
 networks:
   edge:

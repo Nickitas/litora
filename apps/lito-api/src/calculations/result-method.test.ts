@@ -44,6 +44,9 @@ test("worker читает ревизию только из соответств�
     schemaVersion: 2, command: "lito calibrate-cerc", artifacts: [],
   })), "calibrate_cerc"), null);
   assert.equal(resultMethodFromManifest(Buffer.from(JSON.stringify({
+    schemaVersion: 2, command: "lito shoreline-data-audit", artifacts: [],
+  })), "shoreline_data_audit"), null);
+  assert.equal(resultMethodFromManifest(Buffer.from(JSON.stringify({
     schemaVersion: 2, command: "lito seabed check-full", artifacts: [],
   })), "seabed_check_full"), null);
   for (const bytes of [

@@ -16,7 +16,7 @@ import type {
   ScientificInputRole,
 } from "@litora/contracts";
 import { aiNecessityDefaults, allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, figureFiveDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
-import { defaultCoastlineDataset } from "@litora/generated-data";
+import { defaultCoastlineDataset, defaultCoastlineExample, findSavedExample } from "@litora/generated-data";
 import { ArrowUpRight, Database, FilePlus2, X } from "lucide-react";
 import { api } from "@/shared/api/client";
 import { Button } from "@/shared/shadcn/components/ui/button";
@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from "@/shared/shadcn/components/ui/select";
 import { errorMessage } from "./model/use-calculations";
+import { groupDatasets } from "./model/dataset-groups";
 import { scenarioGuidance } from "./model/scenario-guidance";
 import { DatasetUpload } from "./ui/dataset-upload";
 import { ScientificInputUpload } from "./ui/scientific-input-upload";
@@ -85,6 +86,7 @@ export function NewCalculationDialog({
   const [allFileOptions, setAllFileOptions] = useState<AllOptionsDto>(allFileDefaults);
   const [calibrationOptions, setCalibrationOptions] = useState<Omit<CercCalibrationOptionsDto, "bathymetryResolution">>(cercCalibrationDefaults);
   const [calibrationResolution, setCalibrationResolution] = useState("");
+  const [auditValidationStart, setAuditValidationStart] = useState("");
   const [meshCellSizes, setMeshCellSizes] = useState("1000");
   const [meshBoundaryDetails, setMeshBoundaryDetails] = useState("1000");
   const [meshGenerators, setMeshGenerators] = useState("frontal-quad");
@@ -237,6 +239,9 @@ export function NewCalculationDialog({
         });
         break;
       }
+      case "shoreline_data_audit":
+        if (typeof input.validationStart === "string") setAuditValidationStart(input.validationStart);
+        break;
       case "mesh":
         string("cellSizes", setMeshCellSizes);
         string("boundaryDetails", setMeshBoundaryDetails);
@@ -431,10 +436,18 @@ export function NewCalculationDialog({
     try {
       let selectedDatasetId = datasetId;
       if (kind === "dimension_dataset" && !selectedDatasetId) {
-        const example = await api.createDataset(defaultCoastlineDataset);
-        setDatasets((current) => [example, ...current]);
-        setDatasetId(example.id);
-        selectedDatasetId = example.id;
+        const existingExample = findSavedExample(datasets, defaultCoastlineExample);
+        if (existingExample) {
+          selectedDatasetId = existingExample.id;
+        } else {
+          if (datasets.length >= 100) {
+            throw new Error("Лимит наборов достигнут. Выберите уже сохранённый набор для расчёта.");
+          }
+          const example = await api.createDataset(defaultCoastlineDataset);
+          setDatasets((current) => [example, ...current]);
+          setDatasetId(example.id);
+          selectedDatasetId = example.id;
+        }
       }
       const job = await api.createCalculation({
         kind,
@@ -445,6 +458,7 @@ export function NewCalculationDialog({
           ...(kind === "all_demo" ? allDemoOptions : {}),
           ...(kind === "all_file" ? allFileOptions : {}),
           ...(kind === "calibrate_cerc" ? { ...calibrationOptions, bathymetryResolution: Number(calibrationResolution) } : {}),
+          ...(kind === "shoreline_data_audit" && auditValidationStart ? { validationStart: auditValidationStart } : {}),
           ...(kind === "mesh" ? {
             cellSizes: meshCellSizes, boundaryDetails: meshBoundaryDetails,
             generators: meshGenerators, maxCells: meshMaxCells,
@@ -679,6 +693,7 @@ export function NewCalculationDialog({
                       setMissingRepeatInputs([]);
                       setDatasetUploadOpen(false);
                       setUploadField(null);
+                      setAuditValidationStart("");
                     }}
                   >
                     <SelectTrigger
@@ -764,22 +779,25 @@ export function NewCalculationDialog({
                   </h3>
                   <div className="mt-4 space-y-2">
                     <Label htmlFor="erosion-steps">
-                      Шаги волнового ряда ({isDemoKind ? "1" : "0"}–{kind === "all_demo" ? 24 : 48}{isDemoKind ? "" : "; 0 — весь ряд"})
+                      Шаги волнового ряда ({isDemoKind ? "1" : "0"}–{kind === "all_demo" ? 24 : kind === "erosion" ? 168 : 48}{isDemoKind ? "" : "; 0 — весь ряд"})
                     </Label>
                     <Input
                       id="erosion-steps"
                       type="number"
                       min={isDemoKind ? 1 : 0}
-                      max={kind === "all_demo" ? 24 : 48}
+                      max={kind === "all_demo" ? 24 : kind === "erosion" ? 168 : 48}
                       required
                       value={cercOptions.steps}
                       onChange={(event) => {
                         const steps = Number(event.target.value);
-                        updateCercOptions(isDemoKind ? { steps } : steps === 0
+                        updateCercOptions(isDemoKind ? { steps, ...(steps > 48 ? { outputGif: false } : {}) } : steps === 0
                           ? { steps, svgMaxFrames: cercOptions.svgMaxFrames || 64, outputGif: false, csvFormat: "long" }
                           : { steps, svgMaxFrames: 0 });
                       }}
                     />
+                    {kind === "erosion" && <p className="text-xs text-muted-foreground">
+                      Встроенный прогноз волн содержит 168 почасовых состояний (7 суток). Это учебный сценарий, не историческое наблюдение и не прогноз эрозии на годы. Для ряда длиннее 48 часов доступен реплей вместо GIF.
+                    </p>}
                   </div>
                   {!isDemoKind && cercOptions.steps === 0 && (
                     <div className="mt-4 space-y-2 rounded-xl border bg-muted/35 p-4">
@@ -847,7 +865,7 @@ export function NewCalculationDialog({
                       {isCercKind && (
                         <div className="space-y-4 border-t pt-4">
                           <label className="flex min-h-11 items-center gap-3 text-sm">
-                            <input type="checkbox" checked={cercOptions.outputGif} disabled={cercOptions.steps === 0}
+                            <input type="checkbox" checked={cercOptions.outputGif} disabled={cercOptions.steps === 0 || cercOptions.steps > 48}
                               onChange={(event) => updateCercOptions({ outputGif: event.target.checked })} />
                             Сохранить анимацию GIF
                           </label>
@@ -939,17 +957,20 @@ export function NewCalculationDialog({
                         <SelectItem value="__example__">
                           Встроенный пример Сочи (по умолчанию)
                         </SelectItem>
-                        {datasets.map((dataset) => (
-                          <SelectItem key={dataset.id} value={dataset.id}>
-                            {dataset.name} · {dataset.pointCount} точек
+                        {groupDatasets(datasets).map(({ dataset, records }) => {
+                          const option = records.find((item) => item.id === datasetId) ?? dataset;
+                          return <SelectItem key={option.id} value={option.id}>
+                            {option.name} · {option.pointCount} точек
                           </SelectItem>
-                        ))}
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
                     {selectedDataset?.source ??
-                      "Пример Сочи (OpenStreetMap, ODbL) сохранится в вашем аккаунте при запуске."}
+                      (findSavedExample(datasets, defaultCoastlineExample)
+                        ? "Пример Сочи (OpenStreetMap, ODbL) уже сохранён и будет использован повторно."
+                        : "Пример Сочи (OpenStreetMap, ODbL) сохранится в вашем аккаунте при запуске.")}
                     {selectedDataset?.sourceRevision &&
                       ` · версия: ${selectedDataset.sourceRevision}`}
                   </p>
@@ -1008,12 +1029,20 @@ export function NewCalculationDialog({
                         Выберите закрытый ключ и отчёт того же AI-01/ADAPT-03, исходные модель, паспорт и контур, а также заполненный TSV оценок. Go сверит SHA-256; пути из старого задания не используются. Ключ не передавайте экспертам.
                       </p>
                     )}
-                    {optionalScientificRequirements && (
+                    {optionalScientificRequirements && kind !== "shoreline_data_audit" && (
                       <p className="mt-2 text-sm text-muted-foreground">
                         Дополнительные профили CERC необязательны. Их индексы относятся к точкам после нормализации контура в Go: для источника point_index, для сооружения left_point_index. Проверьте порядок и число точек на том же входном GeoJSON. Положительный source_rate_m3_s добавляет наносы, отрицательный удаляет; transmission_coefficient сооружения задаётся от 0 до 1. Каждый элемент требует data_source.
                         {kind === "all_file" && " При выборе профиля упрощение базовой модели выключается: иначе индексы сместятся."}
                       </p>
                     )}
+                    {kind === "shoreline_data_audit" && <p className="mt-2 text-sm text-muted-foreground">
+                      Выберите ряд датированных контуров. Волновой ряд необязателен, но без него аудит не оценит покрытие волн. Результат не является прогнозом.
+                    </p>}
+                    {kind === "shoreline_data_audit" && <div className="max-w-xs space-y-2">
+                      <Label htmlFor="audit-validation-start">Начало отложенной проверки UTC (необязательно)</Label>
+                      <Input id="audit-validation-start" type="date" value={auditValidationStart}
+                        onChange={(event) => setAuditValidationStart(event.target.value)} />
+                    </div>}
                   </div>
                   {scientificFields.map(([field, role]) => {
                     const isOptional = Object.hasOwn(optionalScientificRequirements ?? {}, field);
@@ -1056,12 +1085,12 @@ export function NewCalculationDialog({
                               return next;
                             });
                             setMissingRepeatInputs((current) => current.filter((item) => item !== field));
-                          }}>Не использовать этот профиль</Button>
+                          }}>{kind === "shoreline_data_audit" ? "Без волнового ряда" : "Не использовать этот профиль"}</Button>
                         )}
                         {isOptional && missingRepeatInputs.includes(field) && !selectedScientific[field] && (
                           <Button type="button" variant="ghost" onClick={() =>
                             setMissingRepeatInputs((current) => current.filter((item) => item !== field))
-                          }>Продолжить без недоступного профиля</Button>
+                          }>{kind === "shoreline_data_audit" ? "Продолжить без волнового ряда" : "Продолжить без недоступного профиля"}</Button>
                         )}
                         {chosenArtifact && (
                           <p className="text-xs text-muted-foreground">

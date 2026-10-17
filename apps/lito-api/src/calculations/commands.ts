@@ -22,6 +22,7 @@ export const calculationKinds: CalculationKindDto[] = [
   { kind: "all_demo", title: "Полный демонстрационный конвейер Сочи", description: "Проверка контура, размерность, CERC и баланс наносов; SVG, JSON, опционально CSV и GIF." },
   { kind: "all_file", title: "Полный конвейер по своим данным", description: "Проверка контура, размерность, CERC и баланс наносов по загруженным файлам; не калиброванный прогноз." },
   { kind: "calibrate_cerc", title: "Калибровка CERC по наблюдениям", description: "Сравнение коэффициентов CERC с независимыми годовыми скоростями береговой линии и фактическим годовым волновым рядом." },
+  { kind: "shoreline_data_audit", title: "Аудит ряда береговой линии", description: "Проверка дат, пробелов, точности и покрытия волнами в Go; без прогноза." },
   { kind: "mesh", title: "Плоская сетка Чёрного моря", description: "Gmsh строит MSH и SVG обзоры сеток по загруженному полному контуру." },
   { kind: "seabed_build", title: "Построить модель дна", description: "Назначить глубины плоской сетке и получить MSH, VTU, CSV и паспорт экспорта." },
   { kind: "seabed_render", title: "Карты и 3D-рельеф дна", description: "SVG карты глубин, фрагментов фактической сетки, 3D-рельефа и профилей из готовой модели MSH." },
@@ -68,6 +69,16 @@ function numberIn(value: unknown, label: string, minimum: number, maximum: numbe
 function rejectUnknown(input: Record<string, unknown>, allowed: string[]) {
   if (Object.keys(input).some((key) => !allowed.includes(key)))
     throw new BadRequestException("Недопустимые параметры расчёта");
+}
+
+function optionalUtcDay(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    throw new BadRequestException("Дата начала проверки должна быть ГГГГ-ММ-ДД UTC");
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== value)
+    throw new BadRequestException("Некорректная календарная дата начала проверки");
+  return value;
 }
 
 function references(input: Record<string, unknown>, fields: Record<string, ScientificInputRole>) {
@@ -202,6 +213,8 @@ function validateCercOptions(
   const csvFormat = input.csvFormat ?? defaults.csvFormat;
   if (steps === 0 && outputGif)
     throw new BadRequestException("GIF для полного волнового ряда недоступен из-за расхода памяти");
+  if (steps > 48 && outputGif)
+    throw new BadRequestException("Для ряда длиннее 48 часов используйте интерактивный реплей вместо GIF");
   if (steps === 0 && outputCsv && csvFormat === "wide")
     throw new BadRequestException("Для полного волнового ряда используйте длинный CSV");
   return {
@@ -328,7 +341,7 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
       return { kind: data.kind, input: references(p, scientificInputFields[data.kind]) };
     case "erosion": {
       rejectUnknown(p, Object.keys(erosionDemoDefaults));
-      return { kind: "erosion", input: { ...validateCercOptions(p, erosionDemoDefaults, 48, 48) } };
+      return { kind: "erosion", input: { ...validateCercOptions(p, erosionDemoDefaults, 168, 48) } };
     }
     case "erosion_file": {
       const fields = scientificInputFields.erosion_file;
@@ -361,6 +374,15 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
       rejectUnknown(p, [...Object.keys(fields), ...Object.keys(optionalScientificInputRequirements.calibrate_cerc), ...Object.keys(cercCalibrationDefaults), "bathymetryResolution"]);
       return { kind: "calibrate_cerc", input: {
         ...references(p, fields), ...optionalReferences(p, "calibrate_cerc"), ...validateCalibrationOptions(p),
+      } };
+    }
+    case "shoreline_data_audit": {
+      const fields = scientificInputFields.shoreline_data_audit;
+      rejectUnknown(p, [...Object.keys(fields), ...Object.keys(optionalScientificInputRequirements.shoreline_data_audit), "validationStart"]);
+      const validationStart = optionalUtcDay(p.validationStart);
+      return { kind: "shoreline_data_audit", input: {
+        ...references(p, fields), ...optionalReferences(p, "shoreline_data_audit"),
+        ...(validationStart ? { validationStart } : {}),
       } };
     }
     case "mesh": {
@@ -554,6 +576,7 @@ export function commandArguments(
       return ["map", "black-sea", "--input", required("coastlineInputId"), "--output", output];
     case "erosion":
       return ["erosion", "--black-sea-sochi", "--offline", ...cercArguments(input),
+        "--svg-max-frames", "12",
         ...(input.outputCsv ? ["--output-csv", "erosion-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
         ...(input.outputGif ? ["--output-gif", "erosion-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
         "--output", output];
@@ -592,6 +615,11 @@ export function commandArguments(
         "--left-boundary-transport", String(input.leftBoundaryTransport),
         "--right-boundary-transport", String(input.rightBoundaryTransport),
         ...cercProfileArguments(),
+        "--output", output];
+    case "shoreline_data_audit":
+      return ["shoreline-data-audit", "--observations", required("observationsInputId"),
+        ...(input.waveInputId ? ["--wave-input", required("waveInputId"), "--wave-source", requiredSource("waveInputId")] : []),
+        ...(input.validationStart ? ["--validation-start", String(input.validationStart)] : []),
         "--output", output];
     case "mesh":
       return ["mesh", "--input", required("coastlineInputId"),

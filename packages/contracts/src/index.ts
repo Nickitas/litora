@@ -239,6 +239,7 @@ export type CalculationKind =
   | "all_demo"
   | "all_file"
   | "calibrate_cerc"
+  | "shoreline_data_audit"
   | "mesh"
   | "seabed_build"
   | "seabed_render"
@@ -284,7 +285,7 @@ export interface CercOptionsDto {
 export type ErosionDemoOptionsDto = CercOptionsDto;
 
 export const erosionDemoDefaults: CercOptionsDto = {
-  steps: 3,
+  steps: 168,
   breakingIndex: 0.78,
   bermHeight: 2,
   closureDepth: 8,
@@ -305,6 +306,7 @@ export const erosionDemoDefaults: CercOptionsDto = {
 /** Параметры CERC для собственного контура, волнового ряда и батиметрии. */
 export const erosionFileDefaults: CercOptionsDto = {
   ...erosionDemoDefaults,
+  steps: 3,
   maxBathymetryGap: 1500,
   svgMaxFrames: 0,
 };
@@ -475,6 +477,9 @@ export const scientificInputRequirements = {
     ...ownCercInputRequirements,
     observationsInputId: "shoreline_observations_json",
   },
+  shoreline_data_audit: {
+    observationsInputId: "shoreline_timeseries_geojson",
+  },
   seabed_build: {
     flatMeshInputId: "flat_mesh_msh",
     bathymetryInputId: "bathymetry_grid_json",
@@ -543,6 +548,9 @@ export const optionalScientificInputRequirements = {
   calibrate_cerc: {
     sedimentSourcesInputId: "longshore_sediment_sources_json",
     structuresInputId: "longshore_structures_json",
+  },
+  shoreline_data_audit: {
+    waveInputId: "wave_climate",
   },
 } as const satisfies Partial<Record<CalculationKind, Record<string, ScientificInputRole>>>;
 

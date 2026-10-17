@@ -21,7 +21,7 @@ test("допустимый запрос преобразуется в фикси
     "--black-sea-sochi",
     "--offline",
     "--steps",
-    "3",
+    "168",
     "--breaking-index", "0.78",
     "--berm-height", "2",
     "--closure-depth", "8",
@@ -32,6 +32,7 @@ test("допустимый запрос преобразуется в фикси
     "--max-bathymetry-gap", "3000",
     "--left-boundary-transport", "0",
     "--right-boundary-transport", "0",
+    "--svg-max-frames", "12",
     "--output",
     "/tmp/job",
   ]);
@@ -41,7 +42,38 @@ test("допустимый запрос преобразуется в фикси
   });
 });
 
+test("аудит ряда принимает только приватные UUID и передаёт worker подготовленные файлы", () => {
+  const observationsInputId = "33333333-3333-4333-8333-333333333333";
+  const waveInputId = "44444444-4444-4444-8444-444444444444";
+  const job = validateCalculation({ kind: "shoreline_data_audit", input: { observationsInputId, waveInputId } });
+  assert.deepEqual(scientificReferences(job).map(({ role }) => role), ["shoreline_timeseries_geojson", "wave_climate"]);
+  assert.deepEqual(commandArguments(job, "/job/output", undefined,
+    { observationsInputId: "/job/observations.json", waveInputId: "/job/waves.csv" },
+    { waveInputId: "Локальный архив волн" }), [
+    "shoreline-data-audit", "--observations", "/job/observations.json",
+    "--wave-input", "/job/waves.csv", "--wave-source", "Локальный архив волн", "--output", "/job/output",
+  ]);
+  assert.deepEqual(commandArguments(
+    validateCalculation({ kind: "shoreline_data_audit", input: { observationsInputId } }),
+    "/job/output", undefined, { observationsInputId: "/job/observations.json" },
+  ), ["shoreline-data-audit", "--observations", "/job/observations.json", "--output", "/job/output"]);
+  const split = validateCalculation({ kind: "shoreline_data_audit", input: { observationsInputId, validationStart: "2022-01-01" } });
+  assert.deepEqual(commandArguments(split, "/job/output", undefined, { observationsInputId: "/job/observations.json" }), [
+    "shoreline-data-audit", "--observations", "/job/observations.json", "--validation-start", "2022-01-01", "--output", "/job/output",
+  ]);
+  for (const input of [{}, { observationsInputId: "/etc/passwd" },
+    { observationsInputId, waveInputId: "http://internal" },
+    { observationsInputId, output: "/tmp/unsafe" },
+    { observationsInputId, validationStart: "2022-02-30" },
+    { observationsInputId, validationStart: "2022-01-01;echo bad" }]) {
+    assert.throws(() => validateCalculation({ kind: "shoreline_data_audit", input }));
+  }
+});
+
 test("демо CERC принимает ограниченные параметры и экспортирует CSV в каталог worker", () => {
+  assert.equal(validateCalculation({ kind: "erosion", input: { steps: 168 } }).input?.steps, 168);
+  assert.throws(() => validateCalculation({ kind: "erosion", input: { steps: 169 } }));
+  assert.throws(() => validateCalculation({ kind: "erosion", input: { steps: 168, outputGif: true } }));
   const job = validateCalculation({ kind: "erosion", input: {
     steps: 12, breakingIndex: 0.85, cercCoefficient: 0.5,
     leftBoundaryTransport: 0.02, rightBoundaryTransport: -0.01,

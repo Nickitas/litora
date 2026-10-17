@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import type {
   AuthDto,
@@ -11,8 +12,18 @@ import type {
   ScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
-import { defaultCoastlineDataset } from "@litora/generated-data";
+import {
+  allDemoDefaults,
+  allFileDefaults,
+  cercCalibrationDefaults,
+  erosionDemoDefaults,
+  erosionFileDefaults,
+} from "@litora/contracts";
+import {
+  coastlineExamples,
+  defaultCoastlineDataset,
+  defaultCoastlineExample,
+} from "@litora/generated-data";
 
 const user = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -68,6 +79,26 @@ const dataset = {
   createdAt: "2026-09-29T12:00:00.000Z",
 } satisfies DatasetDto;
 
+function savedExample(
+  example: (typeof coastlineExamples)[number],
+  id: string
+): DatasetDto {
+  const geometryBytes = Buffer.from(JSON.stringify(example.dataset.geometry));
+  return {
+    ...dataset,
+    id,
+    name: example.dataset.name,
+    source: example.dataset.source,
+    sourceRevision: example.dataset.sourceRevision ?? null,
+    license: example.dataset.license,
+    crs: example.dataset.crs,
+    coordinateUnit: example.dataset.coordinateUnit,
+    pointCount: example.dataset.geometry.coordinates.length,
+    sizeBytes: geometryBytes.length,
+    sha256: example.sha256,
+  };
+}
+
 const articleInputRoles = [
   "seabed_msh",
   "bathymetry_source_json",
@@ -76,20 +107,22 @@ const articleInputRoles = [
   "adaptive_field_report_json",
   "coastline_geojson",
 ] as const satisfies ScientificInputRole[];
-const articleInputs: ScientificInputDto[] = articleInputRoles.map((role, index) => ({
-  id: `77777777-7777-4777-8777-${String(index + 1).padStart(12, "0")}`,
-  role,
-  name: `Архивный вход ${index + 1}`,
-  filename: `input-${index + 1}.json`,
-  sizeBytes: 1024,
-  source: "Тестовый архив",
-  license: "Тестовое использование",
-  crs: "EPSG:4326",
-  coordinateUnit: "degrees",
-  status: "ready",
-  sha256: "a".repeat(64),
-  createdAt: "2026-09-29T12:00:00.000Z",
-}));
+const articleInputs: ScientificInputDto[] = articleInputRoles.map(
+  (role, index) => ({
+    id: `77777777-7777-4777-8777-${String(index + 1).padStart(12, "0")}`,
+    role,
+    name: `Архивный вход ${index + 1}`,
+    filename: `input-${index + 1}.json`,
+    sizeBytes: 1024,
+    source: "Тестовый архив",
+    license: "Тестовое использование",
+    crs: "EPSG:4326",
+    coordinateUnit: "degrees",
+    status: "ready",
+    sha256: "a".repeat(64),
+    createdAt: "2026-09-29T12:00:00.000Z",
+  })
+);
 
 type ApiReply = { status?: number; body: unknown };
 
@@ -135,10 +168,18 @@ async function mockApi(
             },
           };
       }
-      if (!result && method === "GET" &&
-          (path === "/api/scientific-inputs" || path === "/api/scientific-inputs/reusable-artifacts"))
+      if (
+        !result &&
+        method === "GET" &&
+        (path === "/api/scientific-inputs" ||
+          path === "/api/scientific-inputs/reusable-artifacts")
+      )
         result = { body: [] };
-      if (!result && path === "/api/calculations/deletions-current" && method === "GET")
+      if (
+        !result &&
+        path === "/api/calculations/deletions-current" &&
+        method === "GET"
+      )
         result = { body: null };
       if (!result) {
         unexpected.push(`${method} ${path}`);
@@ -180,29 +221,45 @@ async function chooseTheme(page: Page, mode: "light" | "dark" | "system") {
 
 async function selectArticleInput(page: Page, field: string, index: number) {
   await page.locator(`#scientific-${field}`).click();
-  await page.getByRole("option", { name: new RegExp(`Архивный вход ${index + 1}`) }).click();
+  await page
+    .getByRole("option", { name: new RegExp(`Архивный вход ${index + 1}`) })
+    .click();
 }
 
 async function mockArticleCalculations(page: Page, submissions: unknown[]) {
   const articleKinds = [
-    { kind: "seabed_adapt", title: "Поле размера", description: "Тестовый сценарий" },
-    { kind: "seabed_compare_adaptive", title: "Сравнение сеток", description: "Тестовый сценарий" },
+    {
+      kind: "seabed_adapt",
+      title: "Поле размера",
+      description: "Тестовый сценарий",
+    },
+    {
+      kind: "seabed_compare_adaptive",
+      title: "Сравнение сеток",
+      description: "Тестовый сценарий",
+    },
   ] satisfies CalculationKindDto[];
   return mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds" && method === "GET") return { body: articleKinds };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: articleKinds };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/scientific-inputs" && method === "GET") return { body: articleInputs };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: articleInputs };
     if (path === "/api/calculations" && method === "GET") return { body: [] };
     if (path === "/api/calculations" && method === "POST") {
       submissions.push(body);
       return { status: 201, body: job };
     }
-    if (path === `/api/calculations/${job.id}` && method === "GET") return { body: job };
+    if (path === `/api/calculations/${job.id}` && method === "GET")
+      return { body: job };
   });
 }
 
-test("каталог показывает паспорт набора, поиск и адаптивную карточку", async ({ page }) => {
+test("каталог показывает паспорт набора, поиск и адаптивную карточку", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 360, height: 800 });
   const second = {
     ...dataset,
@@ -212,20 +269,109 @@ test("каталог показывает паспорт набора, поис�
     sourceRevision: "2025-08",
   } satisfies DatasetDto;
   const observed = await mockApi(page, (path, method) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/datasets" && method === "GET") return { body: [dataset, second] };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/datasets" && method === "GET")
+      return { body: [dataset, second] };
   });
 
   await page.goto("/lab/datasets");
   await chooseTheme(page, "dark");
-  await expect(page.getByRole("heading", { name: "Наборы данных" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Наборы данных" })
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: dataset.name })).toBeVisible();
   await expect(page.getByText(dataset.sha256)).toHaveCount(2);
   await expect(page.getByText("2 из 100 возможных")).toBeVisible();
-  await page.getByRole("textbox", { name: "Поиск по названию и источнику" }).fill("экспедиция");
+  await page
+    .getByRole("textbox", { name: "Поиск по названию и источнику" })
+    .fill("экспедиция");
   await expect(page.getByRole("heading", { name: second.name })).toBeVisible();
-  await expect(page.getByRole("heading", { name: dataset.name })).toHaveCount(0);
-  await expect(page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).resolves.toBe(true);
+  await expect(page.getByRole("heading", { name: dataset.name })).toHaveCount(
+    0
+  );
+  await expect(
+    page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).resolves.toBe(true);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("учебные контуры различаются геометрией и имеют проверяемые суммы", () => {
+  expect(new Set(coastlineExamples.map((example) => example.sha256)).size).toBe(
+    3
+  );
+  for (const example of coastlineExamples) {
+    const bytes = Buffer.from(JSON.stringify(example.dataset.geometry));
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    expect(example.sha256).toBe(digest);
+    expect(bytes.length).toBeLessThanOrEqual(65_536);
+    expect(example.dataset.geometry.coordinates.length).toBeGreaterThan(2);
+    expect(example.dataset.geometry.coordinates.length).toBeLessThanOrEqual(
+      500
+    );
+    for (const [longitude, latitude] of example.dataset.geometry.coordinates) {
+      expect(longitude).toBeGreaterThanOrEqual(-180);
+      expect(longitude).toBeLessThanOrEqual(180);
+      expect(latitude).toBeGreaterThanOrEqual(-90);
+      expect(latitude).toBeLessThanOrEqual(90);
+    }
+  }
+});
+
+test("каталог показывает сохранённые записи без предупреждения о повторах", async ({
+  page,
+}) => {
+  const first = savedExample(
+    defaultCoastlineExample,
+    "77777777-7777-4777-8777-777777777771"
+  );
+  const copy = { ...first, id: "77777777-7777-4777-8777-777777777772" };
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/datasets" && method === "GET")
+      return { body: [first, copy, dataset] };
+  });
+
+  await page.goto("/lab/datasets");
+  const savedList = page.getByRole("region", { name: "Сохранённые наборы" });
+  await expect(
+    savedList.getByRole("heading", { name: first.name })
+  ).toHaveCount(2);
+  await expect(page.getByText("3 из 100 возможных")).toBeVisible();
+  await expect(page.getByText(/Повторов:|Уникальных:/)).toHaveCount(0);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("каталог сохраняет другой реальный пример только по выбору пользователя", async ({
+  page,
+}) => {
+  const example = coastlineExamples.find((item) => item.key === "anapa")!;
+  const saved = savedExample(example, "77777777-7777-4777-8777-777777777773");
+  const submissions: unknown[] = [];
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/datasets" && method === "POST") {
+      submissions.push(body);
+      return { status: 201, body: saved };
+    }
+  });
+
+  await page.goto("/lab/datasets");
+  const exampleCard = page
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("heading", { name: example.dataset.name }) });
+  await exampleCard.getByRole("button", { name: "Сохранить набор" }).click();
+  await expect(
+    exampleCard.getByRole("button", { name: "Уже в моих наборах" })
+  ).toBeDisabled();
+  expect(submissions).toEqual([example.dataset]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -234,7 +380,8 @@ test("каталог создаёт набор отдельно от запус�
   const saved = { ...dataset, name: "Новый контур", source: "Полевой архив" };
   const submissions: unknown[] = [];
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
     if (path === "/api/datasets" && method === "POST") {
       submissions.push(body);
@@ -248,26 +395,50 @@ test("каталог создаёт набор отдельно от запус�
   await page.getByLabel("Файл GeoJSON").setInputFiles({
     name: "coast.geojson",
     mimeType: "application/geo+json",
-    buffer: Buffer.from(JSON.stringify({ type: "LineString", coordinates: [[37, 44], [37.1, 44.1]] })),
+    buffer: Buffer.from(
+      JSON.stringify({
+        type: "LineString",
+        coordinates: [
+          [37, 44],
+          [37.1, 44.1],
+        ],
+      })
+    ),
   });
   await page.getByLabel("Название", { exact: true }).fill(saved.name);
   await page.getByLabel("Источник данных").fill(saved.source);
-  await page.getByLabel("Лицензия или условия использования").fill(saved.license);
-  await page.getByRole("button", { name: "Сохранить набор" }).click();
+  await page
+    .getByLabel("Лицензия или условия использования")
+    .fill(saved.license);
+  await page
+    .locator("#dataset-creation")
+    .getByRole("button", { name: "Сохранить набор" })
+    .click();
 
   await expect(page.getByRole("heading", { name: saved.name })).toBeVisible();
-  await expect(page.getByRole("status").filter({ hasText: "сохранён" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Добавить набор" })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "сохранён" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Добавить набор" })
+  ).toBeVisible();
   expect(submissions).toHaveLength(1);
-  expect(submissions[0]).toMatchObject({ name: saved.name, source: saved.source, crs: "EPSG:4326" });
+  expect(submissions[0]).toMatchObject({
+    name: saved.name,
+    source: saved.source,
+    crs: "EPSG:4326",
+  });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("каталог различает ошибку API и пустой результат поиска", async ({ page }) => {
+test("каталог различает ошибку API и пустой результат поиска", async ({
+  page,
+}) => {
   let allowSuccess = false;
   const observed = await mockApi(page, (path, method) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
     if (path === "/api/datasets" && method === "GET") {
       return allowSuccess
         ? { body: [dataset] }
@@ -281,8 +452,12 @@ test("каталог различает ошибку API и пустой рез�
   allowSuccess = true;
   await page.getByRole("button", { name: "Повторить загрузку" }).click();
   await expect(page.getByRole("heading", { name: dataset.name })).toBeVisible();
-  await page.getByRole("textbox", { name: "Поиск по названию и источнику" }).fill("неизвестный");
-  await expect(page.getByText("По этому запросу наборы не найдены.", { exact: false })).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "Поиск по названию и источнику" })
+    .fill("неизвестный");
+  await expect(
+    page.getByText("По этому запросу наборы не найдены.", { exact: false })
+  ).toBeVisible();
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -305,7 +480,9 @@ test("устаревшая ссылка на создание возвращае
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("расчёт из истории открывает редактируемые параметры без автоматического запуска", async ({ page }) => {
+test("расчёт из истории открывает редактируемые параметры без автоматического запуска", async ({
+  page,
+}) => {
   const original = { ...job, status: "succeeded" as const };
   const created = {
     ...job,
@@ -314,12 +491,17 @@ test("расчёт из истории открывает редактируем
   };
   let submitted: unknown;
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/calculations" && method === "GET") return { body: [original] };
-    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
-    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === "/api/calculations" && method === "GET")
+      return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET")
+      return { body: original };
+    if (path === `/api/calculations/${created.id}` && method === "GET")
+      return { body: created };
     if (path === "/api/calculations" && method === "POST") {
       submitted = body;
       return { status: 201, body: created };
@@ -330,7 +512,7 @@ test("расчёт из истории открывает редактируем
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog).toBeVisible();
-  const steps = dialog.getByLabel("Шаги волнового ряда (1–48)");
+  const steps = dialog.getByLabel("Шаги волнового ряда (1–168)");
   await expect(steps).toHaveValue("4");
   expect(submitted).toBeUndefined();
   await steps.fill("5");
@@ -341,27 +523,58 @@ test("расчёт из истории открывает редактируем
   await dialog.getByLabel("Кадров в секунду (1–30)").fill("8");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
-  expect(submitted).toEqual({ kind: "erosion", input: {
-    ...erosionDemoDefaults, steps: 5, cercCoefficient: 0.5,
-    outputCsv: true, csvFormat: "wide", outputGif: true, gifFps: 8,
-  } });
+  expect(submitted).toEqual({
+    kind: "erosion",
+    input: {
+      ...erosionDemoDefaults,
+      steps: 5,
+      cercCoefficient: 0.5,
+      outputCsv: true,
+      csvFormat: "wide",
+      outputGif: true,
+      gifFps: 8,
+    },
+  });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("полный демо-конвейер позволяет настроить GIF и повторить параметры", async ({ page }) => {
-  const fullKind = [{ kind: "all_demo", title: "Полный конвейер Сочи", description: "Демо" }] satisfies CalculationKindDto[];
-  const original = { ...job, kind: "all_demo" as const, status: "succeeded" as const,
-    input: { ...allDemoDefaults, steps: 4, outputGif: true, gifFps: 8, gifSkip: 2 } };
-  const created = { ...original, id: "99999999-9999-4999-8999-999999999999", status: "queued" as const };
+test("полный демо-конвейер позволяет настроить GIF и повторить параметры", async ({
+  page,
+}) => {
+  const fullKind = [
+    { kind: "all_demo", title: "Полный конвейер Сочи", description: "Демо" },
+  ] satisfies CalculationKindDto[];
+  const original = {
+    ...job,
+    kind: "all_demo" as const,
+    status: "succeeded" as const,
+    input: {
+      ...allDemoDefaults,
+      steps: 4,
+      outputGif: true,
+      gifFps: 8,
+      gifSkip: 2,
+    },
+  };
+  const created = {
+    ...original,
+    id: "99999999-9999-4999-8999-999999999999",
+    status: "queued" as const,
+  };
   let submitted: unknown;
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds" && method === "GET") return { body: fullKind };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: fullKind };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/calculations" && method === "GET") return { body: [original] };
-    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
-    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === "/api/calculations" && method === "GET")
+      return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET")
+      return { body: original };
+    if (path === `/api/calculations/${created.id}` && method === "GET")
+      return { body: created };
     if (path === "/api/calculations" && method === "POST") {
       submitted = body;
       return { status: 201, body: created };
@@ -373,42 +586,88 @@ test("полный демо-конвейер позволяет настроит
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog.getByText("Демонстрационный сценарий")).toBeVisible();
-  await expect(dialog.getByLabel("Шаги волнового ряда (1–24)")).toHaveValue("4");
+  await expect(dialog.getByLabel("Шаги волнового ряда (1–24)")).toHaveValue(
+    "4"
+  );
   await expect(dialog.getByLabel("Сохранить анимацию GIF")).toBeChecked();
   await dialog.getByLabel("Кадров в секунду (1–30)").fill("12");
-  await dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)").fill("300");
+  await dialog
+    .getByLabel("Максимум точек базовой модели (0 или 2–10000)")
+    .fill("300");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
-  expect(submitted).toEqual({ kind: "all_demo", input: {
-    ...allDemoDefaults, steps: 4, outputGif: true, gifFps: 12, gifSkip: 2, modelMaxPoints: 300,
-  } });
+  expect(submitted).toEqual({
+    kind: "all_demo",
+    input: {
+      ...allDemoDefaults,
+      steps: 4,
+      outputGif: true,
+      gifFps: 12,
+      gifSkip: 2,
+      modelMaxPoints: 300,
+    },
+  });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("свой CERC выбирает приватные файлы и необязательный индексный профиль без демо", async ({ page }) => {
-  const ownKind = [{ kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC по своим данным" }] satisfies CalculationKindDto[];
-  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "longshore_sediment_sources_json"] as const;
-  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
+test("свой CERC выбирает приватные файлы и необязательный индексный профиль без демо", async ({
+  page,
+}) => {
+  const ownKind = [
+    {
+      kind: "erosion_file",
+      title: "Эрозия по своим данным",
+      description: "CERC по своим данным",
+    },
+  ] satisfies CalculationKindDto[];
+  const roles = [
+    "coastline_geojson",
+    "wave_climate",
+    "bathymetry_grid_json",
+    "bathymetry_grid_metadata_json",
+    "longshore_sediment_sources_json",
+  ] as const;
+  const fields = [
+    "coastlineInputId",
+    "waveInputId",
+    "bathymetryInputId",
+    "bathymetryMetadataInputId",
+  ] as const;
   const inputs: ScientificInputDto[] = roles.map((role, index) => ({
-    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
-    name: `Вход CERC ${index + 1}`, filename: index === 1 ? "waves.csv" : "grid.json",
+    ...articleInputs[0],
+    role,
+    id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Вход CERC ${index + 1}`,
+    filename: index === 1 ? "waves.csv" : "grid.json",
   }));
-  const created = { ...job, kind: "erosion_file" as const,
-    input: { ...erosionFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
-      sedimentSourcesInputId: inputs[4].id } };
+  const created = {
+    ...job,
+    kind: "erosion_file" as const,
+    input: {
+      ...erosionFileDefaults,
+      ...Object.fromEntries(
+        fields.map((field, index) => [field, inputs[index].id])
+      ),
+      sedimentSourcesInputId: inputs[4].id,
+    },
+  };
   let submitted: unknown;
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds" && method === "GET") return { body: ownKind };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: ownKind };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: inputs };
     if (path === "/api/calculations" && method === "GET") return { body: [] };
     if (path === "/api/calculations" && method === "POST") {
       submitted = body;
       return { status: 201, body: created };
     }
-    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === `/api/calculations/${created.id}` && method === "GET")
+      return { body: created };
   });
   await page.setViewportSize({ width: 360, height: 780 });
   await openNewCalculation(page, "dark");
@@ -417,62 +676,117 @@ test("свой CERC выбирает приватные файлы и необя
   await expect(dialog.getByText("Демонстрационный сценарий")).toHaveCount(0);
   for (let index = 0; index < fields.length; index += 1) {
     await dialog.locator(`#scientific-${fields[index]}`).click();
-    await page.getByRole("option", { name: new RegExp(`Вход CERC ${index + 1}`) }).click();
+    await page
+      .getByRole("option", { name: new RegExp(`Вход CERC ${index + 1}`) })
+      .click();
   }
   await dialog.locator("#scientific-sedimentSourcesInputId").click();
   await page.getByRole("option", { name: /Вход CERC 5/ }).click();
   await dialog.locator("#erosion-steps").fill("8");
-  await dialog.getByRole("button", { name: "Параметры CERC и экспорт" }).click();
+  await dialog
+    .getByRole("button", { name: "Параметры CERC и экспорт" })
+    .click();
   await dialog.getByLabel("Поток через левую границу, м³/с").fill("0.02");
   await dialog.getByLabel("Поток через правую границу, м³/с").fill("-0.01");
   await dialog.getByLabel("Сохранить анимацию GIF").check();
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
-  expect(submitted).toEqual({ kind: "erosion_file", input: {
-    ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
-    sedimentSourcesInputId: inputs[4].id,
-    ...erosionFileDefaults, steps: 8, outputGif: true,
-    leftBoundaryTransport: 0.02, rightBoundaryTransport: -0.01,
-  } });
+  expect(submitted).toEqual({
+    kind: "erosion_file",
+    input: {
+      ...Object.fromEntries(
+        fields.map((field, index) => [field, inputs[index].id])
+      ),
+      sedimentSourcesInputId: inputs[4].id,
+      ...erosionFileDefaults,
+      steps: 8,
+      outputGif: true,
+      leftBoundaryTransport: 0.02,
+      rightBoundaryTransport: -0.01,
+    },
+  });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("свой CERC запускает весь ряд с ограниченной выборкой SVG и без GIF", async ({ page }) => {
-  const ownKind = [{ kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC по своим данным" }] satisfies CalculationKindDto[];
-  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json"] as const;
-  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
+test("свой CERC запускает весь ряд с ограниченной выборкой SVG и без GIF", async ({
+  page,
+}) => {
+  const ownKind = [
+    {
+      kind: "erosion_file",
+      title: "Эрозия по своим данным",
+      description: "CERC по своим данным",
+    },
+  ] satisfies CalculationKindDto[];
+  const roles = [
+    "coastline_geojson",
+    "wave_climate",
+    "bathymetry_grid_json",
+    "bathymetry_grid_metadata_json",
+  ] as const;
+  const fields = [
+    "coastlineInputId",
+    "waveInputId",
+    "bathymetryInputId",
+    "bathymetryMetadataInputId",
+  ] as const;
   const inputs: ScientificInputDto[] = roles.map((role, index) => ({
-    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
-    name: `Вход полного ряда ${index + 1}`, filename: index === 1 ? "waves.csv" : "grid.json",
+    ...articleInputs[0],
+    role,
+    id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Вход полного ряда ${index + 1}`,
+    filename: index === 1 ? "waves.csv" : "grid.json",
   }));
-  const created = { ...job, kind: "erosion_file" as const,
-    input: { ...erosionFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
-      steps: 0, svgMaxFrames: 24, outputGif: false } };
+  const created = {
+    ...job,
+    kind: "erosion_file" as const,
+    input: {
+      ...erosionFileDefaults,
+      ...Object.fromEntries(
+        fields.map((field, index) => [field, inputs[index].id])
+      ),
+      steps: 0,
+      svgMaxFrames: 24,
+      outputGif: false,
+    },
+  };
   let submitted: unknown;
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds" && method === "GET") return { body: ownKind };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: ownKind };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: inputs };
     if (path === "/api/calculations" && method === "GET") return { body: [] };
     if (path === "/api/calculations" && method === "POST") {
       submitted = body;
       return { status: 201, body: created };
     }
-    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === `/api/calculations/${created.id}` && method === "GET")
+      return { body: created };
   });
   await openNewCalculation(page, "dark");
   await chooseOption(page, "Что рассчитать", "Эрозия по своим данным");
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
   for (let index = 0; index < fields.length; index += 1) {
     await dialog.locator(`#scientific-${fields[index]}`).click();
-    await page.getByRole("option", { name: new RegExp(`Вход полного ряда ${index + 1}`) }).click();
+    await page
+      .getByRole("option", {
+        name: new RegExp(`Вход полного ряда ${index + 1}`),
+      })
+      .click();
   }
-  await dialog.getByRole("button", { name: "Параметры CERC и экспорт" }).click();
+  await dialog
+    .getByRole("button", { name: "Параметры CERC и экспорт" })
+    .click();
   await dialog.getByLabel("Сохранить анимацию GIF").check();
   await dialog.locator("#erosion-steps").fill("0");
-  await expect(dialog.getByLabel("Максимум SVG эрозии (2–128)")).toHaveValue("64");
+  await expect(dialog.getByLabel("Максимум SVG эрозии (2–128)")).toHaveValue(
+    "64"
+  );
   await expect(dialog.getByLabel("Сохранить анимацию GIF")).toBeDisabled();
   await expect(dialog.getByLabel("Сохранить анимацию GIF")).not.toBeChecked();
   await dialog.getByLabel("Максимум SVG эрозии (2–128)").fill("24");
@@ -483,29 +797,74 @@ test("свой CERC запускает весь ряд с ограниченно
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("полный конвейер по своим файлам повторяет входы и параметры без подмены демо", async ({ page }) => {
-  const ownKind = [{ kind: "all_file", title: "Полный конвейер по своим данным", description: "Свои входы" }] satisfies CalculationKindDto[];
-  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "longshore_structures_json"] as const;
-  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
+test("полный конвейер по своим файлам повторяет входы и параметры без подмены демо", async ({
+  page,
+}) => {
+  const ownKind = [
+    {
+      kind: "all_file",
+      title: "Полный конвейер по своим данным",
+      description: "Свои входы",
+    },
+  ] satisfies CalculationKindDto[];
+  const roles = [
+    "coastline_geojson",
+    "wave_climate",
+    "bathymetry_grid_json",
+    "bathymetry_grid_metadata_json",
+    "longshore_structures_json",
+  ] as const;
+  const fields = [
+    "coastlineInputId",
+    "waveInputId",
+    "bathymetryInputId",
+    "bathymetryMetadataInputId",
+  ] as const;
   const inputs: ScientificInputDto[] = roles.map((role, index) => ({
-    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
-    name: `Вход полного конвейера ${index + 1}`, filename: index === 1 ? "waves.csv" : "grid.json",
+    ...articleInputs[0],
+    role,
+    id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Вход полного конвейера ${index + 1}`,
+    filename: index === 1 ? "waves.csv" : "grid.json",
   }));
-  const original = { ...job, kind: "all_file" as const, status: "succeeded" as const,
-    input: { ...allFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
+  const original = {
+    ...job,
+    kind: "all_file" as const,
+    status: "succeeded" as const,
+    input: {
+      ...allFileDefaults,
+      ...Object.fromEntries(
+        fields.map((field, index) => [field, inputs[index].id])
+      ),
       structuresInputId: inputs[4].id,
-      steps: 0, svgMaxFrames: 16, modelMaxPoints: 0, noModelSimplify: true,
-      leftBoundaryTransport: 0.04, rightBoundaryTransport: -0.03 } };
-  const created = { ...original, id: "99999999-9999-4999-8999-999999999999", status: "queued" as const };
+      steps: 0,
+      svgMaxFrames: 16,
+      modelMaxPoints: 0,
+      noModelSimplify: true,
+      leftBoundaryTransport: 0.04,
+      rightBoundaryTransport: -0.03,
+    },
+  };
+  const created = {
+    ...original,
+    id: "99999999-9999-4999-8999-999999999999",
+    status: "queued" as const,
+  };
   let submitted: unknown;
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds" && method === "GET") return { body: ownKind };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: ownKind };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
-    if (path === "/api/calculations" && method === "GET") return { body: [original] };
-    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
-    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: inputs };
+    if (path === "/api/calculations" && method === "GET")
+      return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET")
+      return { body: original };
+    if (path === `/api/calculations/${created.id}` && method === "GET")
+      return { body: created };
     if (path === "/api/calculations" && method === "POST") {
       submitted = body;
       return { status: 201, body: created };
@@ -517,21 +876,35 @@ test("полный конвейер по своим файлам повторя�
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog.getByText("Демонстрационный сценарий")).toHaveCount(0);
   await expect(dialog.locator("#erosion-steps")).toHaveValue("0");
-  await expect(dialog.getByLabel("Максимум SVG эрозии (2–128)")).toHaveValue("16");
+  await expect(dialog.getByLabel("Максимум SVG эрозии (2–128)")).toHaveValue(
+    "16"
+  );
   await expect(dialog.getByLabel("Сохранить анимацию GIF")).toBeDisabled();
-  await expect(dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)")).toHaveValue("0");
-  await expect(dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)")).toBeDisabled();
+  await expect(
+    dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)")
+  ).toHaveValue("0");
+  await expect(
+    dialog.getByLabel("Максимум точек базовой модели (0 или 2–10000)")
+  ).toBeDisabled();
   await expect(dialog.getByLabel("Не упрощать базовую линию")).toBeChecked();
-  await expect(dialog.locator("#scientific-structuresInputId")).toContainText("Вход полного конвейера 5");
-  await expect(dialog.getByLabel("Поток через левую границу, м³/с")).toHaveValue("0.04");
-  await expect(dialog.getByLabel("Поток через правую границу, м³/с")).toHaveValue("-0.03");
+  await expect(dialog.locator("#scientific-structuresInputId")).toContainText(
+    "Вход полного конвейера 5"
+  );
+  await expect(
+    dialog.getByLabel("Поток через левую границу, м³/с")
+  ).toHaveValue("0.04");
+  await expect(
+    dialog.getByLabel("Поток через правую границу, м³/с")
+  ).toHaveValue("-0.03");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(submitted).toEqual({ kind: "all_file", input: original.input });
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
   const download = await downloadPromise;
-  const exported = JSON.parse(await readFile(await download.path(), "utf8")) as CalculationMetadataExportV1;
+  const exported = JSON.parse(
+    await readFile(await download.path(), "utf8")
+  ) as CalculationMetadataExportV1;
   expect(exported.calculation.input).toMatchObject({
     steps: 0,
     svgMaxFrames: 16,
@@ -543,27 +916,67 @@ test("полный конвейер по своим файлам повторя�
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("повтор не отбрасывает недоступный индексный профиль без явного выбора", async ({ page }) => {
-  const ownKind = [{ kind: "erosion_file", title: "Эрозия по своим данным", description: "Свои входы" }] satisfies CalculationKindDto[];
-  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json"] as const;
-  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
+test("повтор не отбрасывает недоступный индексный профиль без явного выбора", async ({
+  page,
+}) => {
+  const ownKind = [
+    {
+      kind: "erosion_file",
+      title: "Эрозия по своим данным",
+      description: "Свои входы",
+    },
+  ] satisfies CalculationKindDto[];
+  const roles = [
+    "coastline_geojson",
+    "wave_climate",
+    "bathymetry_grid_json",
+    "bathymetry_grid_metadata_json",
+  ] as const;
+  const fields = [
+    "coastlineInputId",
+    "waveInputId",
+    "bathymetryInputId",
+    "bathymetryMetadataInputId",
+  ] as const;
   const inputs: ScientificInputDto[] = roles.map((role, index) => ({
-    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
-    name: `Вход повтора ${index + 1}`, filename: index === 1 ? "waves.csv" : "grid.json",
+    ...articleInputs[0],
+    role,
+    id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Вход повтора ${index + 1}`,
+    filename: index === 1 ? "waves.csv" : "grid.json",
   }));
-  const original = { ...job, kind: "erosion_file" as const, status: "succeeded" as const,
-    input: { ...erosionFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
-      structuresInputId: "99999999-9999-4999-8999-999999999991" } };
-  const created = { ...original, id: "99999999-9999-4999-8999-999999999992", status: "queued" as const };
+  const original = {
+    ...job,
+    kind: "erosion_file" as const,
+    status: "succeeded" as const,
+    input: {
+      ...erosionFileDefaults,
+      ...Object.fromEntries(
+        fields.map((field, index) => [field, inputs[index].id])
+      ),
+      structuresInputId: "99999999-9999-4999-8999-999999999991",
+    },
+  };
+  const created = {
+    ...original,
+    id: "99999999-9999-4999-8999-999999999992",
+    status: "queued" as const,
+  };
   let submitted: unknown;
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds" && method === "GET") return { body: ownKind };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: ownKind };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
-    if (path === "/api/calculations" && method === "GET") return { body: [original] };
-    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
-    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: inputs };
+    if (path === "/api/calculations" && method === "GET")
+      return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET")
+      return { body: original };
+    if (path === `/api/calculations/${created.id}` && method === "GET")
+      return { body: created };
     if (path === "/api/calculations" && method === "POST") {
       submitted = body;
       return { status: 201, body: created };
@@ -572,54 +985,109 @@ test("повтор не отбрасывает недоступный индек
   await page.goto(`/lab/calculations/${original.id}`);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
-  await expect(dialog.getByText("Часть исходных данных больше недоступна.", { exact: false })).toBeVisible();
+  await expect(
+    dialog.getByText("Часть исходных данных больше недоступна.", {
+      exact: false,
+    })
+  ).toBeVisible();
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(dialog.getByRole("alert")).toContainText("Исходный индексный профиль больше недоступен");
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Исходный индексный профиль больше недоступен"
+  );
   expect(submitted).toBeUndefined();
-  await dialog.getByRole("button", { name: "Продолжить без недоступного профиля" }).click();
+  await dialog
+    .getByRole("button", { name: "Продолжить без недоступного профиля" })
+    .click();
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
-  expect(submitted).toEqual({ kind: "erosion_file", input: {
-    ...erosionFileDefaults, ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])),
-  } });
+  expect(submitted).toEqual({
+    kind: "erosion_file",
+    input: {
+      ...erosionFileDefaults,
+      ...Object.fromEntries(
+        fields.map((field, index) => [field, inputs[index].id])
+      ),
+    },
+  });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("калибровка CERC требует наблюдения и фактический шаг батиметрии", async ({ page }) => {
-  const calibrationKind = [{ kind: "calibrate_cerc", title: "Калибровка CERC по наблюдениям", description: "Годовой ряд" }] satisfies CalculationKindDto[];
-  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "shoreline_observations_json"] as const;
-  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId", "observationsInputId"] as const;
+test("калибровка CERC требует наблюдения и фактический шаг батиметрии", async ({
+  page,
+}) => {
+  const calibrationKind = [
+    {
+      kind: "calibrate_cerc",
+      title: "Калибровка CERC по наблюдениям",
+      description: "Годовой ряд",
+    },
+  ] satisfies CalculationKindDto[];
+  const roles = [
+    "coastline_geojson",
+    "wave_climate",
+    "bathymetry_grid_json",
+    "bathymetry_grid_metadata_json",
+    "shoreline_observations_json",
+  ] as const;
+  const fields = [
+    "coastlineInputId",
+    "waveInputId",
+    "bathymetryInputId",
+    "bathymetryMetadataInputId",
+    "observationsInputId",
+  ] as const;
   const inputs: ScientificInputDto[] = roles.map((role, index) => ({
-    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
-    name: `Вход калибровки ${index + 1}`, filename: index === 1 ? "waves.csv" : "rates.json",
+    ...articleInputs[0],
+    role,
+    id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Вход калибровки ${index + 1}`,
+    filename: index === 1 ? "waves.csv" : "rates.json",
   }));
-  const created = { ...job, kind: "calibrate_cerc" as const,
-    input: { ...cercCalibrationDefaults, bathymetryResolution: 0.005,
-      ...Object.fromEntries(fields.map((field, index) => [field, inputs[index].id])) } };
+  const created = {
+    ...job,
+    kind: "calibrate_cerc" as const,
+    input: {
+      ...cercCalibrationDefaults,
+      bathymetryResolution: 0.005,
+      ...Object.fromEntries(
+        fields.map((field, index) => [field, inputs[index].id])
+      ),
+    },
+  };
   let submitted: unknown;
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds" && method === "GET") return { body: calibrationKind };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: calibrationKind };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: inputs };
     if (path === "/api/calculations" && method === "GET") return { body: [] };
     if (path === "/api/calculations" && method === "POST") {
       submitted = body;
       return { status: 201, body: created };
     }
-    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === `/api/calculations/${created.id}` && method === "GET")
+      return { body: created };
   });
   await page.setViewportSize({ width: 360, height: 780 });
   await openNewCalculation(page, "dark");
   await chooseOption(page, "Что рассчитать", "Калибровка CERC по наблюдениям");
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
-  await expect(dialog.getByLabel("Фактический шаг батиметрии, градусы")).toBeEmpty();
+  await expect(
+    dialog.getByLabel("Фактический шаг батиметрии, градусы")
+  ).toBeEmpty();
   await dialog.getByLabel("Фактический шаг батиметрии, градусы").fill("0.005");
-  await expect(dialog.getByLabel("Коэффициенты CERC (1–8 через запятую)")).toHaveValue(cercCalibrationDefaults.cercCoefficients);
+  await expect(
+    dialog.getByLabel("Коэффициенты CERC (1–8 через запятую)")
+  ).toHaveValue(cercCalibrationDefaults.cercCoefficients);
   for (let index = 0; index < fields.length; index += 1) {
     await dialog.locator(`#scientific-${fields[index]}`).click();
-    await page.getByRole("option", { name: new RegExp(`Вход калибровки ${index + 1}`) }).click();
+    await page
+      .getByRole("option", { name: new RegExp(`Вход калибровки ${index + 1}`) })
+      .click();
   }
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
@@ -628,39 +1096,92 @@ test("калибровка CERC требует наблюдения и факт�
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("результат калибровки показывает рейтинг Go без пересчёта и полный отчёт", async ({ page }) => {
-  const completed = { ...job, kind: "calibrate_cerc", status: "succeeded" as const,
-    resultSummary: { fileCount: 2, totalBytes: 2048, metrics: {
-      "cerc-calibration.json": { results: [
-        { cerc_coefficient: 0.39, metrics: { rmse_m_per_year: 0.125, mae_m_per_year: 0.1,
-          mbe_m_per_year: -0.05, r_squared: 0.85, count: 12 } },
-        { cerc_coefficient: 0.2, metrics: { rmse_m_per_year: 0.5, mae_m_per_year: 0.4,
-          mbe_m_per_year: 0.2, r_squared: 0.2, count: 12 } },
-      ] },
-    } },
-    artifacts: [{ id: "99999999-9999-4999-8999-999999999999", category: "output",
-      filename: "erosion/cerc-calibration.json", contentType: "application/json",
-      sizeBytes: 2048, sha256: "b".repeat(64), downloadUrl: "https://example.test/signed-report" }],
+test("результат калибровки показывает рейтинг Go без пересчёта и полный отчёт", async ({
+  page,
+}) => {
+  const completed = {
+    ...job,
+    kind: "calibrate_cerc",
+    status: "succeeded" as const,
+    resultSummary: {
+      fileCount: 2,
+      totalBytes: 2048,
+      metrics: {
+        "cerc-calibration.json": {
+          results: [
+            {
+              cerc_coefficient: 0.39,
+              metrics: {
+                rmse_m_per_year: 0.125,
+                mae_m_per_year: 0.1,
+                mbe_m_per_year: -0.05,
+                r_squared: 0.85,
+                count: 12,
+              },
+            },
+            {
+              cerc_coefficient: 0.2,
+              metrics: {
+                rmse_m_per_year: 0.5,
+                mae_m_per_year: 0.4,
+                mbe_m_per_year: 0.2,
+                r_squared: 0.2,
+                count: 12,
+              },
+            },
+          ],
+        },
+      },
+    },
+    artifacts: [
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        category: "output",
+        filename: "erosion/cerc-calibration.json",
+        contentType: "application/json",
+        sizeBytes: 2048,
+        sha256: "b".repeat(64),
+        downloadUrl: "https://example.test/signed-report",
+      },
+    ],
   } satisfies CalculationJobDto;
   const observed = await mockApi(page, (path, method) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
     if (path === "/api/calculations/kinds" && method === "GET")
-      return { body: [{ kind: "calibrate_cerc", title: "Калибровка CERC", description: "Годовой ряд" }] };
-    if (path === `/api/calculations/${completed.id}` && method === "GET") return { body: completed };
+      return {
+        body: [
+          {
+            kind: "calibrate_cerc",
+            title: "Калибровка CERC",
+            description: "Годовой ряд",
+          },
+        ],
+      };
+    if (path === `/api/calculations/${completed.id}` && method === "GET")
+      return { body: completed };
   });
   await page.setViewportSize({ width: 360, height: 780 });
   await page.goto(`/lab/calculations/${completed.id}`);
-  const rating = page.getByRole("region", { name: "Рейтинг коэффициентов CERC" });
+  const rating = page.getByRole("region", {
+    name: "Рейтинг коэффициентов CERC",
+  });
   await expect(rating.getByRole("row")).toHaveCount(3);
   await expect(rating.getByRole("row").nth(1)).toContainText("0,125");
   await expect(rating.getByRole("row").nth(2)).toContainText("0,5");
-  await expect(page.getByRole("link", { name: "erosion/cerc-calibration.json" })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await expect(
+    page.getByRole("link", { name: "erosion/cerc-calibration.json" })
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("отсутствующий исходный набор не заменяется примером без согласия", async ({ page }) => {
+test("отсутствующий исходный набор не заменяется примером без согласия", async ({
+  page,
+}) => {
   const original = {
     ...job,
     kind: "dimension_dataset",
@@ -675,16 +1196,21 @@ test("отсутствующий исходный набор не заменяе
   let submitted: unknown;
   let datasetCreated = false;
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
     if (path === "/api/datasets" && method === "POST") {
       datasetCreated = true;
       return { status: 201, body: dataset };
     }
-    if (path === "/api/calculations" && method === "GET") return { body: [original] };
-    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
-    if (path === `/api/calculations/${created.id}` && method === "GET") return { body: created };
+    if (path === "/api/calculations" && method === "GET")
+      return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET")
+      return { body: original };
+    if (path === `/api/calculations/${created.id}` && method === "GET")
+      return { body: created };
     if (path === "/api/calculations" && method === "POST") {
       submitted = body;
       return { status: 201, body: created };
@@ -694,21 +1220,34 @@ test("отсутствующий исходный набор не заменяе
   await page.goto(`/lab/calculations/${original.id}`);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
-  await expect(dialog.getByText("Исходный набор больше недоступен.", { exact: false })).toBeVisible();
+  await expect(
+    dialog.getByText("Исходный набор больше недоступен.", { exact: false })
+  ).toBeVisible();
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(dialog.getByRole("alert")).toContainText("Исходный набор данных недоступен");
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Исходный набор данных недоступен"
+  );
   expect(datasetCreated).toBe(false);
   expect(submitted).toBeUndefined();
-  await dialog.getByRole("button", { name: "Использовать встроенный пример вместо исходного" }).click();
+  await dialog
+    .getByRole("button", {
+      name: "Использовать встроенный пример вместо исходного",
+    })
+    .click();
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(datasetCreated).toBe(true);
-  expect(submitted).toEqual({ kind: "dimension_dataset", input: { datasetId: dataset.id } });
+  expect(submitted).toEqual({
+    kind: "dimension_dataset",
+    input: { datasetId: dataset.id },
+  });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("недоступный научный файл требует нового выбора и закрытие возвращает фокус", async ({ page }) => {
+test("недоступный научный файл требует нового выбора и закрытие возвращает фокус", async ({
+  page,
+}) => {
   const original = {
     ...job,
     kind: "dimension_file",
@@ -716,12 +1255,24 @@ test("недоступный научный файл требует нового
   };
   let submitted = false;
   const observed = await mockApi(page, (path, method) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
     if (path === "/api/calculations/kinds" && method === "GET")
-      return { body: [...kinds, { kind: "dimension_file", title: "Полный контур", description: "Тест" }] };
+      return {
+        body: [
+          ...kinds,
+          {
+            kind: "dimension_file",
+            title: "Полный контур",
+            description: "Тест",
+          },
+        ],
+      };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/calculations" && method === "GET") return { body: [original] };
-    if (path === `/api/calculations/${original.id}` && method === "GET") return { body: original };
+    if (path === "/api/calculations" && method === "GET")
+      return { body: [original] };
+    if (path === `/api/calculations/${original.id}` && method === "GET")
+      return { body: original };
     if (path === "/api/calculations" && method === "POST") {
       submitted = true;
       return { status: 201, body: original };
@@ -731,13 +1282,23 @@ test("недоступный научный файл требует нового
   await page.goto(`/lab/calculations/${original.id}`);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
-  await expect(dialog.getByText("Часть исходных данных больше недоступна.", { exact: false })).toBeVisible();
+  await expect(
+    dialog.getByText("Часть исходных данных больше недоступна.", {
+      exact: false,
+    })
+  ).toBeVisible();
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(dialog.getByRole("alert")).toContainText("Выберите все научные входные файлы");
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Выберите все научные входные файлы"
+  );
   expect(submitted).toBe(false);
-  await dialog.getByRole("button", { name: "Закрыть окно нового расчёта" }).click();
+  await dialog
+    .getByRole("button", { name: "Закрыть окно нового расчёта" })
+    .click();
   await expect(page).toHaveURL(/\/lab\/calculations$/);
-  await expect(page.getByRole("link", { name: "Расчёты и отчёты" })).toBeFocused();
+  await expect(
+    page.getByRole("link", { name: "Расчёты и отчёты" })
+  ).toBeFocused();
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -855,7 +1416,9 @@ test("модальный запуск сохраняет фокус и не пе
   await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
 
-  await page.getByRole("link", { name: "Расчёты и отчёты", exact: true }).click();
+  await page
+    .getByRole("link", { name: "Расчёты и отчёты", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Расчёты", exact: true })
   ).toBeVisible();
@@ -1013,7 +1576,9 @@ test("перед запуском объясняются входы, огран�
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("принятая адаптивная MSH выбирается как вход модели дна", async ({ page }) => {
+test("принятая адаптивная MSH выбирается как вход модели дна", async ({
+  page,
+}) => {
   const submissions: unknown[] = [];
   const adaptive = {
     id: "88888888-8888-4888-8888-888888888888",
@@ -1026,39 +1591,69 @@ test("принятая адаптивная MSH выбирается как вх
     createdAt: "2026-10-11T12:00:00.000Z",
   } satisfies ReusableScientificArtifactDto;
   const buildInputs: ScientificInputDto[] = [
-    { ...articleInputs[0], id: "77777777-7777-4777-8777-777777777771", role: "bathymetry_grid_json" },
-    { ...articleInputs[1], id: "77777777-7777-4777-8777-777777777772", role: "bathymetry_grid_metadata_json" },
+    {
+      ...articleInputs[0],
+      id: "77777777-7777-4777-8777-777777777771",
+      role: "bathymetry_grid_json",
+    },
+    {
+      ...articleInputs[1],
+      id: "77777777-7777-4777-8777-777777777772",
+      role: "bathymetry_grid_metadata_json",
+    },
     articleInputs[5],
   ];
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
     if (path === "/api/calculations/kinds" && method === "GET")
-      return { body: [{ kind: "seabed_build", title: "Построить модель дна", description: "Тестовый сценарий" }] };
+      return {
+        body: [
+          {
+            kind: "seabed_build",
+            title: "Построить модель дна",
+            description: "Тестовый сценарий",
+          },
+        ],
+      };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/scientific-inputs" && method === "GET") return { body: buildInputs };
-    if (path === "/api/scientific-inputs/reusable-artifacts" && method === "GET") return { body: [adaptive] };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: buildInputs };
+    if (
+      path === "/api/scientific-inputs/reusable-artifacts" &&
+      method === "GET"
+    )
+      return { body: [adaptive] };
     if (path === "/api/calculations" && method === "GET") return { body: [] };
     if (path === "/api/calculations" && method === "POST") {
       submissions.push(body);
       return { status: 201, body: job };
     }
-    if (path === `/api/calculations/${job.id}` && method === "GET") return { body: job };
+    if (path === `/api/calculations/${job.id}` && method === "GET")
+      return { body: job };
   });
   await page.setViewportSize({ width: 360, height: 780 });
   await openNewCalculation(page, "dark");
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
-  await expect(dialog.getByText("Принятую MSH из «Построить адаптивную сетку»", { exact: false })).toBeVisible();
+  await expect(
+    dialog.getByText("Принятую MSH из «Построить адаптивную сетку»", {
+      exact: false,
+    })
+  ).toBeVisible();
   await dialog.locator("#scientific-flatMeshInputId").click();
   await page.getByRole("option", { name: /black-sea-adaptive\.msh/ }).click();
-  await expect(dialog.getByRole("link", { name: "Открыть исходный результат" }))
-    .toHaveAttribute("href", `/lab/calculations/${adaptive.jobId}`);
+  await expect(
+    dialog.getByRole("link", { name: "Открыть исходный результат" })
+  ).toHaveAttribute("href", `/lab/calculations/${adaptive.jobId}`);
   await dialog.locator("#scientific-bathymetryInputId").click();
   await page.getByRole("option", { name: /Архивный вход 1/ }).click();
   await dialog.locator("#scientific-bathymetryMetadataInputId").click();
   await page.getByRole("option", { name: /Архивный вход 2/ }).click();
   await dialog.locator("#scientific-coastlineInputId").click();
   await page.getByRole("option", { name: /Архивный вход 6/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect.poll(() => submissions.length).toBe(1);
   expect(submissions[0]).toMatchObject({
@@ -1074,20 +1669,30 @@ test("принятая адаптивная MSH выбирается как вх
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("пресет рисунка 4 переносит точные параметры поля в запрос без выбора файлов", async ({ page }) => {
+test("пресет рисунка 4 переносит точные параметры поля в запрос без выбора файлов", async ({
+  page,
+}) => {
   const submissions: unknown[] = [];
   const observed = await mockArticleCalculations(page, submissions);
   await page.setViewportSize({ width: 360, height: 780 });
   await openNewCalculation(page, "light");
   await expect(page.locator("html")).toHaveClass(/light/);
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
-  await dialog.getByRole("button", { name: "Заполнить как рисунок 4: поле 50–250 м" }).click();
-  await expect(dialog.getByRole("status")).toContainText("Параметры рисунка 4 заполнены");
-  await expect(dialog.getByText("пресет не выбирает файлы", { exact: false })).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "Заполнить как рисунок 4: поле 50–250 м" })
+    .click();
+  await expect(dialog.getByRole("status")).toContainText(
+    "Параметры рисунка 4 заполнены"
+  );
+  await expect(
+    dialog.getByText("пресет не выбирает файлы", { exact: false })
+  ).toBeVisible();
   await expect(dialog.locator("#adapt-minSize")).toHaveValue("50");
   await expect(dialog.locator("#adapt-deepSize")).toHaveValue("250");
   await expect(dialog.locator("#adapt-maxSizeGradient")).toHaveValue("0.15");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
   await selectArticleInput(page, "modelInputId", 0);
   await selectArticleInput(page, "sourceMetadataInputId", 1);
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
@@ -1097,16 +1702,25 @@ test("пресет рисунка 4 переносит точные параме
     input: {
       modelInputId: articleInputs[0].id,
       sourceMetadataInputId: articleInputs[1].id,
-      minSize: 50, coastSize: 75, shelfSize: 125, deepSize: 250,
-      coastInfluence: 25000, curvatureReference: 30, slopeReference: 10,
-      flatDeepSlope: 1, maxNeighbourRatio: 1.25, maxSizeGradient: 0.15,
+      minSize: 50,
+      coastSize: 75,
+      shelfSize: 125,
+      deepSize: 250,
+      coastInfluence: 25000,
+      curvatureReference: 30,
+      slopeReference: 10,
+      flatDeepSlope: 1,
+      maxNeighbourRatio: 1.25,
+      maxSizeGradient: 0.15,
     },
   });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("пресет рисунков 6–7 задаёт архивный уровень и не разрешает большой запуск", async ({ page }) => {
+test("пресет рисунков 6–7 задаёт архивный уровень и не разрешает большой запуск", async ({
+  page,
+}) => {
   const submissions: unknown[] = [];
   const observed = await mockArticleCalculations(page, submissions);
   await page.setViewportSize({ width: 360, height: 780 });
@@ -1114,15 +1728,29 @@ test("пресет рисунков 6–7 задаёт архивный уров
   await expect(page.locator("html")).toHaveClass(/dark/);
   await chooseOption(page, "Что рассчитать", "Сравнение сеток");
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
-  await dialog.getByRole("button", { name: "Заполнить как рисунки 6–7: сетки 125–250 м" }).click();
-  await expect(dialog.getByRole("status")).toContainText("Большой расчёт не разрешён автоматически");
-  await expect(dialog.getByText("значительных ресурсов", { exact: false })).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "Заполнить как рисунки 6–7: сетки 125–250 м" })
+    .click();
+  await expect(dialog.getByRole("status")).toContainText(
+    "Большой расчёт не разрешён автоматически"
+  );
+  await expect(
+    dialog.getByText("значительных ресурсов", { exact: false })
+  ).toBeVisible();
   await expect(dialog.locator("#compare-levels")).toHaveValue("coarse:125:250");
-  await dialog.getByRole("checkbox", { name: "Подготовить экспертные SVG-карточки AI-01" }).check();
-  await expect(dialog.getByText("Закрытый ключ организатора", { exact: false })).toBeVisible();
+  await dialog
+    .getByRole("checkbox", {
+      name: "Подготовить экспертные SVG-карточки AI-01",
+    })
+    .check();
+  await expect(
+    dialog.getByText("Закрытый ключ организатора", { exact: false })
+  ).toBeVisible();
   await dialog.locator("#expert-levels").fill("coarse");
   await dialog.locator("#expert-seed").fill("article_2026");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
   await selectArticleInput(page, "modelInputId", 0);
   await selectArticleInput(page, "exportMetadataInputId", 2);
   await selectArticleInput(page, "fieldCsvInputId", 3);
@@ -1154,96 +1782,180 @@ test("пресет рисунков 6–7 задаёт архивный уров
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("рисунок 5 собирается из AI-01 с выбранными уровнем и генератором", async ({ page }) => {
+test("рисунок 5 собирается из AI-01 с выбранными уровнем и генератором", async ({
+  page,
+}) => {
   const submissions: unknown[] = [];
   const observed = await mockArticleCalculations(page, submissions);
   await page.setViewportSize({ width: 360, height: 780 });
   await openNewCalculation(page, "dark");
   await chooseOption(page, "Что рассчитать", "Сравнение сеток");
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
-  await dialog.getByRole("button", { name: "Заполнить как рисунок 5: три фрагмента 125–250 м" }).click();
-  await expect(dialog.getByRole("status")).toContainText("Для рисунка 5 выбраны уровень coarse, Delaunay и карточки AI-01");
-  await expect(dialog.getByRole("checkbox", { name: "Подготовить экспертные SVG-карточки AI-01" })).toBeChecked();
-  await expect(dialog.getByRole("checkbox", { name: "Собрать рисунок 5 из трёх фактических карточек" })).toBeChecked();
+  await dialog
+    .getByRole("button", {
+      name: "Заполнить как рисунок 5: три фрагмента 125–250 м",
+    })
+    .click();
+  await expect(dialog.getByRole("status")).toContainText(
+    "Для рисунка 5 выбраны уровень coarse, Delaunay и карточки AI-01"
+  );
+  await expect(
+    dialog.getByRole("checkbox", {
+      name: "Подготовить экспертные SVG-карточки AI-01",
+    })
+  ).toBeChecked();
+  await expect(
+    dialog.getByRole("checkbox", {
+      name: "Собрать рисунок 5 из трёх фактических карточек",
+    })
+  ).toBeChecked();
   await expect(dialog.locator("#figure-five-level")).toHaveValue("coarse");
-  await expect(dialog.locator("#figure-five-generator")).toContainText("delaunay");
-  await expect(dialog.getByRole("checkbox", { name: "Разрешить расчёт сверх лимита оценки ячеек после проверки ресурсов" })).not.toBeChecked();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await expect(dialog.locator("#figure-five-generator")).toContainText(
+    "delaunay"
+  );
+  await expect(
+    dialog.getByRole("checkbox", {
+      name: "Разрешить расчёт сверх лимита оценки ячеек после проверки ресурсов",
+    })
+  ).not.toBeChecked();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
   for (const [field, index] of [
-    ["modelInputId", 0], ["exportMetadataInputId", 2], ["fieldCsvInputId", 3],
-    ["fieldReportInputId", 4], ["coastlineInputId", 5],
-  ] as const) await selectArticleInput(page, field, index);
+    ["modelInputId", 0],
+    ["exportMetadataInputId", 2],
+    ["fieldCsvInputId", 3],
+    ["fieldReportInputId", 4],
+    ["coastlineInputId", 5],
+  ] as const)
+    await selectArticleInput(page, field, index);
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect.poll(() => submissions.length).toBe(1);
-  const submitted = submissions[0] as { kind: string; input: Record<string, unknown> };
+  const submitted = submissions[0] as {
+    kind: string;
+    input: Record<string, unknown>;
+  };
   expect(submitted.kind).toBe("seabed_compare_adaptive");
   expect(submitted.input).toMatchObject({
-    levels: "coarse:125:250", generators: "delaunay,frontal-quad",
-    generateExpertSet: true, expertLevels: "coarse", generateFigureFive: true,
-    figureFiveLevel: "coarse", figureFiveGenerator: "delaunay", allowLarge: false,
+    levels: "coarse:125:250",
+    generators: "delaunay,frontal-quad",
+    generateExpertSet: true,
+    expertLevels: "coarse",
+    generateFigureFive: true,
+    figureFiveLevel: "coarse",
+    figureFiveGenerator: "delaunay",
+    allowLarge: false,
   });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("рисунок 5 отображается как приватный SVG-артефакт расчёта", async ({ page }) => {
+test("рисунок 5 отображается как приватный SVG-артефакт расчёта", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 360, height: 780 });
   const filename = "fig_05_actual_mesh_fragments.svg";
   const figureJob = {
     ...job,
     kind: "seabed_compare_adaptive",
     status: "succeeded" as const,
-    artifacts: [{
-      id: "77777777-7777-4777-8777-777777777777",
-      category: "output" as const,
-      filename,
-      contentType: "image/svg+xml",
-      sizeBytes: 256,
-      sha256: "e".repeat(64),
-      downloadUrl: `/private/${filename}`,
-    }],
+    artifacts: [
+      {
+        id: "77777777-7777-4777-8777-777777777777",
+        category: "output" as const,
+        filename,
+        contentType: "image/svg+xml",
+        sizeBytes: 256,
+        sha256: "e".repeat(64),
+        downloadUrl: `/private/${filename}`,
+      },
+    ],
   } satisfies CalculationJobDto;
   const observed = await mockApi(page, (path, method) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
-    if (path === `/api/calculations/${figureJob.id}` && method === "GET") return { body: figureJob };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === `/api/calculations/${figureJob.id}` && method === "GET")
+      return { body: figureJob };
   });
-  const card = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="teal"/></svg>').toString("base64");
-  await page.route(`**/private/${filename}`, (route) => route.fulfill({
-    contentType: "image/svg+xml",
-    body: `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1800" height="760"><image xlink:href="data:image/svg+xml;base64,${card}" width="600" height="600"/></svg>`,
-  }));
+  const card = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="teal"/></svg>'
+  ).toString("base64");
+  await page.route(`**/private/${filename}`, (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1800" height="760"><image xlink:href="data:image/svg+xml;base64,${card}" width="600" height="600"/></svg>`,
+    })
+  );
   await page.goto(`/lab/calculations/${figureJob.id}`);
   const preview = page.getByRole("img", { name: `Отчёт: ${filename}` });
   await expect(preview).toBeVisible();
-  await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth)).toBe(1800);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await expect
+    .poll(() =>
+      preview.evaluate(
+        (image: HTMLImageElement) => image.complete && image.naturalWidth
+      )
+    )
+    .toBe(1800);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("AI-01 сохраняется в паспорте и восстанавливается при повторе сравнения", async ({ page }) => {
+test("AI-01 сохраняется в паспорте и восстанавливается при повторе сравнения", async ({
+  page,
+}) => {
   const storedInput = {
-    modelInputId: articleInputs[0].id, exportMetadataInputId: articleInputs[2].id,
-    fieldCsvInputId: articleInputs[3].id, fieldReportInputId: articleInputs[4].id,
-    coastlineInputId: articleInputs[5].id, boundaryDetail: 50,
-    generators: "delaunay,frontal-quad", levels: "coarse:125:250",
-    detailPreset: "kizilirmak", maxCells: 25_000_000, allowLarge: false,
-    generatorTimeoutMinutes: 20, generateExpertSet: true,
-    expertLevels: "coarse", expertSeed: "study_2026",
-    generateFigureFive: true, figureFiveLevel: "coarse", figureFiveGenerator: "delaunay",
+    modelInputId: articleInputs[0].id,
+    exportMetadataInputId: articleInputs[2].id,
+    fieldCsvInputId: articleInputs[3].id,
+    fieldReportInputId: articleInputs[4].id,
+    coastlineInputId: articleInputs[5].id,
+    boundaryDetail: 50,
+    generators: "delaunay,frontal-quad",
+    levels: "coarse:125:250",
+    detailPreset: "kizilirmak",
+    maxCells: 25_000_000,
+    allowLarge: false,
+    generatorTimeoutMinutes: 20,
+    generateExpertSet: true,
+    expertLevels: "coarse",
+    expertSeed: "study_2026",
+    generateFigureFive: true,
+    figureFiveLevel: "coarse",
+    figureFiveGenerator: "delaunay",
   };
-  const stored = { ...job, kind: "seabed_compare_adaptive", status: "succeeded" as const,
-    input: storedInput, inputSchemaVersion: 11 };
+  const stored = {
+    ...job,
+    kind: "seabed_compare_adaptive",
+    status: "succeeded" as const,
+    input: storedInput,
+    inputSchemaVersion: 11,
+  };
   const submissions: unknown[] = [];
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
     if (path === "/api/calculations/kinds" && method === "GET")
-      return { body: [{ kind: "seabed_compare_adaptive", title: "Сравнение сеток", description: "ADAPT-03" }] };
+      return {
+        body: [
+          {
+            kind: "seabed_compare_adaptive",
+            title: "Сравнение сеток",
+            description: "ADAPT-03",
+          },
+        ],
+      };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/scientific-inputs" && method === "GET") return { body: articleInputs };
-    if (path === "/api/calculations" && method === "GET") return { body: [stored] };
-    if (path === `/api/calculations/${job.id}` && method === "GET") return { body: stored };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: articleInputs };
+    if (path === "/api/calculations" && method === "GET")
+      return { body: [stored] };
+    if (path === `/api/calculations/${job.id}` && method === "GET")
+      return { body: stored };
     if (path === "/api/calculations" && method === "POST") {
       submissions.push(body);
       return { status: 201, body: stored };
@@ -1253,86 +1965,160 @@ test("AI-01 сохраняется в паспорте и восстанавли
   await page.goto(`/lab/calculations/${job.id}`);
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
-  const passport = JSON.parse(await readFile(await (await downloadPromise).path(), "utf8")) as CalculationMetadataExportV1;
+  const passport = JSON.parse(
+    await readFile(await (await downloadPromise).path(), "utf8")
+  ) as CalculationMetadataExportV1;
   expect(passport.calculation.input).toEqual(storedInput);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const repeat = page.getByRole("dialog", { name: "Расчёт на основе" });
-  await expect(repeat.getByRole("checkbox", { name: "Подготовить экспертные SVG-карточки AI-01" })).toBeChecked();
+  await expect(
+    repeat.getByRole("checkbox", {
+      name: "Подготовить экспертные SVG-карточки AI-01",
+    })
+  ).toBeChecked();
   await expect(repeat.locator("#expert-levels")).toHaveValue("coarse");
   await expect(repeat.locator("#expert-seed")).toHaveValue("study_2026");
-  await expect(repeat.getByRole("checkbox", { name: "Собрать рисунок 5 из трёх фактических карточек" })).toBeChecked();
+  await expect(
+    repeat.getByRole("checkbox", {
+      name: "Собрать рисунок 5 из трёх фактических карточек",
+    })
+  ).toBeChecked();
   await expect(repeat.locator("#figure-five-level")).toHaveValue("coarse");
   await repeat.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect.poll(() => submissions.length).toBe(1);
-  expect(submissions[0]).toEqual({ kind: "seabed_compare_adaptive", input: storedInput });
+  expect(submissions[0]).toEqual({
+    kind: "seabed_compare_adaptive",
+    input: storedInput,
+  });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("AI-02 принимает шесть приватных входов, показывает решение Go и повторяет параметры", async ({ page }) => {
+test("AI-02 принимает шесть приватных входов, показывает решение Go и повторяет параметры", async ({
+  page,
+}) => {
   const aiRoles = [
-    "expert_ratings_tsv", "expert_organizer_key_json", "adaptive_comparison_report_json",
-    "seabed_msh", "export_metadata_json", "coastline_geojson",
+    "expert_ratings_tsv",
+    "expert_organizer_key_json",
+    "adaptive_comparison_report_json",
+    "seabed_msh",
+    "export_metadata_json",
+    "coastline_geojson",
   ] as const satisfies ScientificInputRole[];
   const aiInputs = aiRoles.map((role, index) => ({
-    ...articleInputs[index], role, name: `AI вход ${index + 1}`,
+    ...articleInputs[index],
+    role,
+    name: `AI вход ${index + 1}`,
   }));
   const storedInput = {
-    ratingsInputId: aiInputs[0].id, organizerKeyInputId: aiInputs[1].id,
-    comparisonReportInputId: aiInputs[2].id, modelInputId: aiInputs[3].id,
-    exportMetadataInputId: aiInputs[4].id, coastlineInputId: aiInputs[5].id,
-    minExpertsPerCard: 3, minTraining: 14, minEvaluation: 15,
-    ridgeLambda: 0.5, minRmseImprovement: 0.2,
+    ratingsInputId: aiInputs[0].id,
+    organizerKeyInputId: aiInputs[1].id,
+    comparisonReportInputId: aiInputs[2].id,
+    modelInputId: aiInputs[3].id,
+    exportMetadataInputId: aiInputs[4].id,
+    coastlineInputId: aiInputs[5].id,
+    minExpertsPerCard: 3,
+    minTraining: 14,
+    minEvaluation: 15,
+    ridgeLambda: 0.5,
+    minRmseImprovement: 0.2,
   };
-  const stored = { ...job, kind: "seabed_assess_ml" as const, status: "succeeded" as const,
-    input: storedInput, inputSchemaVersion: 12,
-    resultSummary: { fileCount: 4, totalBytes: 2048, metrics: {
-      "ai-necessity.json": { rating_row_count: 42, decision: {
-        ml_recommended: false, training_record_count: 14, evaluation_record_count: 15,
-        baseline_evaluation: { available: true, rmse: 1.2 }, candidate_evaluation: { available: true, rmse: 1.1 },
-        rmse_improvement: 0.0833, reasons: ["Улучшение недостаточно"],
-      } },
-    } },
+  const stored = {
+    ...job,
+    kind: "seabed_assess_ml" as const,
+    status: "succeeded" as const,
+    input: storedInput,
+    inputSchemaVersion: 12,
+    resultSummary: {
+      fileCount: 4,
+      totalBytes: 2048,
+      metrics: {
+        "ai-necessity.json": {
+          rating_row_count: 42,
+          decision: {
+            ml_recommended: false,
+            training_record_count: 14,
+            evaluation_record_count: 15,
+            baseline_evaluation: { available: true, rmse: 1.2 },
+            candidate_evaluation: { available: true, rmse: 1.1 },
+            rmse_improvement: 0.0833,
+            reasons: ["Улучшение недостаточно"],
+          },
+        },
+      },
+    },
   } satisfies CalculationJobDto;
   const submissions: unknown[] = [];
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
     if (path === "/api/calculations/kinds" && method === "GET")
-      return { body: [{ kind: "seabed_assess_ml", title: "Оценка необходимости ML", description: "AI-02" }] };
+      return {
+        body: [
+          {
+            kind: "seabed_assess_ml",
+            title: "Оценка необходимости ML",
+            description: "AI-02",
+          },
+        ],
+      };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/scientific-inputs" && method === "GET") return { body: aiInputs };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: aiInputs };
     if (path === "/api/calculations" && method === "GET") return { body: [] };
     if (path === "/api/calculations" && method === "POST") {
       submissions.push(body);
       return { status: 201, body: stored };
     }
-    if (path === `/api/calculations/${job.id}` && method === "GET") return { body: stored };
+    if (path === `/api/calculations/${job.id}` && method === "GET")
+      return { body: stored };
   });
   await page.setViewportSize({ width: 360, height: 780 });
   await openNewCalculation(page, "dark");
   await chooseOption(page, "Что рассчитать", "Оценка необходимости ML");
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
-  const fields = ["ratingsInputId", "organizerKeyInputId", "comparisonReportInputId",
-    "modelInputId", "exportMetadataInputId", "coastlineInputId"];
+  const fields = [
+    "ratingsInputId",
+    "organizerKeyInputId",
+    "comparisonReportInputId",
+    "modelInputId",
+    "exportMetadataInputId",
+    "coastlineInputId",
+  ];
   for (const [index, field] of fields.entries()) {
     await dialog.locator(`#scientific-${field}`).click();
-    await page.getByRole("option", { name: new RegExp(`AI вход ${index + 1}`) }).click();
+    await page
+      .getByRole("option", { name: new RegExp(`AI вход ${index + 1}`) })
+      .click();
   }
   await dialog.locator("#ai-minExpertsPerCard").fill("3");
   await dialog.locator("#ai-minTraining").fill("14");
   await dialog.locator("#ai-minEvaluation").fill("15");
   await dialog.locator("#ai-ridgeLambda").fill("0.5");
   await dialog.locator("#ai-minRmseImprovement").fill("0.2");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect.poll(() => submissions.length).toBe(1);
-  expect(submissions[0]).toEqual({ kind: "seabed_assess_ml", input: storedInput });
-  await expect(page.getByRole("heading", { name: "Оценка необходимости ML · AI-02" })).toBeVisible();
-  await expect(page.getByText("ML не рекомендуется по заданным критериям")).toBeVisible();
-  await expect(page.getByText("Улучшение недостаточно", { exact: true })).toBeVisible();
+  expect(submissions[0]).toEqual({
+    kind: "seabed_assess_ml",
+    input: storedInput,
+  });
+  await expect(
+    page.getByRole("heading", { name: "Оценка необходимости ML · AI-02" })
+  ).toBeVisible();
+  await expect(
+    page.getByText("ML не рекомендуется по заданным критериям")
+  ).toBeVisible();
+  await expect(
+    page.getByText("Улучшение недостаточно", { exact: true })
+  ).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
-  const passport = JSON.parse(await readFile(await (await downloadPromise).path(), "utf8")) as CalculationMetadataExportV1;
+  const passport = JSON.parse(
+    await readFile(await (await downloadPromise).path(), "utf8")
+  ) as CalculationMetadataExportV1;
   expect(passport.calculation.input).toEqual(storedInput);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const repeat = page.getByRole("dialog", { name: "Расчёт на основе" });
@@ -1340,41 +2126,77 @@ test("AI-02 принимает шесть приватных входов, по�
   await expect(repeat.locator("#ai-minRmseImprovement")).toHaveValue("0.2");
   await repeat.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect.poll(() => submissions.length).toBe(2);
-  expect(submissions[1]).toEqual({ kind: "seabed_assess_ml", input: storedInput });
+  expect(submissions[1]).toEqual({
+    kind: "seabed_assess_ml",
+    input: storedInput,
+  });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("QA-03 запускается с пятью входами, сохраняет параметры и повторяется в тёмной мобильной теме", async ({ page }) => {
+test("QA-03 запускается с пятью входами, сохраняет параметры и повторяется в тёмной мобильной теме", async ({
+  page,
+}) => {
   const fullRoles = [
-    "flat_mesh_msh", "mesh_comparison_report_json", "coastline_geojson",
-    "bathymetry_grid_json", "bathymetry_grid_metadata_json",
+    "flat_mesh_msh",
+    "mesh_comparison_report_json",
+    "coastline_geojson",
+    "bathymetry_grid_json",
+    "bathymetry_grid_metadata_json",
   ] as const satisfies ScientificInputRole[];
-  const fullInputs = fullRoles.map((role, index) => ({ ...articleInputs[index], role }));
+  const fullInputs = fullRoles.map((role, index) => ({
+    ...articleInputs[index],
+    role,
+  }));
   const submissions: { kind: string; input: Record<string, unknown> }[] = [];
-  const created = { ...job, kind: "seabed_check_full", input: {}, inputSchemaVersion: 10 };
+  const created = {
+    ...job,
+    kind: "seabed_check_full",
+    input: {},
+    inputSchemaVersion: 10,
+  };
   const observed = await mockApi(page, (path, method, body) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
     if (path === "/api/calculations/kinds" && method === "GET")
-      return { body: [{ kind: "seabed_check_full", title: "Проверка полного контура", description: "QA-03" }] };
+      return {
+        body: [
+          {
+            kind: "seabed_check_full",
+            title: "Проверка полного контура",
+            description: "QA-03",
+          },
+        ],
+      };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
-    if (path === "/api/scientific-inputs" && method === "GET") return { body: fullInputs };
-    if (path === "/api/calculations" && method === "GET") return { body: submissions.length ? [created] : [] };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: fullInputs };
+    if (path === "/api/calculations" && method === "GET")
+      return { body: submissions.length ? [created] : [] };
     if (path === "/api/calculations" && method === "POST") {
-      submissions.push(body as { kind: string; input: Record<string, unknown> });
+      submissions.push(
+        body as { kind: string; input: Record<string, unknown> }
+      );
       created.input = submissions.at(-1)?.input ?? {};
       return { status: 201, body: created };
     }
-    if (path === `/api/calculations/${job.id}` && method === "GET") return { body: created };
+    if (path === `/api/calculations/${job.id}` && method === "GET")
+      return { body: created };
   });
   await page.setViewportSize({ width: 360, height: 780 });
   await openNewCalculation(page, "dark");
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
-  await expect(dialog.getByText("Предел входной сетки в вебе — 256 МиБ", { exact: false })).toBeVisible();
+  await expect(
+    dialog.getByText("Предел входной сетки в вебе — 256 МиБ", { exact: false })
+  ).toBeVisible();
   for (const [index, field] of [
-    "flatMeshInputId", "meshReportInputId", "coastlineInputId",
-    "bathymetryInputId", "bathymetryMetadataInputId",
-  ].entries()) await selectArticleInput(page, field, index);
+    "flatMeshInputId",
+    "meshReportInputId",
+    "coastlineInputId",
+    "bathymetryInputId",
+    "bathymetryMetadataInputId",
+  ].entries())
+    await selectArticleInput(page, field, index);
   await dialog.locator("#full-targetEdge").fill("900");
   await dialog.locator("#full-isobaths").fill("20,100,1000");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
@@ -1382,18 +2204,29 @@ test("QA-03 запускается с пятью входами, сохраня�
   expect(submissions[0]).toEqual({
     kind: "seabed_check_full",
     input: {
-      flatMeshInputId: fullInputs[0].id, meshReportInputId: fullInputs[1].id,
-      coastlineInputId: fullInputs[2].id, bathymetryInputId: fullInputs[3].id,
+      flatMeshInputId: fullInputs[0].id,
+      meshReportInputId: fullInputs[1].id,
+      coastlineInputId: fullInputs[2].id,
+      bathymetryInputId: fullInputs[3].id,
       bathymetryMetadataInputId: fullInputs[4].id,
-      generator: "frontal-quad", targetEdge: 900, boundaryDetail: 1000,
-      maxSourceDistance: 50000, coastTransition: 0,
-      isobaths: "20,100,1000", verticalExaggeration: 40, controlPoints: true,
+      generator: "frontal-quad",
+      targetEdge: 900,
+      boundaryDetail: 1000,
+      maxSourceDistance: 50000,
+      coastTransition: 0,
+      isobaths: "20,100,1000",
+      verticalExaggeration: 40,
+      controlPoints: true,
     },
   });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Скачать паспорт JSON" }).click();
-  const passport = JSON.parse(await readFile(await (await downloadPromise).path(), "utf8")) as CalculationMetadataExportV1;
+  const passport = JSON.parse(
+    await readFile(await (await downloadPromise).path(), "utf8")
+  ) as CalculationMetadataExportV1;
   expect(passport.calculation.input).toEqual(submissions[0].input);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const repeat = page.getByRole("dialog", { name: "Расчёт на основе" });
@@ -1578,7 +2411,9 @@ test("история листается сервером и сохраняет �
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("история различает ожидание worker, повтор ошибки и завершение удаления", async ({ page }) => {
+test("история различает ожидание worker, повтор ошибки и завершение удаления", async ({
+  page,
+}) => {
   const requestId = "77777777-7777-4777-8777-777777777777";
   const request = {
     id: requestId,
@@ -1591,29 +2426,68 @@ test("история различает ожидание worker, повтор о
   } satisfies CalculationDeletionRequestDto;
   let checks = 0;
   const observed = await mockApi(page, (path, method) => {
-    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
-    if (path === "/api/calculations/page" && method === "GET") return {
-      body: { items: checks >= 2 ? [] : [{ ...job, status: "succeeded", deletionRequestedAt: request.createdAt }], nextCursor: null, totalCount: checks >= 2 ? 0 : 1 },
-    };
-    if (path === "/api/calculations/deletions-current" && method === "GET") return { body: request };
-    if (path === `/api/calculations/deletions/${requestId}` && method === "GET") {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/calculations/page" && method === "GET")
+      return {
+        body: {
+          items:
+            checks >= 2
+              ? []
+              : [
+                  {
+                    ...job,
+                    status: "succeeded",
+                    deletionRequestedAt: request.createdAt,
+                  },
+                ],
+          nextCursor: null,
+          totalCount: checks >= 2 ? 0 : 1,
+        },
+      };
+    if (path === "/api/calculations/deletions-current" && method === "GET")
+      return { body: request };
+    if (
+      path === `/api/calculations/deletions/${requestId}` &&
+      method === "GET"
+    ) {
       checks++;
-      return { body: checks === 1
-        ? { ...request, status: "retrying", retryingCount: 1 }
-        : { ...request, status: "completed", deletedCount: 1 } };
+      return {
+        body:
+          checks === 1
+            ? { ...request, status: "retrying", retryingCount: 1 }
+            : { ...request, status: "completed", deletedCount: 1 },
+      };
     }
   });
   await page.setViewportSize({ width: 360, height: 780 });
   await page.goto("/lab/calculations");
-  await expect(page.getByText("Удаление поставлено в очередь worker.", { exact: false })).toBeVisible();
-  await expect(page.getByText("Если прогресс долго не меняется", { exact: false })).toBeVisible();
-  await expect(page.getByText("Удаление отложено; worker повторит попытку.", { exact: false })).toBeVisible();
-  await expect(page.getByText("Ошибок обработки: 1.", { exact: false })).toBeVisible();
-  await expect(page.getByText("Удаление завершено.", { exact: false })).toBeVisible();
+  await expect(
+    page.getByText("Удаление поставлено в очередь worker.", { exact: false })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Если прогресс долго не меняется", { exact: false })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Удаление отложено; worker повторит попытку.", {
+      exact: false,
+    })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Ошибок обработки: 1.", { exact: false })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Удаление завершено.", { exact: false })
+  ).toBeVisible();
   await expect(page.getByText("Найдено расчётов: 0")).toBeVisible();
-  await expect(page.getByText("Пока нет расчётов.", { exact: false })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  await expect(
+    page.getByText("Пока нет расчётов.", { exact: false })
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth)
+  ).toBeLessThanOrEqual(360);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -1826,7 +2700,7 @@ test("кабинет показывает ошибку расчёта и поз�
 
   await openNewCalculation(page);
   await chooseOption(page, "Что рассчитать", "Размыв");
-  await page.getByLabel("Шаги волнового ряда (1–48)").fill("4");
+  await page.getByLabel("Шаги волнового ряда (1–168)").fill("4");
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page.getByRole("alert")).toContainText(
     "Вычислитель временно недоступен"
@@ -1979,6 +2853,54 @@ test("встроенный пример GeoJSON сохраняется при з
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${job.id}$`));
 
   expect(uploads).toEqual([defaultCoastlineDataset]);
+  expect(jobs).toEqual([
+    { kind: "dimension_dataset", input: { datasetId: example.id } },
+  ]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("повторный расчёт использует сохранённый пример Сочи без новой записи", async ({
+  page,
+}) => {
+  const example = savedExample(
+    defaultCoastlineExample,
+    "77777777-7777-4777-8777-777777777774"
+  );
+  const copy = { ...example, id: "77777777-7777-4777-8777-777777777775" };
+  const jobs: unknown[] = [];
+  const customJob = {
+    ...job,
+    kind: "dimension_dataset",
+    input: { datasetId: example.id },
+  };
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: kinds };
+    if (path === "/api/datasets" && method === "GET")
+      return { body: [example, copy] };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: [] };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      jobs.push(body);
+      return { status: 201, body: customJob };
+    }
+    if (path === `/api/calculations/${job.id}` && method === "GET")
+      return { body: customJob };
+  });
+
+  await openNewCalculation(page);
+  await chooseOption(page, "Что рассчитать", "Своя береговая линия");
+  await expect(
+    page.getByText("уже сохранён и будет использован повторно", {
+      exact: false,
+    })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${job.id}$`));
   expect(jobs).toEqual([
     { kind: "dimension_dataset", input: { datasetId: example.id } },
   ]);
@@ -2141,7 +3063,9 @@ test("реестр открывает краткий просмотр и соп�
   await expect(quickView).toBeHidden();
   await expect(quickTrigger).toBeFocused();
 
-  const compareControls = page.getByRole("checkbox", { name: /Сравнить расчёт/ });
+  const compareControls = page.getByRole("checkbox", {
+    name: /Сравнить расчёт/,
+  });
   await compareControls.nth(0).check();
   await compareControls.nth(1).check();
   const comparisonTrigger = page.getByRole("button", {
@@ -2247,7 +3171,14 @@ test("полный паспорт показывает происхождени�
   const second = {
     ...job,
     id: "66666666-6666-4666-8666-666666666666",
-    input: { ...erosionDemoDefaults, steps: 4, cercCoefficient: 0.5, outputCsv: true, csvFormat: "wide" as const, accessToken: "input-secret" },
+    input: {
+      ...erosionDemoDefaults,
+      steps: 4,
+      cercCoefficient: 0.5,
+      outputCsv: true,
+      csvFormat: "wide" as const,
+      accessToken: "input-secret",
+    },
   } satisfies CalculationJobDto;
   const observed = await mockApi(page, (path, method) => {
     if (path === "/api/auth/refresh" && method === "POST")
@@ -2365,7 +3296,13 @@ test("полный паспорт показывает происхождени�
   ) as CalculationMetadataExportV1;
   expect(secondExport.calculation).toMatchObject({
     id: second.id,
-    input: { ...erosionDemoDefaults, steps: 4, cercCoefficient: 0.5, outputCsv: true, csvFormat: "wide" },
+    input: {
+      ...erosionDemoDefaults,
+      steps: 4,
+      cercCoefficient: 0.5,
+      outputCsv: true,
+      csvFormat: "wide",
+    },
     coreVersion: null,
     resultSchemaVersion: null,
   });

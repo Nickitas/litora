@@ -9,8 +9,20 @@
 OpenStreetMap way 59530506, выгрузка 17.08.2026, лицензия ODbL. Это технический
 пример, не геодезическая съёмка и не исходные данные для инженерного заключения.
 
-`shorelineDemoIndex`, `shorelineDemoChunk` и `shorelineDemoSeries` — малый
+`coastlineExamples` добавляет два самостоятельных учебных контура: Геленджик —
+[OSM way 165783307, версия 7](https://www.openstreetmap.org/way/165783307/history/7),
+102 узла; Анапа —
+[OSM way 104318270, версия 15](https://www.openstreetmap.org/way/104318270/history/15),
+65 узлов. Координаты получены из OSM API 16.10.2026 в порядке узлов way.
+Источник: © OpenStreetMap contributors, лицензия
+[ODbL](https://www.openstreetmap.org/copyright). Это зафиксированные примеры,
+а не актуальный мониторинг или калиброванные научные данные. Контрольные суммы
+считаются для сериализованного GeoJSON `LineString` и проверяются тестом.
+
+`shorelineDemoIndex`, части кадров и ряды узлов —
 сохранённый результат Go CLI для демонстрации реплея в кабинете без собственного
-задания. Команда: `lito erosion --black-sea-sochi --offline --steps 3`. Данные
-охватывают 18.08.2026 00:00–03:00 UTC и основаны на оперативном прогнозе
+задания. Команда: `lito erosion --black-sea-sochi --offline --steps 168 --svg-max-frames 12`.
+Индекс, три части кадров и ряды узлов взяты из `erosion/visualization/` без
+изменения чисел. Данные охватывают 18.08.2026 00:00 — 25.08.2026 00:00 UTC
+и основаны на оперативном прогнозе
 Open-Meteo Marine, а не на наблюдениях за берегом. Это не годовой прогноз.

@@ -58,6 +58,7 @@ const scientificInputs = new ScientificInputsRepository(db);
 const workerId = randomUUID();
 let stopping = false;
 let active: ChildProcess | undefined;
+const shutdown = new AbortController();
 function stopProcess() {
   if (active?.pid) {
     try {
@@ -69,7 +70,9 @@ function stopProcess() {
 }
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.on(signal, () => {
+    if (stopping) return;
     stopping = true;
+    shutdown.abort();
     stopProcess();
   });
 
@@ -449,10 +452,17 @@ async function main() {
     if (item) await deletion.process(item);
     const job = await repository.claim(workerId, environment.workerProfile);
     if (job) await run(job);
-    else if (!item) await delay(1000);
+    else if (!item) {
+      try {
+        await delay(1000, undefined, { signal: shutdown.signal });
+      } catch (error) {
+        if (!stopping) throw error;
+      }
+    }
   }
 }
 main()
+  .then(() => console.log(`Worker ${workerId} остановлен`))
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

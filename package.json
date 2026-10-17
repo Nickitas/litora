@@ -10,7 +10,7 @@
     "logs": "docker compose --env-file .env.local -f infra/compose.yaml --profile app logs -f",
     "build:cli": "cd apps/lito-cli && go build -o bin/lito ./cmd/lito",
     "dev:api": "pnpm --filter litora-api start:dev",
-    "dev:worker": "pnpm --filter litora-api worker",
+    "dev:worker": "cd apps/lito-api && node --import tsx src/worker/main.ts",
     "dev:web": "pnpm --filter litora-web dev",
     "test:api": "pnpm --filter litora-api test",
     "test:api:db": "pnpm --filter litora-api test:db",

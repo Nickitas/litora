@@ -13,13 +13,6 @@ import type {
 import { Button } from "@/shared/shadcn/components/ui/button";
 import { Input } from "@/shared/shadcn/components/ui/input";
 import { Label } from "@/shared/shadcn/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/shadcn/components/ui/select";
 
 type Frame = ShorelineVisualizationChunkDto["frames"][number];
 const distance = new Intl.NumberFormat("ru-RU", {
@@ -28,7 +21,6 @@ const distance = new Intl.NumberFormat("ru-RU", {
 const coordinate = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 6,
 });
-const gainNumber = new Intl.NumberFormat("ru-RU");
 const mapStyleUrl = import.meta.env.VITE_MAP_STYLE_URL || "https://tiles.openfreemap.org/styles/liberty";
 
 function changeKind(value: number) {
@@ -73,14 +65,12 @@ export function ShorelineMap({
   index,
   initial,
   current,
-  initialGain,
   selectedPoint,
   onSelectPoint,
 }: {
   index: ShorelineVisualizationIndexDto;
   initial: Frame;
   current: Frame;
-  initialGain: number;
   selectedPoint: number;
   onSelectPoint: (point: number) => void;
 }) {
@@ -90,10 +80,9 @@ export function ShorelineMap({
   const mapPadding = compactMap ? 60 : 48;
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
-  const [showChanges, setShowChanges] = useState(true);
+  const [showChanges, setShowChanges] = useState(false);
   const [showInitial, setShowInitial] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
-  const [gain, setGain] = useState(initialGain);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [basemap, setBasemap] = useState<MapLibreMap | null>(null);
   const [basemapFailed, setBasemapFailed] = useState(false);
@@ -246,28 +235,6 @@ export function ShorelineMap({
       });
     return [...longitudeLines, ...latitudeLines].join(" ");
   })();
-  const amplifiedPoints = (() => {
-    if (gain === 1 || current.index === initial.index) return null;
-    const points: [number, number][] = [];
-    for (let pointIndex = 0; pointIndex < current.points.length; pointIndex++) {
-      const start = initial.points[pointIndex];
-      const end = current.points[pointIndex];
-      if (!start || !end) return null;
-      const projectedStart = projectCoordinate([start.lon, start.lat]);
-      const projectedEnd = projectCoordinate([end.lon, end.lat]);
-      if (!projectedStart || !projectedEnd) return null;
-      points.push([
-        projectedStart[0] + (projectedEnd[0] - projectedStart[0]) * gain,
-        projectedStart[1] + (projectedEnd[1] - projectedStart[1]) * gain,
-      ]);
-    }
-    return points;
-  })();
-  const amplifiedPath = amplifiedPoints
-    ? line<[number, number]>()
-        .x((point) => point[0])
-        .y((point) => point[1])(amplifiedPoints)
-    : null;
   const selected = current.points[selectedPoint];
   const initialSelected = initial.points[selectedPoint];
   const screenPoint = selected
@@ -276,13 +243,27 @@ export function ShorelineMap({
   const initialScreenPoint = initialSelected
     ? projectCoordinate([initialSelected.lon, initialSelected.lat])
     : null;
-  const amplifiedSelectedPoint = amplifiedPoints?.[selectedPoint] ?? null;
-  const selectedDisplayPoint = amplifiedSelectedPoint ?? screenPoint;
+  const closeup = basemap ? basemap.getZoom() >= 19 : view.scale >= 1000;
+  const focusSelectedPoint = () => {
+    if (!initialSelected) return;
+    if (basemap) {
+      basemap.jumpTo({ center: [initialSelected.lon, initialSelected.lat], zoom: 22 });
+      return;
+    }
+    const point = geometry.projection([initialSelected.lon, initialSelected.lat]);
+    if (!point) return;
+    const scale = 1000;
+    setView({
+      scale,
+      x: -scale * (point[0] - 400),
+      y: -scale * (point[1] - mapHeight / 2),
+    });
+  };
   const cellsByPoint = new Map(
     current.cells.map((cell) => [cell.pointIndex, cell] as const)
   );
   const selectedCell = cellsByPoint.get(selectedPoint);
-  const markerRadius =
+  const markerRadius = closeup ? 3 :
     current.points.length > 60
       ? compactMap
         ? 6
@@ -296,25 +277,10 @@ export function ShorelineMap({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xl font-semibold">Положение береговой линии</h2>
         <div className="flex flex-wrap gap-1" aria-label="Управление картой">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="shoreline-map-gain">Усиление смещения</Label>
-            <Select
-              value={String(gain)}
-              onValueChange={(value) => setGain(Number(value))}
-            >
-              <SelectTrigger id="shoreline-map-gain" aria-label="Усиление смещения" className="min-h-9 w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1× · точно</SelectItem>
-                <SelectItem value="100">100×</SelectItem>
-                <SelectItem value="10000">10 000×</SelectItem>
-                <SelectItem value="100000">100 000×</SelectItem>
-                <SelectItem value="500000">500 000×</SelectItem>
-                <SelectItem value="1000000">1 000 000×</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Button type="button" size="sm" variant="outline"
+            disabled={!initialSelected} onClick={focusSelectedPoint}>
+            Крупный план узла
+          </Button>
           <Button
             type="button"
             size="sm"
@@ -349,7 +315,7 @@ export function ShorelineMap({
             aria-label="Увеличить карту"
             onClick={() => basemap
               ? basemap.zoomIn()
-              : setView((v) => ({ ...v, scale: Math.min(v.scale * 1.4, 8) }))}
+              : setView((v) => ({ ...v, scale: Math.min(v.scale * 1.4, 2000) }))}
           >
             +
           </Button>
@@ -380,7 +346,7 @@ export function ShorelineMap({
               } else setView({ x: 0, y: 0, scale: 1 });
             }}
           >
-            Сбросить
+            Весь участок
           </Button>
         </div>
       </div>
@@ -391,7 +357,7 @@ export function ShorelineMap({
         <svg
           viewBox={`0 0 800 ${mapHeight}`}
           role="img"
-          aria-label={`Карта: исходная линия и положение после шага ${current.index}. Выбран узел ${selectedPoint + 1}.${gain > 1 ? ` Наглядный контур усилен в ${gainNumber.format(gain)} раз.` : ""}`}
+          aria-label={`Карта: исходная линия и положение после шага ${current.index}. Выбран узел ${selectedPoint + 1}. Геометрия показана без смещения координат.`}
           className={`relative block w-full touch-none ${basemap ? "pointer-events-none" : ""}`}
           style={{ aspectRatio: `800 / ${mapHeight}` }}
           onPointerDown={(event) => {
@@ -427,7 +393,7 @@ export function ShorelineMap({
                 d={contourPath(initial)}
                 fill="none"
                 stroke="var(--chart-2)"
-                strokeWidth="3"
+                strokeWidth={closeup ? 2 : 3}
                 strokeDasharray="8 5"
                 vectorEffect="non-scaling-stroke"
               />
@@ -436,30 +402,13 @@ export function ShorelineMap({
               data-actual-contour="true"
               d={contourPath(current)}
               fill="none"
-              stroke="var(--background)"
-              strokeWidth="8"
-              vectorEffect="non-scaling-stroke"
-            />
-            <path
-              d={contourPath(current)}
-              fill="none"
               stroke="var(--chart-1)"
-              strokeWidth="4"
+              strokeWidth={closeup ? 2 : 4}
               vectorEffect="non-scaling-stroke"
             />
-            {amplifiedPath && (
-              <path
-                data-display-contour={gain}
-                d={amplifiedPath}
-                fill="none"
-                stroke="var(--chart-3)"
-                strokeWidth="4"
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
             {current.points.length <= 500 &&
               current.points.map((point, pointIndex) => {
-                const projected = amplifiedPoints?.[pointIndex] ?? projectCoordinate([point.lon, point.lat]);
+                const projected = projectCoordinate([point.lon, point.lat]);
                 if (!projected) return null;
                 const cell = cellsByPoint.get(pointIndex);
                 const kind = cell
@@ -527,7 +476,7 @@ export function ShorelineMap({
                 <circle
                   cx={initialScreenPoint[0]}
                   cy={initialScreenPoint[1]}
-                  r={compactMap ? 10 : 5}
+                  r={closeup ? 4 : compactMap ? 10 : 5}
                   fill="var(--card)"
                   stroke="var(--chart-2)"
                   strokeWidth="2"
@@ -535,24 +484,11 @@ export function ShorelineMap({
                 />
               </g>
             )}
-            {amplifiedSelectedPoint && initialScreenPoint && current.index !== initial.index && (
-              <line
-                data-selected-displacement="visual"
-                x1={initialScreenPoint[0]}
-                y1={initialScreenPoint[1]}
-                x2={amplifiedSelectedPoint[0]}
-                y2={amplifiedSelectedPoint[1]}
-                stroke="var(--chart-3)"
-                strokeWidth="2"
-                strokeDasharray="5 4"
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
-            {selectedDisplayPoint && (
+            {screenPoint && (
               <circle
-                cx={selectedDisplayPoint[0]}
-                cy={selectedDisplayPoint[1]}
-                r={compactMap ? 16 : 7}
+                cx={screenPoint[0]}
+                cy={screenPoint[1]}
+                r={closeup ? 5 : compactMap ? 16 : 7}
                 fill="none"
                 stroke="var(--chart-3)"
                 strokeWidth="2"
@@ -589,12 +525,6 @@ export function ShorelineMap({
           <span className="w-7 border-t-[3px] border-chart-1" />
           Точное положение после шага
         </span>
-        {amplifiedPath && (
-          <span className="inline-flex items-center gap-2">
-            <span className="w-7 border-t-[3px] border-chart-3" />
-            Наглядный контур · {gainNumber.format(gain)}×
-          </span>
-        )}
         <span className="inline-flex items-center gap-2">
           <span className="size-3 rounded-full bg-chart-3" />
           Выбранный узел
@@ -622,15 +552,11 @@ export function ShorelineMap({
           Координаты узла: {coordinate.format(selected.lat)}° с. ш., {coordinate.format(selected.lon)}° в. д.
         </p>
       )}
-      {gain > 1 ? (
-        <p role="note" className="rounded-lg bg-warning-background p-3 text-sm text-warning">
-          Наглядный контур усилен в {gainNumber.format(gain)} раз только на экране. Метки узлов следуют за ним; их положение не является географической координатой. Точный контур и значения модели не изменены; сравнивайте кадры при одном коэффициенте.
-        </p>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Геометрия показана без усиления. Малые изменения могут быть меньше толщины линии; точное значение дано в метрах за шаг.
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        Контуры и узлы показаны в рассчитанных координатах. На обзоре участка малое смещение может быть меньше толщины линии.
+        {closeup ? " Крупный план сохраняет положение камеры при смене кадра; масштаб увеличен, координаты не сдвинуты." : " Выберите узел и откройте его крупный план, чтобы увидеть смещение в масштабе карты."}
+        {" "}Точное значение дано в метрах за шаг.
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <Label htmlFor="shoreline-point">
           Узел береговой линии

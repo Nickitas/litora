@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { DatasetDto } from "@litora/contracts";
-import { Database, Plus, Search } from "lucide-react";
+import {
+  coastlineExamples,
+  findSavedExample,
+  type CoastlineExample,
+} from "@litora/generated-data";
+import { Check, Database, ExternalLink, Plus, Search } from "lucide-react";
 import { api } from "@/shared/api/client";
 import { Badge } from "@/shared/shadcn/components/ui/badge";
 import { Button } from "@/shared/shadcn/components/ui/button";
@@ -22,7 +27,9 @@ function DatasetCard({ dataset }: { dataset: DatasetDto }) {
       <Card className="h-full min-w-0 p-5 shadow-none sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold break-words">{dataset.name}</h2>
+            <h3 className="text-lg font-semibold break-words">
+              {dataset.name}
+            </h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Добавлен {formatDate(dataset.createdAt)}
             </p>
@@ -49,9 +56,14 @@ function DatasetCard({ dataset }: { dataset: DatasetDto }) {
             <dd className="mt-1 font-medium break-words">{dataset.license}</dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-muted-foreground">Система координат и единицы</dt>
+            <dt className="text-muted-foreground">
+              Система координат и единицы
+            </dt>
             <dd className="mt-1 font-medium">
-              {dataset.crs} · {dataset.coordinateUnit === "degrees" ? "градусы" : dataset.coordinateUnit}
+              {dataset.crs} ·{" "}
+              {dataset.coordinateUnit === "degrees"
+                ? "градусы"
+                : dataset.coordinateUnit}
             </dd>
           </div>
           <div>
@@ -69,12 +81,84 @@ function DatasetCard({ dataset }: { dataset: DatasetDto }) {
         </dl>
         <div className="mt-5 border-t pt-4 text-sm">
           <p className="text-muted-foreground">Контрольная сумма SHA-256</p>
-          <code className="mt-1 block break-all text-xs leading-5">
+          <code className="mt-1 block text-xs leading-5 break-all">
             {dataset.sha256}
           </code>
           <p className="mt-2 text-xs text-muted-foreground">
             Версия схемы набора: {dataset.schemaVersion}
           </p>
+          <p className="mt-1 text-xs break-all text-muted-foreground">
+            ID записи: {dataset.id}
+          </p>
+        </div>
+      </Card>
+    </li>
+  );
+}
+
+function ExampleCard({
+  example,
+  saved,
+  disabled,
+  pending,
+  onSave,
+}: {
+  example: CoastlineExample;
+  saved: boolean;
+  disabled: boolean;
+  pending: boolean;
+  onSave: (example: CoastlineExample) => void;
+}) {
+  return (
+    <li>
+      <Card className="flex h-full min-w-0 flex-col gap-4 p-5 shadow-none">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-xs font-medium text-primary">Учебный контур</p>
+            <h3 className="mt-1 text-base font-semibold">
+              {example.dataset.name}
+            </h3>
+          </div>
+          {saved && (
+            <Badge variant="secondary">
+              <Check aria-hidden="true" className="size-3" /> Сохранён
+            </Badge>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">{example.description}</p>
+        <p className="text-xs text-muted-foreground">
+          {example.dataset.geometry.coordinates.length} точек ·{" "}
+          {example.dataset.crs} · ODbL
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Источник: © OpenStreetMap contributors
+          {example.dataset.sourceRevision &&
+            ` · ${example.dataset.sourceRevision}`}
+        </p>
+        <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
+          <Button
+            type="button"
+            size="sm"
+            variant={saved ? "secondary" : "default"}
+            disabled={saved || disabled || pending}
+            onClick={() => onSave(example)}
+          >
+            {saved
+              ? "Уже в моих наборах"
+              : pending
+                ? "Сохраняем…"
+                : "Сохранить набор"}
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <a
+              href={example.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Исходные данные{" "}
+              <ExternalLink aria-hidden="true" className="size-3" />
+            </a>
+          </Button>
         </div>
       </Card>
     </li>
@@ -89,6 +173,8 @@ export function DatasetsPage() {
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
+  const [exampleError, setExampleError] = useState("");
+  const [savingExampleKey, setSavingExampleKey] = useState<string | null>(null);
   const reload = useCallback(() => {
     setLoading(true);
     setError("");
@@ -97,7 +183,8 @@ export function DatasetsPage() {
 
   useEffect(() => {
     let mounted = true;
-    void api.datasets()
+    void api
+      .datasets()
       .then((result) => {
         if (!mounted) return;
         setDatasets(result);
@@ -105,14 +192,18 @@ export function DatasetsPage() {
       })
       .catch((nextError: unknown) => {
         if (mounted)
-          setError(nextError instanceof Error
-            ? nextError.message
-            : "Не удалось загрузить наборы данных");
+          setError(
+            nextError instanceof Error
+              ? nextError.message
+              : "Не удалось загрузить наборы данных"
+          );
       })
       .finally(() => {
         if (mounted) setLoading(false);
       });
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [revision]);
 
   const normalizedSearch = search.trim().toLocaleLowerCase("ru-RU");
@@ -126,10 +217,33 @@ export function DatasetsPage() {
     : datasets;
 
   function onSaved(dataset: DatasetDto) {
-    setDatasets((current) => [dataset, ...current.filter((item) => item.id !== dataset.id)]);
+    setDatasets((current) => [
+      dataset,
+      ...current.filter((item) => item.id !== dataset.id),
+    ]);
     setSearch("");
     setCreating(false);
-    setSavedMessage(`Набор «${dataset.name}» сохранён. Он доступен в форме нового расчёта.`);
+    setSavedMessage(
+      `Набор «${dataset.name}» сохранён. Он доступен в форме нового расчёта.`
+    );
+  }
+
+  async function saveExample(example: CoastlineExample) {
+    if (savingExampleKey || findSavedExample(datasets, example)) return;
+    setSavingExampleKey(example.key);
+    setExampleError("");
+    try {
+      const saved = await api.createDataset(example.dataset);
+      onSaved(saved);
+    } catch (nextError) {
+      setExampleError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Не удалось сохранить пример"
+      );
+    } finally {
+      setSavingExampleKey(null);
+    }
   }
 
   return (
@@ -141,8 +255,8 @@ export function DatasetsPage() {
             Наборы данных
           </h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            Свои небольшие береговые линии для расчёта размерности. Здесь хранится
-            паспорт источника, а не оценка его научной пригодности.
+            Свои небольшие береговые линии для расчёта размерности. Здесь
+            хранится паспорт источника, а не оценка его научной пригодности.
           </p>
         </div>
         <Button
@@ -169,16 +283,57 @@ export function DatasetsPage() {
       )}
 
       <div className="flex gap-3 rounded-xl border bg-muted/35 p-4 text-sm">
-        <Database aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" />
+        <Database
+          aria-hidden="true"
+          className="mt-0.5 size-5 shrink-0 text-primary"
+        />
         <p>
           До 100 наборов GeoJSON LineString, каждый не больше 64 КиБ. Источник,
-          версия и лицензия указаны вами. API проверяет структуру при сохранении,
-          Go — расчётную пригодность при запуске. Удаление пока недоступно.
+          версия и лицензия указаны вами. API проверяет структуру при
+          сохранении, Go — расчётную пригодность при запуске.
         </p>
       </div>
 
+      <section aria-labelledby="dataset-examples-heading" className="space-y-4">
+        <div>
+          <h2 id="dataset-examples-heading" className="text-xl font-semibold">
+            Примеры для старта
+          </h2>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            Три разных фрагмента береговой линии из OpenStreetMap. Сохраняйте
+            только нужные: это учебные данные, не геодезическая съёмка и не
+            основание для инженерного заключения.
+          </p>
+        </div>
+        <ul className="grid gap-4 lg:grid-cols-3">
+          {coastlineExamples.map((example) => (
+            <ExampleCard
+              key={example.key}
+              example={example}
+              saved={Boolean(findSavedExample(datasets, example))}
+              disabled={
+                loading ||
+                Boolean(error) ||
+                quotaReached ||
+                Boolean(savingExampleKey)
+              }
+              pending={savingExampleKey === example.key}
+              onSave={(value) => void saveExample(value)}
+            />
+          ))}
+        </ul>
+        {exampleError && (
+          <p role="alert" className="text-sm text-destructive">
+            {exampleError}
+          </p>
+        )}
+      </section>
+
       {savedMessage && (
-        <p role="status" className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+        <p
+          role="status"
+          className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm"
+        >
           {savedMessage}
         </p>
       )}
@@ -190,9 +345,17 @@ export function DatasetsPage() {
       )}
 
       {error && (
-        <div role="alert" className="rounded-xl border border-destructive bg-status-failed-background p-4 text-status-failed">
+        <div
+          role="alert"
+          className="rounded-xl border border-destructive bg-status-failed-background p-4 text-status-failed"
+        >
           <p>{error}</p>
-          <Button type="button" variant="link" className="mt-2 h-auto p-0" onClick={reload}>
+          <Button
+            type="button"
+            variant="link"
+            className="mt-2 h-auto p-0"
+            onClick={reload}
+          >
             Повторить загрузку
           </Button>
         </div>
@@ -210,28 +373,37 @@ export function DatasetsPage() {
           )}
         </div>
         {loading ? (
-          <p role="status" className="rounded-xl border border-dashed p-6 text-muted-foreground">
+          <p
+            role="status"
+            className="rounded-xl border border-dashed p-6 text-muted-foreground"
+          >
             Загружаем наборы данных…
           </p>
         ) : datasets.length === 0 && !error ? (
           <div className="rounded-xl border border-dashed bg-card p-6">
             <p className="font-medium">Пока нет сохранённых наборов</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Добавьте свой GeoJSON LineString. Создание набора не запускает расчёт.
+              Сохраните учебный пример выше или добавьте свой GeoJSON
+              LineString. Создание набора не запускает расчёт.
             </p>
           </div>
         ) : datasets.length > 0 ? (
           <>
             <div className="max-w-md space-y-2">
-              <Label htmlFor="dataset-search">Поиск по названию и источнику</Label>
+              <Label htmlFor="dataset-search">
+                Поиск по названию и источнику
+              </Label>
               <div className="relative">
-                <Search aria-hidden="true" className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Search
+                  aria-hidden="true"
+                  className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                />
                 <Input
                   id="dataset-search"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   className="pl-9"
-                  placeholder="Например, участок Сочи"
+                  placeholder="Название или источник"
                 />
               </div>
               <p className="text-xs text-muted-foreground">
@@ -239,8 +411,12 @@ export function DatasetsPage() {
               </p>
             </div>
             {visibleDatasets.length === 0 ? (
-              <p role="status" className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-                По этому запросу наборы не найдены. Попробуйте другое название или источник.
+              <p
+                role="status"
+                className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground"
+              >
+                По этому запросу наборы не найдены. Попробуйте другое название
+                или источник.
               </p>
             ) : (
               <ul className="grid gap-4 xl:grid-cols-2">

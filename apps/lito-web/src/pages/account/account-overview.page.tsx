@@ -79,7 +79,7 @@ export function AccountOverviewPage() {
           Реплей береговой линии у Сочи
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Откройте четыре сохранённых состояния модели CERC за 18 августа 2026 года,
+          Откройте сохраненные состояния модели CERC,
           проиграйте их по времени и выберите узел на карте. Свой расчёт не требуется.
         </p>
         <Button asChild className="mt-4">

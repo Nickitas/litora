@@ -40,7 +40,7 @@ export class CalculationResponse implements CalculationJobDto {
   @ApiProperty({ type: String, format: "uuid" }) id!: string;
   @ApiProperty({
     type: String,
-    enum: ["source_file", "dimension", "dimension_dataset", "dimension_file", "map", "map_file", "erosion", "erosion_file", "all_demo", "all_file", "calibrate_cerc", "mesh", "seabed_build", "seabed_render", "seabed_adapt", "seabed_generate_adaptive", "seabed_validate", "seabed_compare_adaptive"],
+    enum: ["source_file", "dimension", "dimension_dataset", "dimension_file", "map", "map_file", "erosion", "erosion_file", "all_demo", "all_file", "calibrate_cerc", "shoreline_data_audit", "mesh", "seabed_build", "seabed_render", "seabed_adapt", "seabed_generate_adaptive", "seabed_validate", "seabed_compare_adaptive", "seabed_assess_ml", "seabed_check_full"],
   })
   kind!: string;
   @ApiProperty({

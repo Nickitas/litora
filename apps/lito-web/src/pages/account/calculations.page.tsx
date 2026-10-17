@@ -200,7 +200,7 @@ export function CalculationsPage() {
               Полные отчеты, ключевые сведения и сопоставления между совместимыми результатами.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full gap-2 justify-between">
             <DialogTrigger asChild>
               <Button type="button">Новый расчёт</Button>
             </DialogTrigger>

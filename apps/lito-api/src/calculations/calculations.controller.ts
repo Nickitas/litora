@@ -86,9 +86,8 @@ export class CalculationsController {
             steps: {
               type: "integer",
               minimum: 0,
-              maximum: 48,
-              description: "Для erosion/all_demo: 1–48/1–24; для erosion_file/all_file: 1–48 либо 0 (весь ряд с ограничениями)",
-              default: 3,
+              maximum: 168,
+              description: "Для erosion: 1–168, по умолчанию 168; для all_demo: 1–24; для erosion_file/all_file: 1–48 либо 0 (весь ряд с ограничениями)",
             },
             svgMaxFrames: { type: "integer", minimum: 0, maximum: 128, description: "Только erosion_file/all_file: 0 при обычном расчёте; при steps=0 — 2–128 SVG эрозии, включая первый и последний" },
             breakingIndex: { type: "number", minimum: 0.55, maximum: 1.2, description: "CERC и all: индекс разрушения волн, default 0.78" },
@@ -119,8 +118,9 @@ export class CalculationsController {
                 "Только для dimension_dataset; набор должен принадлежать пользователю",
             },
             coastlineInputId: { type: "string", format: "uuid", description: "Загруженный GeoJSON-контур для source_file, map_file, dimension_file, erosion_file, all_file, calibrate_cerc и сеточных сценариев" },
-            waveInputId: { type: "string", format: "uuid", description: "erosion_file/all_file/calibrate_cerc: волновой ряд CSV/JSON, принадлежащий пользователю" },
-            observationsInputId: { type: "string", format: "uuid", description: "calibrate_cerc: независимые годовые скорости берега, JSON EPSG:4326" },
+            waveInputId: { type: "string", format: "uuid", description: "erosion_file/all_file/calibrate_cerc: волновой ряд; shoreline_data_audit: необязательный волновой ряд CSV/JSON владельца" },
+            observationsInputId: { type: "string", format: "uuid", description: "calibrate_cerc: JSON независимых годовых скоростей; shoreline_data_audit: датированные контуры GeoJSON EPSG:4326" },
+            validationStart: { type: "string", format: "date", description: "shoreline_data_audit: необязательное начало поздней независимой проверки UTC; Go требует наблюдения по обе стороны даты" },
             sedimentSourcesInputId: { type: "string", format: "uuid", description: "erosion_file/all_file/calibrate_cerc: необязательный JSON источников и стоков наносов; для all_file только без упрощения" },
             structuresInputId: { type: "string", format: "uuid", description: "erosion_file/all_file/calibrate_cerc: необязательный JSON сооружений; для all_file только без упрощения" },
             flatMeshInputId: { type: "string", format: "uuid", description: "Плоская MSH для seabed_build или QA-03; в QA-03 максимум 256 МиБ" },
@@ -185,7 +185,7 @@ export class CalculationsController {
           },
         },
       },
-      example: { kind: "erosion", input: { steps: 3 } },
+      example: { kind: "erosion", input: { steps: 168 } },
     },
   })
   @ApiResponse({

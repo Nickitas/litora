@@ -162,39 +162,71 @@ test("пример открывается из обзора без своего 
   await expect(page).toHaveURL(/\/lab\/shoreline$/);
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.getByRole("img", { name: /Карта: исходная линия/ })).toBeVisible();
-  await expect(page.getByText("Короткий демонстрационный расчёт за 3 часа", { exact: false })).toBeVisible();
+  await expect(page.getByText("Демонстрационный расчёт за 7 суток", { exact: false })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Перейти к году: охват расчётных состояний по годам" })
+    .getByRole("button", { name: "2026: 169 дат" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Данные для карты" })).toBeVisible();
   await page.getByRole("combobox", { name: "Скорость" }).click();
   await page.getByRole("option", { name: "2×" }).click();
   await page.getByRole("button", { name: /Воспроизвести/ }).click();
+  await expect(page.getByRole("img", { name: /положение после шага 24/ })).toBeVisible();
+  await page.getByRole("button", { name: "Пауза" }).click();
+  const slider = page.getByRole("region", { name: "Реплей береговой линии" })
+    .getByRole("slider", { name: "Состояние береговой линии" });
+  await slider.focus();
+  await slider.press("Home");
+  await slider.press("ArrowRight");
+  await slider.press("ArrowRight");
+  await slider.press("ArrowRight");
   await expect(page.getByRole("img", { name: /положение после шага 3/ })).toBeVisible();
-  const map = page.getByRole("img", { name: /положение после шага 3/ });
+  const map = page.locator('svg[aria-label^="Карта:"]');
   await expect(map).toHaveAttribute("viewBox", "0 0 800 1500");
   await expect(map.locator('[data-map-grid="local"]')).toHaveAttribute("d", /V1500.*H800/);
-  await expect(page.getByRole("combobox", { name: "Усиление смещения" })).toContainText("1 000 000×");
-  await expect(map.locator('[data-display-contour="1000000"]')).toHaveCount(1);
-  await page.getByLabel("Узел береговой линии").fill("13");
-  const connector = await map.evaluate((svg) => {
-    const length = (kind: string) => {
-      const line = svg.querySelector<SVGLineElement>(`[data-selected-displacement="${kind}"]`);
-      if (!line) return 0;
-      return Math.hypot(
-        Number(line.getAttribute("x2")) - Number(line.getAttribute("x1")),
-        Number(line.getAttribute("y2")) - Number(line.getAttribute("y1")),
-      );
-    };
-    return { actual: length("actual"), visual: length("visual") };
-  });
-  expect(connector.actual).toBeLessThan(0.01);
-  expect(connector.visual).toBeGreaterThan(5);
-  const exactPath = await map.locator('[data-actual-contour="true"]').getAttribute("d");
-  await page.getByRole("combobox", { name: "Усиление смещения" }).click();
-  await page.getByRole("option", { name: "1× · точно" }).click();
+  await expect(page.getByRole("combobox", { name: "Усиление смещения" })).toHaveCount(0);
   await expect(map.locator("[data-display-contour]")).toHaveCount(0);
-  expect(await map.locator('[data-actual-contour="true"]').getAttribute("d")).toBe(exactPath);
-  await page.getByRole("combobox", { name: "Усиление смещения" }).click();
-  await page.getByRole("option", { name: "1 000 000×" }).click();
+  await slider.press("End");
+  await expect(page.getByRole("img", { name: /положение после шага 168/ })).toBeVisible();
+  await page.getByLabel("Узел береговой линии").fill("13");
+  const connectorLength = () => map.evaluate((svg) => {
+    const line = svg.querySelector<SVGLineElement>('[data-selected-displacement="actual"] line');
+    if (!line) return 0;
+    const matrix = line.getScreenCTM();
+    if (!matrix) return 0;
+    const start = new DOMPoint(Number(line.getAttribute("x1")), Number(line.getAttribute("y1"))).matrixTransform(matrix);
+    const end = new DOMPoint(Number(line.getAttribute("x2")), Number(line.getAttribute("y2"))).matrixTransform(matrix);
+    return Math.hypot(
+      end.x - start.x,
+      end.y - start.y,
+    );
+  });
+  const overviewLength = await connectorLength();
+  expect(overviewLength).toBeLessThan(0.01);
+  await expect(map.locator('[data-actual-contour="true"]')).toHaveCount(1);
+  await page.getByRole("button", { name: "Крупный план узла" }).click();
+  await expect.poll(connectorLength).toBeGreaterThan(overviewLength * 10);
+  await expect(page.getByText("Крупный план сохраняет положение камеры", { exact: false })).toBeVisible();
+  const camera = () => map.evaluate((svg) => {
+    const line = svg.querySelector<SVGLineElement>('[data-selected-displacement="actual"] line');
+    const matrix = line?.getCTM();
+    if (!line || !matrix) return null;
+    const point = new DOMPoint(Number(line.getAttribute("x1")), Number(line.getAttribute("y1"))).matrixTransform(matrix);
+    return { x: point.x, y: point.y };
+  });
+  const fixedPoint = await camera();
+  await slider.press("ArrowLeft");
+  await expect(page.getByRole("img", { name: /положение после шага 167/ })).toBeVisible();
+  expect(await camera()).toEqual(fixedPoint);
+  await slider.press("End");
+  await expect(page.getByRole("img", { name: /положение после шага 168/ })).toBeVisible();
+  await page.getByRole("button", { name: "Весь участок" }).click();
+  await expect.poll(connectorLength).toBeLessThan(0.01);
+  await slider.press("Home");
+  await slider.press("ArrowRight");
+  await slider.press("ArrowRight");
+  await slider.press("ArrowRight");
+  await expect(page.getByRole("img", { name: /положение после шага 3/ })).toBeVisible();
   await page.getByLabel("Узел береговой линии").fill("1");
+  await page.getByRole("button", { name: "Смещения по узлам" }).click();
   await expect(map.locator('[data-change-kind="landward"]').first()).toBeVisible();
   await expect(map.locator('[data-change-kind="seaward"]').first()).toBeVisible();
   await expect(page.getByRole("paragraph").filter({ hasText: "Узел 1: смещение к суше" })).toBeVisible();
@@ -216,20 +248,30 @@ test("пример открывается из обзора без своего 
       width: element.getBoundingClientRect().width,
       height: element.getBoundingClientRect().height,
     }))).toEqual(mapSize);
-  const slider = page.getByRole("region", { name: "Реплей береговой линии" })
-    .getByRole("slider", { name: "Состояние береговой линии" });
   await expect(slider).toBeVisible();
   await slider.focus();
   await slider.press("Home");
   await expect(page.getByRole("img", { name: /Карта: исходная линия/ })).toBeVisible();
   await slider.press("End");
-  await expect(page.getByRole("img", { name: /положение после шага 3/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: /положение после шага 168/ })).toBeVisible();
+  await expect(page.getByText("Кадр 169 из 169")).toBeVisible();
   await slider.press("ArrowLeft");
   await slider.press("ArrowLeft");
+  await expect(page.getByRole("img", { name: /положение после шага 166/ })).toBeVisible();
+  await slider.press("Home");
+  await slider.press("ArrowRight");
   await page.getByRole("button", { name: "Следующий узел" }).click();
   await expect(page.getByRole("heading", { name: "Смещение узла 2 во времени" })).toBeVisible();
   await page.getByRole("button", { name: "Предыдущий узел" }).click();
   await expect(page.getByRole("row", { name: /Смещение ячейки за шаг/ })).toContainText(/0,0001455 м/);
+  await slider.press("Home");
+  await page.getByRole("combobox", { name: "Шаг просмотра" }).click();
+  await page.getByRole("option", { name: "Каждый час" }).click();
+  await page.getByRole("combobox", { name: "Скорость" }).click();
+  await page.getByRole("option", { name: "0,5×" }).click();
+  await page.getByRole("button", { name: /Воспроизвести/ }).click();
+  await expect(page.getByRole("img", { name: /положение после шага 1/ })).toBeVisible();
+  await page.getByRole("button", { name: "Пауза" }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });
