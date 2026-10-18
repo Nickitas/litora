@@ -43,6 +43,7 @@ export function useCalculationKinds() {
 export function useCalculations() {
   const [jobs, setJobs] = useState<CalculationJobDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const reload = useCallback(() => setRevision((value) => value + 1), []);
@@ -56,6 +57,7 @@ export function useCalculations() {
         const result = await api.calculations();
         if (mounted) {
           setJobs(result);
+          setLoaded(true);
           setError("");
         }
       } catch (nextError) {
@@ -75,7 +77,60 @@ export function useCalculations() {
     };
   }, [revision]);
 
-  return { jobs, loading, error, reload };
+  return { jobs, loading, loaded, error, reload };
+}
+
+export function useActiveCalculations() {
+  const [jobs, setJobs] = useState<CalculationJobDto[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  const reload = useCallback(() => setRevision((value) => value + 1), []);
+
+  useEffect(() => {
+    let mounted = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    async function poll() {
+      try {
+        const [queued, running] = await Promise.all([
+          api.calculationPage({ status: "queued", limit: 50 }),
+          api.calculationPage({ status: "running", limit: 50 }),
+        ]);
+        if (mounted) {
+          const unique = new Map(
+            [...queued.items, ...running.items].map((job) => [job.id, job]),
+          );
+          setJobs(
+            [...unique.values()].sort((left, right) =>
+              right.createdAt.localeCompare(left.createdAt) ||
+              right.id.localeCompare(left.id),
+            ),
+          );
+          setTotalCount(queued.totalCount + running.totalCount);
+          setLoaded(true);
+          setError("");
+        }
+      } catch (nextError) {
+        if (mounted) setError(messageFromError(nextError));
+      } finally {
+        if (mounted) {
+          setLoading(false);
+          timer = setTimeout(poll, 4000);
+        }
+      }
+    }
+
+    void poll();
+    return () => {
+      mounted = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [revision]);
+
+  return { jobs, totalCount, loading, loaded, error, reload };
 }
 
 type HistoryState = {

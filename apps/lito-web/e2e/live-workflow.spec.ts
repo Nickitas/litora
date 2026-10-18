@@ -39,7 +39,7 @@ test("реальный кабинет: регистрация, GeoJSON по ум
   await expect(page.getByLabel("Что рассчитать")).toBeEnabled();
 
   await page.getByRole("combobox", { name: "Что рассчитать" }).click();
-  await page.getByRole("option", { name: "Своя береговая линия" }).click();
+  await page.getByRole("option", { name: "Размерность своей береговой линии" }).click();
   await expect(page.getByLabel("Набор данных")).toContainText(
     "Встроенный пример Сочи"
   );
@@ -57,7 +57,7 @@ test("реальный кабинет: регистрация, GeoJSON по ум
   const download = await page.request.get(manifestUrl!);
   expect(download.status()).toBe(200);
   const manifest = await download.json();
-  expect(manifest.schemaVersion).toBe(1);
+  expect(manifest.schemaVersion).toBe(2);
   expect(manifest.artifacts.length).toBeGreaterThan(0);
 
   await page.reload();

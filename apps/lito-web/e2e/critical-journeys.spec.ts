@@ -480,6 +480,96 @@ test("устаревшая ссылка на создание возвращае
   expect(observed.pageErrors).toEqual([]);
 });
 
+test("обзор показывает старый queued и все пять активных после сотни завершённых", async ({ page }) => {
+  const statuses = ["queued", "queued", "queued", "running", "running"] as const;
+  const activeJobs: CalculationJobDto[] = statuses.map((status, index) => ({
+    ...job,
+    id: `90000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    status,
+    createdAt: "2025-01-01T12:00:00.000Z",
+  }));
+  const completedJobs: CalculationJobDto[] = Array.from({ length: 100 }, (_, index) => ({
+    ...job,
+    id: `80000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    status: "succeeded",
+    createdAt: "2026-10-18T12:00:00.000Z",
+  }));
+  const requestedStatuses: string[] = [];
+  const observed = await mockApi(page, (path, method, _body, params) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
+    if (path === "/api/calculations" && method === "GET") return { body: completedJobs };
+    if (path === "/api/calculations/page" && method === "GET") {
+      const status = params.get("status");
+      requestedStatuses.push(status ?? "");
+      const items = activeJobs.filter((item) => item.status === status);
+      return { body: { items, nextCursor: null, totalCount: items.length } };
+    }
+  });
+
+  await page.goto("/lab");
+  const active = page.getByRole("region", { name: "Сейчас выполняются" });
+  await expect(active.getByRole("listitem")).toHaveCount(5);
+  await expect(active.getByText("Активных расчётов: 5.")).toBeVisible();
+  await expect(active.locator(`a[href="/lab/calculations/${activeJobs[0].id}"]`)).toBeVisible();
+  expect(requestedStatuses).toContain("queued");
+  expect(requestedStatuses).toContain("running");
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("ошибка активных расчётов не выглядит пустотой и сохраняет последний снимок", async ({ page }) => {
+  let allowActive = false;
+  const observed = await mockApi(page, (path, method, _body, params) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations/page" && method === "GET" && params.has("status")) {
+      if (!allowActive) return { status: 503, body: { message: "База временно недоступна" } };
+      const items = params.get("status") === "queued" ? [job] : [];
+      return { body: { items, nextCursor: null, totalCount: items.length } };
+    }
+  });
+
+  await page.goto("/lab");
+  const active = page.getByRole("region", { name: "Сейчас выполняются" });
+  await expect(active.getByText("Сведения об активных расчётах временно недоступны.")).toBeVisible();
+  await expect(active.getByText("Нет активных расчётов.", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("Пока нет расчётов.", { exact: false })).toBeVisible();
+
+  allowActive = true;
+  await page.getByRole("button", { name: "Повторить загрузку активных расчётов" }).click();
+  await expect(active.getByRole("listitem")).toHaveCount(1);
+  allowActive = false;
+  await expect(active.getByText("Показаны последние полученные данные; обновление не удалось.")).toBeVisible({ timeout: 10_000 });
+  await expect(active.getByRole("listitem")).toHaveCount(1);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("обзор сообщает об усечении активных и отдельно об ошибке недавних", async ({ page }) => {
+  const observed = await mockApi(page, (path, method, _body, params) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
+    if (path === "/api/calculations" && method === "GET")
+      return { status: 503, body: { message: "История временно недоступна" } };
+    if (path === "/api/calculations/page" && method === "GET") {
+      const items = params.get("status") === "queued" ? [job] : [];
+      return { body: { items, nextCursor: null, totalCount: items.length ? 2 : 0 } };
+    }
+  });
+
+  await page.goto("/lab");
+  const active = page.getByRole("region", { name: "Сейчас выполняются" });
+  const recent = page.getByRole("region", { name: "Недавние расчёты" });
+  await expect(active.getByText("Показано 1 из 2 активных расчётов.")).toBeVisible();
+  await expect(active.getByRole("listitem")).toHaveCount(1);
+  await expect(recent.getByText("Сведения о недавних расчётах временно недоступны.")).toBeVisible();
+  await expect(recent.getByText("Пока нет расчётов.", { exact: false })).toHaveCount(0);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
 test("расчёт из истории открывает редактируемые параметры без автоматического запуска", async ({
   page,
 }) => {
@@ -1535,8 +1625,8 @@ test("перед запуском объясняются входы, огран�
     },
     {
       kind: "erosion",
-      source: "Закреплённые волновые и батиметрические данные",
-      limitation: "Демонстрация CERC, а не прогноз годового размыва",
+      source: "Закреплённый почасовой прогноз волн на 7 суток",
+      limitation: "Демонстрация CERC по старому оперативному прогнозу волн",
       reference: "cerc-one-line-model.md",
     },
   ]) {

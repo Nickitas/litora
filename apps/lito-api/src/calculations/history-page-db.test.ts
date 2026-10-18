@@ -80,6 +80,40 @@ test(
         ).totalCount,
         0,
       );
+
+      await database.query(
+        `INSERT INTO calculation_jobs(user_id,kind,status,created_at)
+         SELECT $1,'map','succeeded','2026-10-18T12:00:00Z'::timestamptz
+         FROM generate_series(1,101)`,
+        [users[0]],
+      );
+      const activeIds: string[] = [];
+      for (const status of ["queued", "queued", "queued", "running", "running"]) {
+        const id = randomUUID();
+        activeIds.push(id);
+        await database.query(
+          `INSERT INTO calculation_jobs(id,user_id,kind,status,created_at)
+           VALUES($1,$2,'map',$3,'2025-01-01T12:00:00Z'::timestamptz)`,
+          [id, users[0], status],
+        );
+      }
+      await database.query(
+        `INSERT INTO calculation_jobs(user_id,kind,status,created_at)
+         VALUES($1,'map','queued','2025-01-01T12:00:00Z'::timestamptz)`,
+        [users[1]],
+      );
+      assert.equal((await repository.list(users[0])).filter((job) =>
+        job.status === "queued" || job.status === "running").length, 0);
+      for (const [status, expectedIds] of [
+        ["queued", activeIds.slice(0, 3)],
+        ["running", activeIds.slice(3)],
+      ] as const) {
+        const page = await repository.listPage(
+          users[0], parseHistoryPageQuery({ status, limit: "50" }, users[0]),
+        );
+        assert.equal(page.totalCount, expectedIds.length);
+        assert.deepEqual(new Set(page.items.map((item) => item.id)), new Set(expectedIds));
+      }
     } finally {
       if (users.length) {
         await database.query(

@@ -7,7 +7,7 @@ import { CalculationStatus } from "@/entities/calculation/ui/calculation-status"
 import { Button } from "@/shared/shadcn/components/ui/button";
 import { DialogTrigger } from "@/shared/shadcn/components/ui/dialog";
 import {
-  isActiveCalculation,
+  useActiveCalculations,
   useCalculationKinds,
   useCalculations,
 } from "./model/use-calculations";
@@ -47,14 +47,14 @@ function JobLink({
 }
 
 export function AccountOverviewPage() {
-  const { jobs, loading, error, reload } = useCalculations();
+  const recent = useCalculations();
+  const active = useActiveCalculations();
   const {
     kinds,
     error: kindsError,
     reload: reloadKinds,
   } = useCalculationKinds();
-  const activeJobs = jobs.filter(isActiveCalculation).slice(0, 3);
-  const recentJobs = jobs.slice(0, 4);
+  const recentJobs = recent.jobs.slice(0, 4);
 
   return (
     <div className="min-w-0 space-y-6">
@@ -87,16 +87,21 @@ export function AccountOverviewPage() {
         </Button>
       </section>
 
-      {(error || kindsError) && (
+      {(active.error || recent.error || kindsError) && (
         <div
           role="alert"
           className="rounded-xl border border-destructive bg-status-failed-background p-4 text-status-failed"
         >
-          {error || kindsError}
+          {active.error || recent.error || kindsError}
           <div className="mt-2 flex flex-wrap gap-2">
-            {error && (
-              <Button variant="link" className="h-auto p-0" onClick={reload}>
-                Повторить загрузку расчётов
+            {active.error && (
+              <Button variant="link" className="h-auto p-0" onClick={active.reload}>
+                Повторить загрузку активных расчётов
+              </Button>
+            )}
+            {recent.error && (
+              <Button variant="link" className="h-auto p-0" onClick={recent.reload}>
+                Повторить загрузку недавних расчётов
               </Button>
             )}
             {kindsError && (
@@ -132,21 +137,34 @@ export function AccountOverviewPage() {
           лимит достигнут, дождитесь завершения или отмените один из них. Это не
           число мест и не позиция в очереди.
         </p>
-        {loading ? (
+        {active.loading && !active.loaded ? (
           <p role="status" className="text-muted-foreground">
-            Загружаем расчёты…
+            Загружаем активные расчёты…
           </p>
-        ) : activeJobs.length === 0 ? (
+        ) : active.error && active.jobs.length === 0 ? (
+          <p className="rounded-xl border border-dashed bg-card p-5 text-sm text-muted-foreground">
+            Сведения об активных расчётах временно недоступны.
+          </p>
+        ) : active.jobs.length === 0 ? (
           <div className="rounded-xl border border-dashed bg-card p-5 text-sm text-muted-foreground">
             Нет активных расчётов. Новый запуск появится здесь сразу после
             постановки в очередь.
           </div>
         ) : (
-          <ul className="space-y-3">
-            {activeJobs.map((job) => (
-              <JobLink key={job.id} {...job} kinds={kinds} />
-            ))}
-          </ul>
+          <>
+            <p className="mb-3 text-sm text-muted-foreground">
+              {active.error
+                ? "Показаны последние полученные данные; обновление не удалось."
+                : active.totalCount > active.jobs.length
+                  ? `Показано ${active.jobs.length} из ${active.totalCount} активных расчётов.`
+                  : `Активных расчётов: ${active.jobs.length}.`}
+            </p>
+            <ul className="space-y-3">
+              {active.jobs.map((job) => (
+                <JobLink key={job.id} {...job} kinds={kinds} />
+              ))}
+            </ul>
+          </>
         )}
       </section>
 
@@ -157,21 +175,32 @@ export function AccountOverviewPage() {
         >
           Недавние расчёты
         </h2>
-        {loading ? (
+        {recent.loading && !recent.loaded ? (
           <div className="grid gap-3 sm:grid-cols-2" aria-hidden="true">
             <div className="h-24 animate-pulse rounded-xl bg-muted" />
             <div className="h-24 animate-pulse rounded-xl bg-muted" />
           </div>
+        ) : recent.error && recentJobs.length === 0 ? (
+          <p className="rounded-xl border border-dashed bg-card p-5 text-sm text-muted-foreground">
+            Сведения о недавних расчётах временно недоступны.
+          </p>
         ) : recentJobs.length === 0 ? (
           <div className="rounded-xl border border-dashed bg-card p-8 text-muted-foreground">
             Пока нет расчётов. Выберите сценарий и запустите первый.
           </div>
         ) : (
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {recentJobs.map((job) => (
-              <JobLink key={job.id} {...job} kinds={kinds} />
-            ))}
-          </ul>
+          <>
+            {recent.error && (
+              <p className="mb-3 text-sm text-muted-foreground">
+                Показаны последние полученные данные; обновление не удалось.
+              </p>
+            )}
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {recentJobs.map((job) => (
+                <JobLink key={job.id} {...job} kinds={kinds} />
+              ))}
+            </ul>
+          </>
         )}
       </section>
     </div>

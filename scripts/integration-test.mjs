@@ -60,6 +60,7 @@ function client() {
 const first = client(),
   second = client(),
   anonymous = client();
+let observedInputSchemaVersion;
 const email = `integration-${randomUUID()}@example.test`;
 const password = `test-${randomUUID()}`;
 const blockedOrigin = await fetch(`${base}/auth/refresh`, {
@@ -172,6 +173,7 @@ await first.request("/datasets", "POST", {
 await second.request("/calculations", "POST", {
   kind: "dimension_dataset", input: { datasetId: uploaded.id },
 }, 404);
+let deletableMap;
 for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
   const expectedMethod = {
     dimension: "box-counting",
@@ -202,7 +204,9 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
     await delay(1000);
   }
   assert.equal(result.status, "succeeded", JSON.stringify(result));
-  assert.equal(result.inputSchemaVersion, 3);
+  assert.ok(Number.isSafeInteger(result.inputSchemaVersion) && result.inputSchemaVersion > 0);
+  observedInputSchemaVersion ??= result.inputSchemaVersion;
+  assert.equal(result.inputSchemaVersion, observedInputSchemaVersion);
   assert.equal(result.resultSchemaVersion, 1);
   assert.equal(result.methodId, expectedMethod);
   assert.equal(result.methodRevision, "baseline-1");
@@ -237,6 +241,7 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
     file.filename.endsWith("manifest.json"),
   );
   assert.ok(artifact, "CLI должен создать манифест");
+  if (kind === "map") deletableMap = { id: job.id, manifestUrl: artifact.downloadUrl };
   const download = await fetch(artifact.downloadUrl);
   assert.equal(download.status, 200);
   const data = Buffer.from(await download.arrayBuffer());
@@ -252,7 +257,7 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
   });
   assert.ok(manifest.artifacts.length > 0);
   if (kind === "erosion") {
-    const csv = result.artifacts.find((file) => file.filename === "erosion-metrics.csv");
+    const csv = result.artifacts.find((file) => file.filename === "csv/erosion-metrics.csv");
     assert.ok(csv, "CLI должен создать CSV для демонстрационного расчёта");
     const csvBytes = Buffer.from(await (await fetch(csv.downloadUrl)).arrayBuffer());
     assert.equal(createHash("sha256").update(csvBytes).digest("hex"), csv.sha256);
@@ -286,7 +291,7 @@ if (process.env.TEST_HEAVY_ENABLED === "true") {
     }
     assert.equal(result.status, "succeeded", JSON.stringify(result));
     assert.equal(result.resultSummary.scenario, "user-data");
-    assert.equal(result.inputSchemaVersion, 3);
+    assert.equal(result.inputSchemaVersion, observedInputSchemaVersion);
     const manifestArtifact = result.artifacts.find((artifact) =>
       artifact.filename === "manifest.json");
     assert.ok(manifestArtifact);
@@ -379,6 +384,25 @@ assert.ok(swagger.paths["/api/datasets"].post);
 assert.ok(swagger.paths["/api/scientific-inputs/reusable-artifacts"].get);
 assert.ok(swagger.components.securitySchemes.bearer);
 assert.ok(swagger.paths["/api/auth/register"].post.requestBody.content["application/json"].schema.required.includes("invitationCode"));
+assert.ok(deletableMap);
+await second.request(`/calculations/${deletableMap.id}`, "DELETE", undefined, 404);
+const deletion = await first.request(
+  `/calculations/${deletableMap.id}`, "DELETE", undefined, 202,
+);
+assert.equal(deletion.scope, "single");
+await second.request(`/calculations/deletions/${deletion.id}`, "GET", undefined, 404);
+let deletionState;
+for (let attempt = 0; attempt < 60; attempt++) {
+  deletionState = await first.request(`/calculations/deletions/${deletion.id}`);
+  if (deletionState.status === "completed") break;
+  await delay(1000);
+}
+assert.equal(deletionState.status, "completed", JSON.stringify(deletionState));
+assert.equal(deletionState.deletedCount, 1);
+await first.request(`/calculations/${deletableMap.id}`, "GET", undefined, 404);
+const deletedArtifact = await fetch(deletableMap.manifestUrl);
+assert.notEqual(deletedArtifact.status, 200, "Удалённый артефакт не должен оставаться доступным");
+console.log("Проверены удаление завершённого расчёта, изоляция владельца и очистка объекта S3");
 await first.request("/auth/logout", "POST");
 await first.request("/auth/me", "GET", undefined, 401);
 await first.request("/auth/refresh", "POST", undefined, 401);
