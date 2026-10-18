@@ -16,7 +16,10 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    image: litora-minio-dev:2025-10-15-9e49d5e
+    build:
+      context: ./minio
+      dockerfile: Dockerfile
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:-litora}

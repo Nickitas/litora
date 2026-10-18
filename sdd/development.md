@@ -123,8 +123,58 @@ pnpm infra:logs
 ```
 
 Эта команда следит за логами, завершить просмотр `Ctrl+C`. Пароли в логах/вопросах
-поддержки маскируйте. Локальный `minio/minio:latest` в существующем Compose — dev
-наследие; для реального сервера используйте проверенный S3 из runbook.
+поддержки маскируйте. Локальный MinIO теперь собирается из исходного коммита,
+зафиксированного в `infra/minio/Dockerfile`; первый build может занять несколько
+минут. Он предназначен только для dev и распространяется под AGPLv3. Production
+использует AWS S3 по [runbook](deployment.md), а не этот контейнер.
+
+Перед первым запуском нового образа на **существующем** MinIO volume остановите
+задания и сделайте отдельные копии MinIO и PostgreSQL: запуск API может применить
+новые миграции. Стандартные volumes проекта — `infra_litora_minio_data` и
+`infra_litora_postgres_data`; проверьте точные имена через `docker inspect`
+контейнеров. Остановите прежний dev-профиль без `-v`, убедитесь, что volumes
+не используются запущенными контейнерами, и создайте два новых volume с
+уникальными свободными именами. Исходные volumes монтируйте **только для чтения**.
+В примере замените суффикс `YYYYMMDD_HHMM` на актуальный:
+
+```bash
+pnpm down
+pnpm infra:down
+docker volume inspect infra_litora_minio_data --format '{{.Name}}'
+docker volume inspect infra_litora_postgres_data --format '{{.Name}}'
+docker volume create litora_minio_backup_YYYYMMDD_HHMM
+docker volume create litora_postgres_backup_YYYYMMDD_HHMM
+docker run --rm --entrypoint /bin/sh \
+  --mount type=volume,source=infra_litora_minio_data,target=/from,readonly \
+  --mount type=volume,source=litora_minio_backup_YYYYMMDD_HHMM,target=/to \
+  debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 \
+  -c 'cp -a /from/. /to/'
+docker run --rm --entrypoint /bin/sh \
+  --mount type=volume,source=infra_litora_postgres_data,target=/from,readonly \
+  --mount type=volume,source=litora_postgres_backup_YYYYMMDD_HHMM,target=/to \
+  debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 \
+  -c 'cp -a /from/. /to/'
+docker run --rm --entrypoint /bin/sh \
+  --mount type=volume,source=infra_litora_minio_data,target=/from,readonly \
+  --mount type=volume,source=litora_minio_backup_YYYYMMDD_HHMM,target=/to,readonly \
+  debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 \
+  -c 'diff -qr /from /to'
+docker run --rm --entrypoint /bin/sh \
+  --mount type=volume,source=infra_litora_postgres_data,target=/from,readonly \
+  --mount type=volume,source=litora_postgres_backup_YYYYMMDD_HHMM,target=/to,readonly \
+  debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 \
+  -c 'diff -qr /from /to'
+pnpm infra:up
+S3_SMOKE_LOCAL=true pnpm --filter litora-api storage:local-smoke
+```
+
+Этот тест создаёт и удаляет только свой случайный bucket на localhost. Перед
+выполнением убедитесь, что `.env.local` указывает на локальный MinIO: скрипт
+отклоняет внешний endpoint. Копии volumes в том же Docker-хранилище годятся
+для локального отката, но не заменяют off-host backup. Если новая версия не открывает
+старые данные, остановите её и не запускайте прежний образ на изменённом volume:
+восстановление из копии может потерять записи после момента копирования и требует
+отдельного решения. Существующие volume и bucket автоматически не удаляются.
 
 ## 5. Собрать Go CLI
 
@@ -243,9 +293,13 @@ PostgreSQL/HTTP-тесты приглашений, сессий, изоляци�
 БД с именем `litora_test_<суффикс>` (суффикс: строчные латинские буквы, цифры,
 подчёркивания). Тесты создают собственные fixtures и удаляют их после проверки;
 тест приглашений также использует тестовый trigger. Не указывайте рабочую БД.
-Локально `pnpm test:api` без переменной явно пропускает две PostgreSQL suites.
+Локально `pnpm test:api` без переменной явно пропускает PostgreSQL/HTTP suites.
 `pnpm test:api:db` и запуск при `CI=true` требуют TEST_DATABASE_URL и завершаются
-ошибкой при её отсутствии. CI поднимает отдельный PostgreSQL.
+ошибкой при её отсутствии. CI поднимает отдельный PostgreSQL, проверяет оба файла
+локального Compose и запускает `pnpm --filter litora-api test:migrations`: скрипт
+создаёт собственную временную БД на localhost, проверяет чистую и повторную
+инициализацию, затем удаляет только эту БД. Для создания тестовой БД у роли
+нужно право `CREATEDB`; рабочую БД указывать нельзя.
 
 После создания выделенной тестовой БД:
 
@@ -269,6 +323,19 @@ pnpm test:web
 pnpm test:api
 pnpm test:cli
 ```
+
+Снимок пользовательских очередей без изменения данных:
+
+```bash
+pnpm --filter litora-api queue:status
+pnpm --filter litora-api queue:status --json --profile heavy --queue-wait-seconds 14400
+```
+
+Используется штатный env API. Команда не применяет миграции; PostgreSQL должна
+быть подготовлена обычным запуском. Exit 0 означает отсутствие обнаруженных
+сигналов, 1 — превышение порога ожидания/неполадку heartbeat, 2 — ошибка проверки.
+Справка `queue:status --help` не требует подключения. Пустая очередь не
+доказывает наличие idle worker. Границы — в [0050](features/0050-queue-diagnostics.md).
 
 Браузерная регрессия web запускается отдельно от быстрого `pnpm verify`:
 

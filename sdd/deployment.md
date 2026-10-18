@@ -79,9 +79,11 @@ AWS S3 в регионе `eu-central-1` (Франкфурт)
 
 На дату проверки community MinIO объявлен неподдерживаемым, GitHub-репозиторий
 архивирован 25.04.2026: [первичный источник](https://github.com/minio/minio).
-Не публиковать унаследованный `minio:latest` в production. Локальный изолированный
-стенд пока сохраняется; поддерживаемая self-hosted альтернатива требует отдельного ADR,
-подбора версии, лицензии, дисков, TLS и резервирования. Это не входит в данный шаблон.
+Не публиковать MinIO из dev Compose в production. Локальный стенд теперь
+[собирает зафиксированные исходники](decisions.md#adr-023--зафиксированная-сборка-minio-для-локальной-разработки),
+но это не поддерживаемый self-hosted production-вариант. Для сервера выбран AWS S3;
+другая self-hosted альтернатива потребует отдельного ADR, проверки лицензии,
+дисков, TLS и резервирования.
 
 ## 2. Железо: минимум и достаточная конфигурация
 
@@ -481,6 +483,9 @@ S3/БД остановиться и сверить результаты след
 
 ## 9. Backup: БД и объекты вместе
 
+Проверяемые требования и незавершённые шаги staging-приёмки — в
+[0051](features/0051-staging-backup-verification.md).
+
 Цели пилота (оценка): RPO ≤24 h, RTO ≤4 h, подтверждаются restore drill. Ежедневный
 дамп, отдельная копия S3/versioning, off-host backup конфигурации и release image IDs.
 Versioning и snapshot диска сами по себе не являются независимой резервной копией.
@@ -507,10 +512,11 @@ umask 077
 LITORA_BACKUP_DIR=$(mktemp -d /var/backups/litora/snapshot-XXXXXXXX)
 dc exec -T postgres pg_dump -U litora_admin -d litora -Fc > "$LITORA_BACKUP_DIR/litora.dump"
 dc exec -T postgres psql -U litora_admin -d litora -c "COPY (SELECT bucket, object_key, size_bytes, sha256 FROM calculation_artifacts ORDER BY bucket, object_key) TO STDOUT WITH CSV HEADER" > "$LITORA_BACKUP_DIR/artifacts.csv"
-sha256sum "$LITORA_BACKUP_DIR/litora.dump" "$LITORA_BACKUP_DIR/artifacts.csv"
+dc exec -T postgres pg_restore --list < "$LITORA_BACKUP_DIR/litora.dump" > /dev/null
 ```
 
-Проверить exit code и ненулевой размер, записать checksum и дату. `pg_dump` custom
+Проверить exit code каждого шага; при сбое не публиковать частичный snapshot.
+`pg_dump` custom
 format восстанавливается через pg_restore; это не копирование живого data directory:
 [PostgreSQL SQL dump](https://www.postgresql.org/docs/17/backup-dump.html).
 
@@ -518,10 +524,30 @@ format восстанавливается через pg_restore; это не к�
 backup**, не с ключом приложения (заменить имена и дату):
 
 ```bash
-aws --profile litora-backup s3 sync s3://SOURCE_BUCKET s3://BACKUP_BUCKET/snapshots/DATE/objects --only-show-errors
+export AWS_PROFILE=litora-backup AWS_REGION=eu-central-1
+node apps/lito-api/scripts/backup-s3-inventory.mjs capture "$LITORA_BACKUP_DIR" SOURCE_BUCKET
+aws --profile litora-backup s3 sync s3://SOURCE_BUCKET s3://BACKUP_BUCKET/snapshots/DATE/objects/ --only-show-errors
+node scripts/backup-manifest.mjs create "$LITORA_BACKUP_DIR" s3://BACKUP_BUCKET/snapshots/DATE/objects/
+node scripts/backup-manifest.mjs verify "$LITORA_BACKUP_DIR" 30
+node apps/lito-api/scripts/backup-s3-inventory.mjs verify "$LITORA_BACKUP_DIR" 30
 aws --profile litora-backup s3 cp "$LITORA_BACKUP_DIR/litora.dump" s3://BACKUP_BUCKET/snapshots/DATE/litora.dump --only-show-errors
 aws --profile litora-backup s3 cp "$LITORA_BACKUP_DIR/artifacts.csv" s3://BACKUP_BUCKET/snapshots/DATE/artifacts.csv --only-show-errors
+aws --profile litora-backup s3 cp "$LITORA_BACKUP_DIR/objects.ndjson" s3://BACKUP_BUCKET/snapshots/DATE/objects.ndjson --only-show-errors
+aws --profile litora-backup s3 cp "$LITORA_BACKUP_DIR/backup-manifest.json" s3://BACKUP_BUCKET/snapshots/DATE/backup-manifest.json --only-show-errors
 ```
+
+Заменить `SOURCE_BUCKET`, `BACKUP_BUCKET`, `DATE` реальными значениями. Prefix
+`snapshots/DATE/` должен быть новым и пустым; не перезаписывать предыдущий
+snapshot. `backup-manifest.json` версии 2 связывает время создания, S3 URI и
+SHA-256 дампа, CSV и `objects.ndjson`. Локальный `verify` завершается ненулевым
+кодом при повреждении или возрасте более 30 часов. S3-проверка сравнивает
+**все** ключи и размеры в backup-prefix с перечнем исходного bucket, включая
+страницы выдачи. Она не проверяет содержимое объектов: ETag не является
+надёжным SHA-256 для multipart/шифрования. После выгрузки скачать четыре
+файла из backup account в отдельный каталог, повторить обе проверки на
+скачанном snapshot; содержимое объектов подтверждать выборкой или полной
+проверкой в restore drill. Манифест и SHA не защищают от злонамеренного
+изменения всего snapshot: backup account должен ограничивать запись/удаление.
 
 Профиль должен иметь права читать source и писать backup. Для разных провайдеров
 server-side sync может не работать: нужен проверенный перенос через backup-хост
@@ -545,7 +571,13 @@ backup с согласованными контрольными точками, 
 проверенный образ релиза, DNS пока не переключать.
 
 1. Развернуть PostgreSQL той же major 17, создать роли/пустую БД по разделу 7.
-2. Скачать dump и artifacts.csv из backup, проверить сохранённые checksums.
+2. Скачать `litora.dump`, `artifacts.csv`, `objects.ndjson` и
+   `backup-manifest.json` из backup, выполнить
+   `node scripts/backup-manifest.mjs verify /path/to/verified 30` и
+   `node apps/lito-api/scripts/backup-s3-inventory.mjs verify /path/to/verified 30`.
+   Для старой копии на плановом drill допустимо указать фактический возрастной
+   лимит вместо 30 часов, записав это исключение в протокол. Проверить также
+   `pg_restore --list` до изменения отдельной тестовой БД.
 3. Перенести snapshot объектов в новый приватный bucket с теми же object keys.
    Согласовать bucket name: в БД оно хранится в каждой строке; безопаснее сохранить
    имя в изолированном S3 либо обновить реестр на копии БД явной миграцией.
@@ -592,6 +624,7 @@ worker/worker-heavy при включённом профиле/web → Caddy →
 ```bash
 dc ps
 dc logs --tail=100 api worker
+dc exec -T api node dist/scripts/queue-status.js --json
 docker stats --no-stream
 df -h /var/lib/docker /var/backups/litora
 ```
@@ -599,8 +632,18 @@ df -h /var/lib/docker /var/backups/litora
 Не публиковать сырой вывод без редактирования чувствительных данных. Настроить
 внешнее наблюдение с разрешённого IP: HTTPS, health, срок TLS, CPU/RAM/disk, OOM/restarts,
 oldest queued, stale heartbeat, доля failed, S3 ошибки/ёмкость, возраст последнего
-успешного backup. Встроенного dashboard Prometheus/Grafana и worker-health пока нет.
-Зелёный health не гарантирует живой worker и корректную математику.
+успешного backup. [Диагностика очереди 0050](features/0050-queue-diagnostics.md)
+показывает отдельно standard/heavy: число ожидающих/выполняющихся jobs, самое
+долгое ожидание, старый или отсутствующий heartbeat. Код выхода 0 — сигналов
+нет, 1 — требуется внимание, 2 — проверка не выполнена. По умолчанию пороги —
+300 с ожидания и 60 с heartbeat; например, для тяжёлых заданий оператор может
+задать `--profile heavy --queue-wait-seconds 14400`. Это порог уведомления,
+не timeout расчёта. Команда выполняет только SELECT, не применяет миграции
+и не обращается к S3; вводы и персональные данные в вывод не попадают.
+
+Пустая очередь не подтверждает живой idle worker: его отдельного реестра,
+автоматической доставки алертов и dashboard пока нет. Зелёный health и exit 0
+диагностики не заменяют успешный контрольный расчёт.
 
 Логи Docker ограничены 3×10 МБ на контейнер в примере. Временный job-каталог worker
 в writable layer очищается приложением, но после аварии возможны остатки; квота

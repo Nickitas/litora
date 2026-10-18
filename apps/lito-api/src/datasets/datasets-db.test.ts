@@ -7,6 +7,7 @@ import { ObjectStorageService } from "../infrastructure/object-storage.service.j
 import { CalculationsRepository } from "../calculations/calculations.repository.js";
 import { DatasetsRepository } from "./datasets.repository.js";
 import { maxDatasetsPerUser, validateDataset } from "./validation.js";
+import { calculationInputSchemaVersion } from "../schema-versions.js";
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -96,7 +97,7 @@ test(
         input: { datasetId: saved.id },
       });
       assert.equal(job.kind, "dimension_dataset");
-      assert.equal(job.inputSchemaVersion, 3);
+      assert.equal(job.inputSchemaVersion, calculationInputSchemaVersion);
       assert.equal(job.resultSchemaVersion, null);
       assert.equal(job.methodId, null);
       assert.equal(job.methodRevision, null);

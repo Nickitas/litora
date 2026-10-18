@@ -73,6 +73,8 @@ pnpm up
 `pnpm up` создаёт отсутствующий `.env.local` со случайными локальными паролями,
 собирает приложения и поднимает PostgreSQL, MinIO, API, worker и web. Существующий
 `.env.local` сохраняется. Первое скачивание образов и сборка могут занять несколько минут.
+Локальный MinIO собирается из зафиксированных исходников; при переходе со старого
+образа на существующем volume сначала выполните [инструкцию резервной копии](sdd/development.md#4-поднять-инфраструктуру).
 Локальные контейнеры называются `lito-infra-*`; прежние volumes проекта `infra`
 сохраняются. После обновления конфигурации остановите старые контейнеры через
 `pnpm down` (или `pnpm infra:down`) и запустите нужный режим снова, без `-v`.
@@ -269,7 +271,8 @@ pnpm verify
 ```
 
 Он проверяет структуру workspace и документации, типы, lint, тесты web/API/Go
-и сборку API/web. Отдельные команды:
+и сборку API/web. CI дополнительно валидирует объединённый локальный Compose
+и запускает миграции на временной тестовой БД. Отдельные команды:
 
 ```bash
 pnpm check:workspace
@@ -280,6 +283,7 @@ pnpm build:web
 pnpm test:web
 pnpm test:api
 pnpm test:api:db        # нужен TEST_DATABASE_URL отдельной БД litora_test_*
+pnpm --filter litora-api test:migrations # создаёт временную БД; нужны localhost и CREATEDB
 pnpm test:web:e2e       # после playwright install chromium; отдельный Vite на 5189
 pnpm test:cli
 pnpm test:integration   # дополнительно нужен TEST_INVITATIONS_JSON, см. ниже

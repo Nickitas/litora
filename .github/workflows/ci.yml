@@ -41,6 +41,10 @@ jobs:
           cache-dependency-path: apps/lito-cli/go.sum
       - run: pnpm install --frozen-lockfile
       - run: pnpm env:init
+      - name: Проверить локальный Compose
+        run: docker compose --env-file .env.local -f infra/compose.yaml -f infra/compose.local.yaml --profile app --profile heavy config --quiet
+      - name: Проверить миграции на чистой и повторно используемой БД
+        run: pnpm --filter litora-api test:migrations
       - run: pnpm verify
 
   publish:

@@ -15,6 +15,7 @@ import { DatabaseService } from "../infrastructure/database.service.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
 import { CalculationsController } from "../calculations/calculations.controller.js";
 import { CalculationsRepository } from "../calculations/calculations.repository.js";
+import { CalculationDeletionService } from "../calculations/calculation-deletion.service.js";
 import { configureTrustedProxies } from "../config/trusted-proxies.js";
 
 @Module({})
@@ -111,9 +112,10 @@ test(
             AuthService,
             AuthGuard,
             CalculationsRepository,
+            CalculationDeletionService,
           ],
         },
-        { logger: false },
+        { logger: false, abortOnError: false },
       );
       app.setGlobalPrefix("api");
       configureTrustedProxies(app, ["127.0.0.1/32"]);
