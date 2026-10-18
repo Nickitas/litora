@@ -17,6 +17,7 @@
     "storage:smoke": "node scripts/storage-smoke.mjs",
     "storage:local-smoke": "node scripts/storage-local-smoke.mjs",
     "queue:status": "node --import tsx src/scripts/queue-status.ts",
+    "scratch:cleanup": "node --import tsx src/scripts/scratch-cleanup.ts",
     "invitations": "tsx src/scripts/invitations.ts",
     "artifacts:import": "tsx src/scripts/import-cli-output.ts",
     "artifacts:reconcile": "tsx src/scripts/reconcile-artifacts.ts"

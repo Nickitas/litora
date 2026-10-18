@@ -48,6 +48,7 @@ import { stageErosionBathymetry } from "./erosion-inputs.js";
 import { auditableCommandLine, redactExecutionLog } from "./command-line.js";
 import { assertFullBlackSeaStagingLimit } from "./full-black-sea-inputs.js";
 import { includeJsonMetric } from "./output-metrics.js";
+import { markHeavyScratch } from "./scratch-cleanup.js";
 
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
@@ -95,6 +96,7 @@ async function sha256(path: string) {
 async function run(job: JobRow) {
   const directory = join(environment.jobsDirectory, job.id);
   const output = join(directory, "output");
+  let ownsDirectory = false;
   let interrupted = false,
     checking = false,
     finished = false,
@@ -130,6 +132,11 @@ async function run(job: JobRow) {
   }, environment.jobTimeoutMs);
   try {
     assertSupportedInputSchemaVersion(job.input_schema_version);
+    await mkdir(environment.jobsDirectory, { recursive: true });
+    await mkdir(directory);
+    ownsDirectory = true;
+    if (environment.workerProfile === "heavy")
+      await markHeavyScratch(directory, job.id);
     await mkdir(output, { recursive: true });
     await cp(
       join(environment.cliDirectory, "data"),
@@ -390,6 +397,7 @@ async function run(job: JobRow) {
       return;
     }
     try {
+      if (!ownsDirectory) throw new Error("Scratch-каталог не принадлежит этому запуску");
       const path = join(output, "failure.log");
       await mkdir(output, { recursive: true });
       await writeFile(path, `${message}\n${log}`);
@@ -427,7 +435,7 @@ async function run(job: JobRow) {
        WHERE id=$1 AND worker_id=$2 AND status IN ('succeeded','failed','cancelled')`,
       [job.id, workerId],
     );
-    await rm(directory, { recursive: true, force: true });
+    if (ownsDirectory) await rm(directory, { recursive: true, force: true });
   }
 }
 
