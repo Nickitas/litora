@@ -21,10 +21,11 @@ async function main(): Promise<void> {
   --profile all|standard|heavy   Профили проверки, по умолчанию all
   --queue-wait-seconds N         Порог ожидания: 1–604800 с, по умолчанию 300
   --stale-after-seconds N        Порог heartbeat: 60–86400 с, по умолчанию 60
-  --json                        Снимок JSON v1
+  --require-worker              Требовать свежий worker каждого выбранного профиля
+  --json                        Снимок JSON v2
   --help                        Эта справка
 Код выхода: 0 — сигналов нет; 1 — требуется внимание; 2 — проверка не выполнена.
-Пустая очередь не подтверждает доступность worker.`);
+Свежий heartbeat worker не подтверждает успешность расчёта.`);
     return;
   }
   try {

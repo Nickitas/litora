@@ -49,6 +49,7 @@ import { auditableCommandLine, redactExecutionLog } from "./command-line.js";
 import { assertFullBlackSeaStagingLimit } from "./full-black-sea-inputs.js";
 import { includeJsonMetric } from "./output-metrics.js";
 import { markHeavyScratch } from "./scratch-cleanup.js";
+import { WorkerPresence } from "./worker-presence.js";
 
 const db = new DatabaseService(),
   storage = new ObjectStorageService();
@@ -57,6 +58,7 @@ const deletion = new CalculationDeletionService(db, storage);
 const datasets = new DatasetsRepository(db, storage);
 const scientificInputs = new ScientificInputsRepository(db);
 const workerId = randomUUID();
+const presence = new WorkerPresence(db, workerId, environment.workerProfile);
 let stopping = false;
 let active: ChildProcess | undefined;
 const shutdown = new AbortController();
@@ -443,29 +445,63 @@ async function main() {
   await db.initialize();
   await storage.initialize();
   await stat(environment.cliBinary);
+  await presence.register();
+  let heartbeatInFlight: Promise<void> | undefined;
+  const presenceTimer = setInterval(() => {
+    if (stopping || heartbeatInFlight) return;
+    heartbeatInFlight = presence.heartbeat().catch(() => {
+      console.error("Worker потерял связь с реестром процессов; приём новых заданий остановлен");
+      stopping = true;
+      shutdown.abort();
+      stopProcess();
+      process.exitCode = 1;
+    }).finally(() => {
+      heartbeatInFlight = undefined;
+    });
+  }, 10_000);
   console.log(`Worker ${workerId} (${environment.workerProfile}) готов`);
   let lastAuditPrune = 0;
-  while (!stopping) {
-    if (environment.workerProfile === "standard" && Date.now() - lastAuditPrune > 24 * 60 * 60 * 1000) {
-      await deletion.pruneCompletedAudit();
-      lastAuditPrune = Date.now();
-    }
-    await db.query(`UPDATE calculation_jobs SET status='failed',error_message='Worker потерял связь. Создайте новый расчёт.',finished_at=now(),updated_at=now()
+  try {
+    while (!stopping) {
+      if (environment.workerProfile === "standard" && Date.now() - lastAuditPrune > 24 * 60 * 60 * 1000) {
+        await deletion.pruneCompletedAudit();
+        lastAuditPrune = Date.now();
+      }
+      await db.query(`UPDATE calculation_jobs SET status='failed',error_message='Worker потерял связь. Создайте новый расчёт.',finished_at=now(),updated_at=now()
       WHERE status='running' AND worker_id IS NOT NULL AND heartbeat_at<now()-interval '60 seconds'`);
-    await db.query(`UPDATE calculation_jobs SET worker_id=NULL
+      await db.query(`UPDATE calculation_jobs SET worker_id=NULL
       WHERE status IN ('succeeded','failed','cancelled') AND worker_id IS NOT NULL
         AND finished_at<now()-interval '1 hour'
         AND (heartbeat_at IS NULL OR heartbeat_at<now()-interval '1 hour')`);
-    const item = environment.workerProfile === "standard" ? await deletion.claim() : undefined;
-    if (item) await deletion.process(item);
-    const job = await repository.claim(workerId, environment.workerProfile);
-    if (job) await run(job);
-    else if (!item) {
-      try {
-        await delay(1000, undefined, { signal: shutdown.signal });
-      } catch (error) {
-        if (!stopping) throw error;
+      const item = environment.workerProfile === "standard" ? await deletion.claim() : undefined;
+      if (item) await deletion.process(item);
+      const job = await repository.claim(workerId, environment.workerProfile);
+      if (stopping) {
+        if (job) await db.query(
+          `UPDATE calculation_jobs SET status='queued',worker_id=NULL,heartbeat_at=NULL,
+           started_at=NULL,updated_at=now()
+           WHERE id=$1 AND worker_id=$2 AND status='running'`,
+          [job.id, workerId]
+        );
+        break;
       }
+      if (job) await run(job);
+      else if (!item) {
+        try {
+          await delay(1000, undefined, { signal: shutdown.signal });
+        } catch (error) {
+          if (!stopping) throw error;
+        }
+      }
+    }
+  } finally {
+    clearInterval(presenceTimer);
+    await heartbeatInFlight;
+    try {
+      await presence.stop();
+    } catch {
+      console.error("Не удалось отметить остановку worker в реестре процессов");
+      process.exitCode = 1;
     }
   }
 }

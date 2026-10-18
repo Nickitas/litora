@@ -24,8 +24,11 @@ test(
       // Временная таблица изолирует сценарий от jobs параллельных DB suites.
       await client.query(`CREATE TEMP TABLE calculation_jobs (
       user_id uuid, resource_profile text, status text, created_at timestamptz,
-      worker_id uuid, heartbeat_at timestamptz
+      worker_id uuid, heartbeat_at timestamptz, finished_at timestamptz
     ) ON COMMIT DROP`);
+      await client.query(`CREATE TEMP TABLE worker_instances (
+        resource_profile text, last_seen_at timestamptz, stopped_at timestamptz
+      ) ON COMMIT DROP`);
       const empty = await readQueueDiagnostics(
         client,
         parseQueueDiagnosticsArgs([])
@@ -63,13 +66,21 @@ test(
       await client.query(`INSERT INTO calculation_jobs
       (user_id,resource_profile,status,created_at) VALUES
       (NULL,'heavy','queued',now()-interval '1 day')`);
+      await client.query(`INSERT INTO calculation_jobs
+      (user_id,resource_profile,status,created_at,finished_at) VALUES
+      ('11111111-1111-4111-8111-111111111111','standard','failed',now()-interval '2 hours',now()-interval '2 hours'),
+      ('11111111-1111-4111-8111-111111111111','standard','failed',now()-interval '26 hours',now()-interval '26 hours')`);
+      await client.query(`INSERT INTO worker_instances(resource_profile,last_seen_at,stopped_at) VALUES
+      ('standard',now()-interval '2 seconds',NULL),
+      ('standard',now()-interval '31 seconds',NULL),
+      ('heavy',now()-interval '1 second',now())`);
 
       const report = await readQueueDiagnostics(
         client,
         parseQueueDiagnosticsArgs([])
       );
       assert.equal(report.status, "attention");
-      assert.equal(report.workerAvailability, "unknown");
+      assert.equal(report.workerAvailability, "not_proven_by_heartbeat");
       const standard = report.profiles.find((p) => p.profile === "standard");
       assert.deepEqual(standard, {
         profile: "standard",
@@ -79,6 +90,8 @@ test(
         unassignedRunningCount: 1,
         oldestQueuedAgeSeconds: 301,
         oldestHeartbeatAgeSeconds: 61,
+        recentWorkerCount: 1,
+        failed24hCount: 1,
       });
       const heavy = report.profiles.find((p) => p.profile === "heavy");
       assert.deepEqual(heavy, {
@@ -89,6 +102,8 @@ test(
         unassignedRunningCount: 0,
         oldestQueuedAgeSeconds: 300,
         oldestHeartbeatAgeSeconds: 0,
+        recentWorkerCount: 0,
+        failed24hCount: 0,
       });
       assert.deepEqual(report.alerts.map((alert) => alert.code).sort(), [
         "queue_wait_exceeded",
@@ -111,8 +126,13 @@ test(
       assert.equal(
         (await client.query("SELECT count(*) FROM calculation_jobs")).rows[0]
           .count,
-        "11"
+        "13"
       );
+      const requiredHeavy = await readQueueDiagnostics(
+        client,
+        parseQueueDiagnosticsArgs(["--profile", "heavy", "--require-worker"])
+      );
+      assert.ok(requiredHeavy.alerts.some((alert) => alert.code === "worker_missing"));
     } finally {
       await client.query("ROLLBACK");
       client.release();

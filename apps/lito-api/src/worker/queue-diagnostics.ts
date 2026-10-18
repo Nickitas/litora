@@ -7,6 +7,7 @@ export interface QueueDiagnosticsOptions {
   profiles: ResourceProfile[];
   queueWaitSeconds: number;
   staleAfterSeconds: number;
+  requireWorker: boolean;
   json: boolean;
   help: boolean;
 }
@@ -20,6 +21,8 @@ interface QueueSnapshotRow {
   unassigned_running_count: string;
   oldest_queued_seconds: number | null;
   oldest_heartbeat_seconds: number | null;
+  recent_worker_count: string;
+  failed_24h_count: string;
 }
 
 interface DiagnosticsDatabase {
@@ -28,11 +31,11 @@ interface DiagnosticsDatabase {
 
 /** QueueDiagnostics содержит агрегаты без UUID, входов и персональных данных. */
 export interface QueueDiagnostics {
-  schemaVersion: 1;
+  schemaVersion: 2;
   observedAt: string;
   status: "no_alerts" | "attention";
-  workerAvailability: "unknown";
-  thresholds: { queueWaitSeconds: number; staleAfterSeconds: number };
+  workerAvailability: "not_proven_by_heartbeat";
+  thresholds: { queueWaitSeconds: number; staleAfterSeconds: number; requireWorker: boolean };
   profiles: {
     profile: ResourceProfile;
     queuedCount: number;
@@ -41,10 +44,12 @@ export interface QueueDiagnostics {
     unassignedRunningCount: number;
     oldestQueuedAgeSeconds: number | null;
     oldestHeartbeatAgeSeconds: number | null;
+    recentWorkerCount: number;
+    failed24hCount: number;
   }[];
   alerts: {
     profile: ResourceProfile;
-    code: "stale_running" | "unassigned_running" | "queue_wait_exceeded";
+    code: "stale_running" | "unassigned_running" | "queue_wait_exceeded" | "worker_missing";
     severity: "warning" | "critical";
     message: string;
   }[];
@@ -62,6 +67,7 @@ export function parseQueueDiagnosticsArgs(
           profile: { type: "string", default: "all" },
           "queue-wait-seconds": { type: "string", default: "300" },
           "stale-after-seconds": { type: "string", default: "60" },
+          "require-worker": { type: "boolean", default: false },
           json: { type: "boolean", default: false },
           help: { type: "boolean", default: false },
         },
@@ -107,6 +113,7 @@ export function parseQueueDiagnosticsArgs(
       60,
       86400
     ),
+    requireWorker: values["require-worker"],
     json: values.json,
     help: values.help,
   };
@@ -145,6 +152,21 @@ export async function readQueueDiagnostics(
        WHERE user_id IS NOT NULL AND status IN ('queued','running')
          AND resource_profile=ANY($2::text[])
        GROUP BY resource_profile
+     ),
+     recent_workers AS (
+       SELECT resource_profile AS profile, count(*)::text AS recent_worker_count
+       FROM worker_instances
+       WHERE stopped_at IS NULL AND last_seen_at >= now()-interval '30 seconds'
+         AND resource_profile=ANY($2::text[])
+       GROUP BY resource_profile
+     ),
+     recent_failures AS (
+       SELECT resource_profile AS profile, count(*)::text AS failed_24h_count
+       FROM calculation_jobs
+       WHERE user_id IS NOT NULL AND status='failed'
+         AND finished_at >= now()-interval '24 hours'
+         AND resource_profile=ANY($2::text[])
+       GROUP BY resource_profile
      )
      SELECT p.profile, now() AS observed_at,
        coalesce(a.queued_count,'0') AS queued_count,
@@ -152,8 +174,12 @@ export async function readQueueDiagnostics(
        coalesce(a.stale_running_count,'0') AS stale_running_count,
        coalesce(a.unassigned_running_count,'0') AS unassigned_running_count,
        CASE WHEN a.oldest_queued_seconds IS NOT NULL THEN greatest(0,a.oldest_queued_seconds) END AS oldest_queued_seconds,
-       CASE WHEN a.oldest_heartbeat_seconds IS NOT NULL THEN greatest(0,a.oldest_heartbeat_seconds) END AS oldest_heartbeat_seconds
+       CASE WHEN a.oldest_heartbeat_seconds IS NOT NULL THEN greatest(0,a.oldest_heartbeat_seconds) END AS oldest_heartbeat_seconds,
+       coalesce(w.recent_worker_count,'0') AS recent_worker_count,
+       coalesce(f.failed_24h_count,'0') AS failed_24h_count
      FROM profiles p LEFT JOIN active a USING(profile)
+       LEFT JOIN recent_workers w USING(profile)
+       LEFT JOIN recent_failures f USING(profile)
      WHERE p.profile=ANY($2::text[]) ORDER BY p.profile DESC`,
     [options.staleAfterSeconds, options.profiles]
   );
@@ -166,13 +192,14 @@ export async function readQueueDiagnostics(
     throw new Error("БД вернула неполный снимок очереди.");
 
   const report: QueueDiagnostics = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     observedAt: result.rows[0].observed_at.toISOString(),
     status: "no_alerts",
-    workerAvailability: "unknown",
+    workerAvailability: "not_proven_by_heartbeat",
     thresholds: {
       queueWaitSeconds: options.queueWaitSeconds,
       staleAfterSeconds: options.staleAfterSeconds,
+      requireWorker: options.requireWorker,
     },
     profiles: result.rows.map((row) => ({
       profile: row.profile,
@@ -182,10 +209,19 @@ export async function readQueueDiagnostics(
       unassignedRunningCount: count(row.unassigned_running_count),
       oldestQueuedAgeSeconds: age(row.oldest_queued_seconds),
       oldestHeartbeatAgeSeconds: age(row.oldest_heartbeat_seconds),
+      recentWorkerCount: count(row.recent_worker_count),
+      failed24hCount: count(row.failed_24h_count),
     })),
     alerts: [],
   };
   for (const profile of report.profiles) {
+    if (options.requireWorker && profile.recentWorkerCount === 0)
+      report.alerts.push({
+        profile: profile.profile,
+        code: "worker_missing",
+        severity: "critical",
+        message: `${profile.profile}: нет heartbeat worker за последние 30 с. Проверьте процесс и БД.`,
+      });
     if (profile.staleRunningCount > 0)
       report.alerts.push({
         profile: profile.profile,
@@ -220,11 +256,11 @@ export async function readQueueDiagnostics(
 export function formatQueueDiagnostics(report: QueueDiagnostics): string {
   const lines = [
     `Снимок пользовательских очередей: ${report.observedAt}`,
-    "Доступность worker не определена: проверяются только heartbeat выполняющихся заданий.",
+    "Heartbeat процесса показывает недавнюю активность, но не подтверждает успешность расчёта.",
   ];
   for (const profile of report.profiles) {
     lines.push(
-      `${profile.profile}: в очереди ${profile.queuedCount}, выполняется ${profile.runningCount}; самое долгое ожидание ${profile.oldestQueuedAgeSeconds === null ? "—" : `${profile.oldestQueuedAgeSeconds} с`}; самый старый heartbeat ${profile.oldestHeartbeatAgeSeconds === null ? "—" : `${profile.oldestHeartbeatAgeSeconds} с`}.`
+      `${profile.profile}: в очереди ${profile.queuedCount}, выполняется ${profile.runningCount}; самое долгое ожидание ${profile.oldestQueuedAgeSeconds === null ? "—" : `${profile.oldestQueuedAgeSeconds} с`}; самый старый heartbeat job ${profile.oldestHeartbeatAgeSeconds === null ? "—" : `${profile.oldestHeartbeatAgeSeconds} с`}; свежих worker ${profile.recentWorkerCount}; failed за 24 ч ${profile.failed24hCount}.`
     );
   }
   lines.push(...report.alerts.map((alert) => alert.message));

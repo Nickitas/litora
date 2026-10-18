@@ -329,13 +329,17 @@ pnpm test:cli
 ```bash
 pnpm --filter litora-api queue:status
 pnpm --filter litora-api queue:status --json --profile heavy --queue-wait-seconds 14400
+pnpm --filter litora-api queue:status --profile standard --require-worker
 ```
 
 Используется штатный env API. Команда не применяет миграции; PostgreSQL должна
 быть подготовлена обычным запуском. Exit 0 означает отсутствие обнаруженных
 сигналов, 1 — превышение порога ожидания/неполадку heartbeat, 2 — ошибка проверки.
-Справка `queue:status --help` не требует подключения. Пустая очередь не
-доказывает наличие idle worker. Границы — в [0050](features/0050-queue-diagnostics.md).
+Справка `queue:status --help` не требует подключения. `--require-worker`
+требует heartbeat за 30 с у выбранного профиля; heavy проверяйте только при
+включённом heavy worker. Снимок JSON имеет версию 2. Наличие heartbeat не
+доказывает успешность расчёта. Границы — в
+[0050](features/0050-queue-diagnostics.md) и [0053](features/0053-worker-presence.md).
 
 Браузерная регрессия web запускается отдельно от быстрого `pnpm verify`:
 

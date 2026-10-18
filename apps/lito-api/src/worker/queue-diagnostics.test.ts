@@ -23,6 +23,8 @@ test("параметры диагностики ограничивают пор�
   assert.deepEqual(options.profiles, ["heavy"]);
   assert.equal(options.queueWaitSeconds, 14400);
   assert.equal(options.json, true);
+  assert.equal(options.requireWorker, false);
+  assert.equal(parseQueueDiagnosticsArgs(["--profile", "standard", "--require-worker"]).requireWorker, true);
   for (const args of [
     ["--apply"],
     ["--profile", "unknown"],
@@ -48,32 +50,36 @@ test("неполный снимок не становится исправной
 });
 
 test("пустая очередь не подтверждает доступность idle worker", async () => {
+  const emptyRow = {
+    profile: "standard" as const,
+    observed_at: new Date("2026-10-18T09:00:00Z"),
+    queued_count: "0",
+    running_count: "0",
+    stale_running_count: "0",
+    unassigned_running_count: "0",
+    oldest_queued_seconds: null,
+    oldest_heartbeat_seconds: null,
+    recent_worker_count: "0",
+    failed_24h_count: "0",
+  };
   const report = await readQueueDiagnostics(
-    {
-      query: async () => ({
-        rows: [
-          {
-            profile: "standard",
-            observed_at: new Date("2026-10-18T09:00:00Z"),
-            queued_count: "0",
-            running_count: "0",
-            stale_running_count: "0",
-            unassigned_running_count: "0",
-            oldest_queued_seconds: null,
-            oldest_heartbeat_seconds: null,
-          },
-        ],
-      }),
-    },
+    { query: async () => ({ rows: [emptyRow] }) },
     parseQueueDiagnosticsArgs(["--profile", "standard"])
   );
   assert.equal(report.status, "no_alerts");
-  assert.equal(report.workerAvailability, "unknown");
+  assert.equal(report.schemaVersion, 2);
+  assert.equal(report.workerAvailability, "not_proven_by_heartbeat");
+  assert.equal(report.profiles[0].recentWorkerCount, 0);
   assert.equal(report.profiles[0].oldestQueuedAgeSeconds, null);
   assert.match(
     formatQueueDiagnostics(report),
-    /Доступность worker не определена/
+    /не подтверждает успешность расчёта/
   );
+  const required = await readQueueDiagnostics(
+    { query: async () => ({ rows: [emptyRow] }) },
+    parseQueueDiagnosticsArgs(["--profile", "standard", "--require-worker"])
+  );
+  assert.equal(required.alerts[0].code, "worker_missing");
 });
 
 test("справка работает без конфигурации, сбой БД не раскрывает реквизиты", () => {
@@ -95,7 +101,7 @@ test("справка работает без конфигурации, сбой 
     });
   const help = run(["--help"]);
   assert.equal(help.status, 0, help.stderr);
-  assert.match(help.stdout, /Пустая очередь не подтверждает/);
+  assert.match(help.stdout, /Свежий heartbeat worker не подтверждает/);
   const invalid = run(["--profile", "unknown"]);
   assert.equal(invalid.status, 2);
   assert.match(invalid.stderr, /Профиль должен быть/);
