@@ -132,13 +132,18 @@ go build -o lito ./cmd/lito
 ./scripts/install-gmsh.sh
 python3 -m pip install -r cmd/bathymetry/convert/requirements.txt
 
-# Команда открывает официальный каталог; сохраните точный URL NetCDF GEBCO_2026.
+# Команда открывает официальный каталог GEBCO_2026 для сверки продукта.
 go run cmd/bathymetry/main.go download
 
-# Скрипт сохранит NetCDF, JSON 0,01° и паспорт происхождения в output/.
-cmd/bathymetry/convert/download_bathymetry.sh \
-  'ТОЧНЫЙ_ОФИЦИАЛЬНЫЙ_URL_NETCDF_GEBCO_2026' \
-  output/source/black-sea-bathymetry-gebco2026-0.01deg-derived.json
+# Из официального OPeNDAP сохранить только региональный срез и его SHA-256.
+python3 cmd/bathymetry/convert/fetch_gebco_region.py \
+  output/source/netcdf/GEBCO_2026_Black_Sea_40.5_47.5_27.0_42.5.nc
+python3 cmd/bathymetry/convert/convert_bathymetry.py \
+  --input output/source/netcdf/GEBCO_2026_Black_Sea_40.5_47.5_27.0_42.5.nc \
+  --output output/source/black-sea-bathymetry-gebco2026-0.01deg-derived.json \
+  --resolution 0.01 \
+  --source-url 'https://dap.ceda.ac.uk/thredds/dodsC/bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/GEBCO_2026.nc' \
+  --downloaded-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # Получить контур, сохранить его в data/cache/ и построить full-quad 1000 м.
 ./lito mesh --refresh --cell-sizes 1000 --boundary-details 1000 \
@@ -148,10 +153,10 @@ cmd/bathymetry/convert/download_bathymetry.sh \
   --mesh output/mesh/msh/black-sea-edge-1000-detail-1000-frontal-quad.msh \
   --coastline data/cache/black-sea.geojson \
   --bathymetry output/source/black-sea-bathymetry-gebco2026-0.01deg-derived.json \
-  --bathymetry-metadata output/source/black-sea-bathymetry-gebco2026-0.01deg.metadata.json
+  --bathymetry-metadata output/source/black-sea-bathymetry-gebco2026-0.01deg-derived.metadata.json
 
 ./lito seabed render \
-  --source-metadata output/source/black-sea-bathymetry-gebco2026-0.01deg.metadata.json
+  --source-metadata output/source/black-sea-bathymetry-gebco2026-0.01deg-derived.metadata.json
 
 mkdir -p output/verification
 go test ./... > output/verification/clean-go-test.log 2>&1
@@ -166,7 +171,7 @@ go vet ./... > output/verification/clean-go-vet.log 2>&1
   --mesh-report output/mesh/mesh-comparison.json \
   --coastline data/cache/black-sea.geojson \
   --bathymetry output/source/black-sea-bathymetry-gebco2026-0.01deg-derived.json \
-  --bathymetry-metadata output/source/black-sea-bathymetry-gebco2026-0.01deg.metadata.json \
+  --bathymetry-metadata output/source/black-sea-bathymetry-gebco2026-0.01deg-derived.metadata.json \
   --output output/seabed/full-black-sea-1000m
 ```
 

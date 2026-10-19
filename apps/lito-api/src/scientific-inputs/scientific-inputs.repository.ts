@@ -9,6 +9,7 @@ import type {
   CreateScientificInputDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
+  ScientificInputQuotaDto,
   ScientificInputRole,
 } from "@litora/contracts";
 import { DatabaseService } from "../infrastructure/database.service.js";
@@ -46,6 +47,14 @@ interface ReusableArtifactRow {
   object_key: string;
   created_at: Date;
 }
+
+interface UsageRow {
+  count: string;
+  bytes: string;
+}
+
+const usageSql = `SELECT count(*)::text AS count, coalesce(sum(size_bytes),0)::text AS bytes
+                  FROM scientific_inputs WHERE owner_id=$1`;
 
 export interface ResolvedScientificInput {
   id: string;
@@ -89,11 +98,7 @@ export class ScientificInputsRepository {
     const id = randomUUID();
     return this.db.transaction(async (client) => {
       await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [userId]);
-      const usage = await client.query<{ count: string; bytes: string }>(
-        `SELECT count(*)::text AS count, coalesce(sum(size_bytes),0)::text AS bytes
-         FROM scientific_inputs WHERE owner_id=$1`,
-        [userId],
-      );
+      const usage = await client.query<UsageRow>(usageSql, [userId]);
       if (
         Number(usage.rows[0].count) >= maxScientificInputsPerUser ||
         Number(usage.rows[0].bytes) + input.sizeBytes > maxScientificInputTotalBytes
@@ -117,6 +122,16 @@ export class ScientificInputsRepository {
       [userId],
     );
     return result.rows.map(dto);
+  }
+
+  async quota(userId: string): Promise<ScientificInputQuotaDto> {
+    const result = await this.db.query<UsageRow>(usageSql, [userId]);
+    return {
+      usedCount: Number(result.rows[0].count),
+      limitCount: maxScientificInputsPerUser,
+      usedBytes: Number(result.rows[0].bytes),
+      limitBytes: maxScientificInputTotalBytes,
+    };
   }
 
   async ownedObservedSeries(id: string, userId: string): Promise<ScientificInputRow> {

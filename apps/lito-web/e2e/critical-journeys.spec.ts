@@ -10,6 +10,7 @@ import type {
   DatasetDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
+  ScientificInputQuotaDto,
   ScientificInputRole,
 } from "@litora/contracts";
 import {
@@ -175,6 +176,8 @@ async function mockApi(
           path === "/api/scientific-inputs/reusable-artifacts")
       )
         result = { body: [] };
+      if (!result && path === "/api/scientific-inputs/quota" && method === "GET")
+        result = { body: { usedCount: 0, limitCount: 20, usedBytes: 0, limitBytes: 2 * 1024 ** 3 } satisfies ScientificInputQuotaDto };
       if (
         !result &&
         path === "/api/calculations/deletions-current" &&
@@ -256,6 +259,64 @@ async function mockArticleCalculations(page: Page, submissions: unknown[]) {
       return { body: job };
   });
 }
+
+test("форма показывает расход квоты после резервирования и удаления pending", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  let pending: ScientificInputDto | null = null;
+  const quota = (): ScientificInputQuotaDto => ({
+    usedCount: pending ? 1 : 0, limitCount: 20,
+    usedBytes: pending ? pending.sizeBytes : 0, limitBytes: 2 * 1024 ** 3,
+  });
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds" && method === "GET")
+      return { body: [{ kind: "source_file", title: "Источник", description: "Тест" }] satisfies CalculationKindDto[] };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET")
+      return { body: pending ? [pending] : [] };
+    if (path === "/api/scientific-inputs/quota" && method === "GET")
+      return { body: quota() };
+    if (path === "/api/scientific-inputs" && method === "POST") {
+      pending = {
+        id: "99999999-9999-4999-8999-999999999999", name: "coast.geojson",
+        role: "coastline_geojson", filename: "coast.geojson", sizeBytes: 2,
+        source: "Тест", license: "Тест", crs: "EPSG:4326", coordinateUnit: "degrees",
+        status: "pending", sha256: null, createdAt: "2026-10-19T00:00:00.000Z",
+      };
+      return { status: 201, body: pending };
+    }
+    if (path === `/api/scientific-inputs/${pending?.id}/content` && method === "PUT")
+      return { status: 503, body: { message: "Тестовый сбой передачи" } };
+    if (path === `/api/scientific-inputs/${pending?.id}` && method === "DELETE") {
+      pending = null;
+      return { body: { deleted: true } };
+    }
+  });
+
+  await openNewCalculation(page, "dark");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await expect(dialog.getByText(/Зарезервировано 0 из 20 файлов/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Загрузить файл" }).click();
+  await dialog.locator("#scientific-file").setInputFiles({
+    name: "coast.geojson", mimeType: "application/geo+json", buffer: Buffer.from("{}"),
+  });
+  await dialog.locator("#scientific-source").fill("Тест");
+  await dialog.locator("#scientific-license").fill("Тест");
+  await dialog.getByRole("button", { name: "Сохранить приватный файл" }).click();
+  await expect(dialog.getByText(/Зарезервировано 1 из 20 файлов/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+  await dialog.getByRole("button", { name: "Удалить незавершённую запись" }).click();
+  await expect(dialog.getByText(/Зарезервировано 0 из 20 файлов/)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await chooseTheme(page, "light");
+  await page.getByRole("button", { name: "Новый расчёт", exact: true }).click();
+  await expect(dialog.getByText(/Зарезервировано 0 из 20 файлов/)).toBeVisible();
+  await expect(page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).resolves.toBe(true);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
 
 test("каталог показывает паспорт набора, поиск и адаптивную карточку", async ({
   page,

@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -15,6 +15,14 @@ const invitations = JSON.parse(process.env.TEST_INVITATIONS_JSON ?? "{}").invita
 assert.ok(Array.isArray(invitations) && invitations.length >= 3,
   "Передайте TEST_INVITATIONS_JSON с тремя одноразовыми приглашениями тестовой БД");
 const codes = invitations.map((invitation) => invitation.code);
+if (process.env.TEST_SEABED_BATHY_JSON) {
+  assert.equal(process.env.TEST_MESH_ENABLED, "true",
+    "Для seabed build включите TEST_MESH_ENABLED=true");
+}
+if (process.env.TEST_SEABED_CHAIN_ENABLED === "true") {
+  assert.ok(process.env.TEST_SEABED_BATHY_JSON,
+    "Для цепочки seabed укажите TEST_SEABED_BATHY_JSON");
+}
 function client() {
   let cookie = "",
     access = "";
@@ -146,6 +154,11 @@ assert.match(uploaded.sha256, /^[a-f0-9]{64}$/);
 assert.equal((await first.request("/datasets"))[0].id, uploaded.id);
 assert.deepEqual(await second.request("/datasets"), []);
 const scientificBytes = await readFile(new URL("../apps/lito-cli/data/black-sea.json", import.meta.url));
+const emptyScientificQuota = {
+  usedCount: 0, limitCount: 20, usedBytes: 0, limitBytes: 2 * 1024 ** 3,
+};
+assert.deepEqual(await first.request("/scientific-inputs/quota"), emptyScientificQuota);
+assert.deepEqual(await second.request("/scientific-inputs/quota"), emptyScientificQuota);
 const scientificRecord = await first.request("/scientific-inputs", "POST", {
   name: "Контур для проверки веб-сценариев",
   role: "coastline_geojson",
@@ -157,6 +170,10 @@ const scientificRecord = await first.request("/scientific-inputs", "POST", {
   coordinateUnit: "degrees",
 }, 201);
 assert.equal(scientificRecord.status, "pending");
+assert.deepEqual(await first.request("/scientific-inputs/quota"), {
+  ...emptyScientificQuota, usedCount: 1, usedBytes: scientificBytes.length,
+});
+assert.deepEqual(await second.request("/scientific-inputs/quota"), emptyScientificQuota);
 assert.deepEqual(await second.request("/scientific-inputs"), []);
 assert.deepEqual(await second.request("/scientific-inputs/reusable-artifacts"), []);
 await second.upload(`/scientific-inputs/${scientificRecord.id}/content`, scientificBytes, 404);
@@ -167,6 +184,9 @@ assert.equal(readyScientific.status, "ready");
 assert.equal(readyScientific.sha256,
   createHash("sha256").update(scientificBytes).digest("hex"));
 assert.equal((await first.request("/scientific-inputs"))[0].id, scientificRecord.id);
+assert.deepEqual(await first.request("/scientific-inputs/quota"), {
+  ...emptyScientificQuota, usedCount: 1, usedBytes: scientificBytes.length,
+});
 await first.request("/datasets", "POST", {
   name: "Неверный CRS", source: "Тест", license: "Тест", crs: "EPSG:3857",
   coordinateUnit: "meters", geometry: inputGeometry,
@@ -438,24 +458,147 @@ if (process.env.TEST_MESH_ENABLED === "true") {
   assert.equal(manifest.command, "lito mesh");
   assert.ok(manifest.artifacts.some((file) => file.sha256 === meshFile.sha256));
   assert.ok(report.levels[0].results[0].metrics.cell_count > 0);
-  assert.ok(process.env.TEST_MESH_CLI_BINARY,
-    "Для сравнения CLI и worker передайте TEST_MESH_CLI_BINARY");
-  const localOutput = await mkdtemp(join(tmpdir(), "litora-mesh-parity-"));
-  try {
-    await execFileAsync(process.env.TEST_MESH_CLI_BINARY, [
-      "mesh", "--input", "data/examples/sochi-local-segment.geojson",
-      "--cell-sizes", "2000", "--boundary-details", "2000",
-      "--generators", "frontal-quad", "--max-cells", "1000",
-      "--generator-timeout", "1m", "--output", localOutput,
-    ], { cwd: fileURLToPath(new URL("../apps/lito-cli/", import.meta.url)), timeout: 120_000 });
-    const localMesh = await readFile(join(localOutput, "mesh/msh", meshFile.filename.split("/").at(-1)));
-    assert.equal(createHash("sha256").update(localMesh).digest("hex"), meshFile.sha256,
-      "CLI и heavy worker должны создать одинаковую MSH на одном входе");
-  } finally {
-    await rm(localOutput, { recursive: true, force: true });
+  if (process.env.TEST_MESH_CLI_BINARY) {
+    const localOutput = await mkdtemp(join(tmpdir(), "litora-mesh-parity-"));
+    try {
+      await execFileAsync(process.env.TEST_MESH_CLI_BINARY, [
+        "mesh", "--input", "data/examples/sochi-local-segment.geojson",
+        "--cell-sizes", "2000", "--boundary-details", "2000",
+        "--generators", "frontal-quad", "--max-cells", "1000",
+        "--generator-timeout", "1m", "--output", localOutput,
+      ], { cwd: fileURLToPath(new URL("../apps/lito-cli/", import.meta.url)), timeout: 120_000 });
+      const localMesh = await readFile(join(localOutput, "mesh/msh", meshFile.filename.split("/").at(-1)));
+      assert.equal(createHash("sha256").update(localMesh).digest("hex"), meshFile.sha256,
+        "CLI и heavy worker должны создать одинаковую MSH на одном входе");
+    } finally {
+      await rm(localOutput, { recursive: true, force: true });
+    }
+  } else {
+    const expected = process.env.TEST_MESH_REFERENCE_SHA256;
+    assert.match(expected ?? "", /^[a-f0-9]{64}$/,
+      "Для сравнения с CLI в другом образе передайте TEST_MESH_REFERENCE_SHA256");
+    assert.equal(meshFile.sha256, expected,
+      "MSH heavy worker должна совпасть с отдельным CLI на том же Gmsh");
   }
   await second.request(`/calculations/${job.id}`, "GET", undefined, 404);
   console.log(`mesh: готово, ${result.artifacts.length} файлов, CLI и worker создали одинаковую MSH`);
+
+  if (process.env.TEST_SEABED_BATHY_JSON) {
+    assert.ok(process.env.TEST_SEABED_BATHY_METADATA,
+      "Для seabed build укажите TEST_SEABED_BATHY_METADATA");
+    const expectedDepthSha = process.env.TEST_SEABED_REFERENCE_SHA256;
+    assert.match(expectedDepthSha ?? "", /^[a-f0-9]{64}$/,
+      "Для seabed build укажите SHA-256 MSH отдельного CLI");
+    const reusable = await first.request("/scientific-inputs/reusable-artifacts");
+    const flatMesh = reusable.find((item) =>
+      item.jobId === job.id && item.role === "flat_mesh_msh");
+    assert.ok(flatMesh, "Плоская MSH должна быть доступна следующему заданию");
+    const uploadInput = async (path, role, name) => {
+      const bytes = await readFile(path);
+      const record = await first.request("/scientific-inputs", "POST", {
+        name, role, filename: basename(path), sizeBytes: bytes.length,
+        source: "GEBCO_2026, региональный срез официального OPeNDAP",
+        license: "Public domain по условиям GEBCO с обязательной атрибуцией",
+        crs: "EPSG:4326", coordinateUnit: "degrees",
+      }, 201);
+      await first.upload(`/scientific-inputs/${record.id}/content`, bytes);
+      return record.id;
+    };
+    const bathymetryInputId = await uploadInput(process.env.TEST_SEABED_BATHY_JSON,
+      "bathymetry_grid_json", "Производный набор GEBCO для теста");
+    const bathymetryMetadataInputId = await uploadInput(process.env.TEST_SEABED_BATHY_METADATA,
+      "bathymetry_grid_metadata_json", "Паспорт набора GEBCO для теста");
+    await second.request("/calculations", "POST", { kind: "seabed_build", input: {
+      flatMeshInputId: flatMesh.id, bathymetryInputId, bathymetryMetadataInputId,
+      coastlineInputId: coastline.id, boundaryDetail: 2000,
+    } }, 404);
+    const build = await first.request("/calculations", "POST", { kind: "seabed_build", input: {
+      flatMeshInputId: flatMesh.id, bathymetryInputId, bathymetryMetadataInputId,
+      coastlineInputId: coastline.id, boundaryDetail: 2000,
+    } }, 201);
+    let built;
+    for (let attempt = 0; attempt < 150; attempt++) {
+      built = await first.request(`/calculations/${build.id}`);
+      if (!["queued", "running"].includes(built.status)) break;
+      await delay(1000);
+    }
+    assert.equal(built.status, "succeeded", JSON.stringify(built));
+    const depth = built.artifacts.find((file) => file.filename === "seabed/black-sea-depth.msh");
+    const buildReport = built.artifacts.find((file) => file.filename === "seabed/build-report.json");
+    const buildManifest = built.artifacts.find((file) => file.filename === "manifest.json");
+    assert.ok(depth && buildReport && buildManifest,
+      "seabed build должен сохранить MSH, отчёт и манифест");
+    assert.equal(depth.sha256, expectedDepthSha,
+      "MSH seabed build должна совпасть с отдельным CLI на том же Gmsh");
+    for (const file of [depth, buildReport, buildManifest]) {
+      const response = await fetch(file.downloadUrl);
+      assert.equal(response.status, 200);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      assert.equal(createHash("sha256").update(bytes).digest("hex"), file.sha256);
+    }
+    const unsignedDepthUrl = new URL(depth.downloadUrl);
+    unsignedDepthUrl.search = "";
+    assert.equal((await fetch(unsignedDepthUrl)).status, 403);
+    await second.request(`/calculations/${build.id}`, "GET", undefined, 404);
+    console.log(`seabed_build: готово, ${built.artifacts.length} файлов, MSH совпала с CLI`);
+
+    if (process.env.TEST_SEABED_CHAIN_ENABLED === "true") {
+      const inputs = await first.request("/scientific-inputs/reusable-artifacts");
+      const ownedArtifact = (jobId, role) => {
+        const artifact = inputs.find((item) => item.jobId === jobId && item.role === role);
+        assert.ok(artifact, `Не найден повторно используемый артефакт ${role}`);
+        return artifact.id;
+      };
+      const modelInputId = ownedArtifact(build.id, "seabed_msh");
+      const exportMetadataInputId = ownedArtifact(build.id, "export_metadata_json");
+      const sourceMetadataInputId = await uploadInput(process.env.TEST_SEABED_BATHY_METADATA,
+        "bathymetry_source_json", "Источник GEBCO для технической цепочки");
+      const runSeabed = async (kind, input, expectedFilename) => {
+        const next = await first.request("/calculations", "POST", { kind, input }, 201);
+        let state;
+        for (let attempt = 0; attempt < 150; attempt++) {
+          state = await first.request(`/calculations/${next.id}`);
+          if (!["queued", "running"].includes(state.status)) break;
+          await delay(1000);
+        }
+        assert.equal(state.status, "succeeded", JSON.stringify(state));
+        const artifact = state.artifacts.find((file) => file.filename === expectedFilename);
+        assert.ok(artifact, `${kind} должен сохранить ${expectedFilename}`);
+        const response = await fetch(artifact.downloadUrl);
+        assert.equal(response.status, 200);
+        assert.equal(createHash("sha256").update(Buffer.from(await response.arrayBuffer()))
+          .digest("hex"), artifact.sha256);
+        await second.request(`/calculations/${next.id}`, "GET", undefined, 404);
+        console.log(`${kind}: готово, ${state.artifacts.length} файлов`);
+        return next.id;
+      };
+      await runSeabed("seabed_render", {
+        modelInputId, exportMetadataInputId, sourceMetadataInputId,
+      }, "seabed/svg/bathymetry-overview.svg");
+      const adaptId = await runSeabed("seabed_adapt", {
+        modelInputId, sourceMetadataInputId,
+      }, "seabed/adaptive/size-field.csv");
+      const adaptedInputs = await first.request("/scientific-inputs/reusable-artifacts");
+      const fieldCsvInputId = adaptedInputs.find((item) =>
+        item.jobId === adaptId && item.role === "adaptive_field_csv")?.id;
+      const fieldReportInputId = adaptedInputs.find((item) =>
+        item.jobId === adaptId && item.role === "adaptive_field_report_json")?.id;
+      assert.ok(fieldCsvInputId && fieldReportInputId,
+        "Поле ADAPT-01 должно быть доступно следующим заданиям");
+      const adaptiveInput = {
+        modelInputId, exportMetadataInputId, fieldCsvInputId,
+        fieldReportInputId, coastlineInputId: coastline.id, boundaryDetail: 2000,
+        maxCells: 20000, generatorTimeoutMinutes: 1,
+      };
+      await runSeabed("seabed_generate_adaptive", {
+        ...adaptiveInput, generator: "frontal-quad",
+      }, "seabed/adaptive/gmsh/black-sea-adaptive.msh");
+      await runSeabed("seabed_compare_adaptive", {
+        ...adaptiveInput, generators: "delaunay,frontal-quad,parallelograms",
+        levels: "local:200:1000", detailPreset: "none",
+      }, "seabed/adaptive/comparison/adaptive-generator-comparison.json");
+    }
+  }
 }
 const rejectedDataset = await first.request("/datasets", "POST", {
   name: "Контур вне Чёрного моря",
@@ -519,6 +662,7 @@ const swagger = await (await fetch(`${base}/docs-json`)).json();
 assert.ok(swagger.paths["/api/calculations"].post);
 assert.ok(swagger.paths["/api/datasets"].post);
 assert.ok(swagger.paths["/api/scientific-inputs/reusable-artifacts"].get);
+assert.ok(swagger.paths["/api/scientific-inputs/quota"].get);
 assert.ok(swagger.components.securitySchemes.bearer);
 assert.ok(swagger.paths["/api/auth/register"].post.requestBody.content["application/json"].schema.required.includes("invitationCode"));
 assert.ok(deletableMap);

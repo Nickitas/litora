@@ -376,6 +376,17 @@ TEST_INVITATIONS_JSON="$(pnpm --silent --filter litora-api invitations create --
 `TEST_HEAVY_ENABLED=true` для сквозного прогона `source_file`, `map_file` и
 `dimension_file`, включая передачу снимка первого расчёта по UUID артефакта
 в следующие задания; обычный тест тяжёлые задания не создаёт.
+Для малого `mesh` на этом же изолированном стенде добавьте
+`TEST_MESH_ENABLED=true` и либо `TEST_MESH_CLI_BINARY` для отдельного запуска
+CLI, либо `TEST_MESH_REFERENCE_SHA256` с контрольной суммой MSH, заранее полученной CLI
+в том же Gmsh-образе. Если подготовлен реальный производный GEBCO и паспорт,
+передайте также `TEST_SEABED_BATHY_JSON`, `TEST_SEABED_BATHY_METADATA` и
+`TEST_SEABED_REFERENCE_SHA256`: тест продолжит цепочку через `seabed_build`,
+сравнит MSH с отдельным CLI и проверит приватную выдачу. Добавьте
+`TEST_SEABED_CHAIN_ENABLED=true`, чтобы проверить последовательно
+`seabed_render`, `seabed_adapt`, `seabed_generate_adaptive` и
+`seabed_compare_adaptive` с приватными артефактами предыдущих шагов. Пример локального
+кандидата и ограничения научной приёмки — [0056](features/0056-heavy-pilot-acceptance.md).
 При ошибке проверки зафиксируйте конкретный вывод и состояние сервисов, не
 заменяйте полноценную проверку одним `/api/health`: health не проверяет worker.
 
@@ -398,6 +409,9 @@ pnpm down
 используйте `pnpm up:heavy`. Профиль `heavy` ограничен 4 CPU, 12 ГБ RAM и
 4 часами на job; одновременно выполняет один тяжёлый расчёт. Без него такие
 сценарии не предлагаются в форме, а прямой запрос API получает 503.
+Heavy-образ собирается для `linux/amd64` с Gmsh 4.15.2-nox; на arm64 Docker
+Desktop запускает его через эмуляцию. Локальный прогон на таком хосте проверяет
+совместимость образа, но его время и RAM не задают лимиты целевого VPS.
 Для хостового запуска нужно явно задать `LITO_HEAVY_ENABLED=true` у API и
 `LITO_WORKER_PROFILE=heavy` у отдельного worker; наличие Gmsh проверьте заранее.
 Для больших результатов обеспечьте свободное место

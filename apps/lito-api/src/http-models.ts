@@ -8,6 +8,7 @@ import type {
   ObservedShorelineSeriesDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
+  ScientificInputQuotaDto,
   ScientificInputRole,
   UserDto,
 } from "@litora/contracts";
@@ -139,6 +140,13 @@ export class ScientificInputResponse implements ScientificInputDto {
   status!: ScientificInputDto["status"];
   @ApiProperty({ type: String, nullable: true }) sha256!: string | null;
   @ApiProperty({ type: String, format: "date-time" }) createdAt!: string;
+}
+
+export class ScientificInputQuotaResponse implements ScientificInputQuotaDto {
+  @ApiProperty({ type: "integer", minimum: 0, description: "Число своих зарезервированных записей" }) usedCount!: number;
+  @ApiProperty({ type: "integer", minimum: 1, description: "Предел числа научных файлов" }) limitCount!: number;
+  @ApiProperty({ type: "integer", minimum: 0, description: "Сумма заявленных размеров своих файлов в байтах" }) usedBytes!: number;
+  @ApiProperty({ type: "integer", minimum: 1, description: "Предел заявленного объёма в байтах" }) limitBytes!: number;
 }
 
 export class ObservedShorelineSeriesResponse implements ObservedShorelineSeriesDto {

@@ -13,6 +13,7 @@ import type {
   FigureFiveOptionsDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
+  ScientificInputQuotaDto,
   ScientificInputRole,
 } from "@litora/contracts";
 import { aiNecessityDefaults, allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, figureFiveDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
@@ -61,6 +62,14 @@ const articleSizeFieldPreset = {
   maxSizeGradient: "0.15",
 } as const;
 
+function quotaSize(bytes: number) {
+  if (bytes < 1024 * 1024)
+    return `${new Intl.NumberFormat("ru-RU").format(bytes)} байт`;
+  const unit = bytes < 1024 ** 3 ? "МиБ" : "ГиБ";
+  const divisor = bytes < 1024 ** 3 ? 1024 ** 2 : 1024 ** 3;
+  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(bytes / divisor)} ${unit}`;
+}
+
 export function NewCalculationDialog({
   repeatJobId,
   onOpenChange,
@@ -74,6 +83,8 @@ export function NewCalculationDialog({
   const [kinds, setKinds] = useState<CalculationKindDto[]>([]);
   const [datasets, setDatasets] = useState<DatasetDto[]>([]);
   const [scientificInputs, setScientificInputs] = useState<ScientificInputDto[]>([]);
+  const [scientificQuota, setScientificQuota] = useState<ScientificInputQuotaDto | null>(null);
+  const [scientificQuotaLoading, setScientificQuotaLoading] = useState(true);
   const [reusableArtifacts, setReusableArtifacts] = useState<ReusableScientificArtifactDto[]>([]);
   const [selectedScientific, setSelectedScientific] = useState<Record<string, string>>({});
   const [uploadField, setUploadField] = useState<{ field: string; role: ScientificInputRole; existing?: ScientificInputDto } | null>(null);
@@ -344,13 +355,14 @@ export function NewCalculationDialog({
       : Promise.resolve({ job: null, error: "" });
     void Promise.all([
       api.calculationKinds(), api.datasets(), api.scientificInputs(),
-      api.reusableScientificArtifacts(), repeat,
+      api.scientificInputQuota().catch(() => null), api.reusableScientificArtifacts(), repeat,
     ])
-      .then(([nextKinds, nextDatasets, nextScientific, nextArtifacts, original]) => {
+      .then(([nextKinds, nextDatasets, nextScientific, nextQuota, nextArtifacts, original]) => {
         if (!mounted) return;
         setKinds(nextKinds);
         setDatasets(nextDatasets);
         setScientificInputs(nextScientific);
+        setScientificQuota(nextQuota);
         setReusableArtifacts(nextArtifacts);
         setKind((current) =>
           nextKinds.some((item) => item.kind === current)
@@ -373,10 +385,16 @@ export function NewCalculationDialog({
         }
       })
       .catch((nextError: unknown) => {
-        if (mounted) setLoadError(errorMessage(nextError));
+        if (mounted) {
+          setLoadError(errorMessage(nextError));
+          setScientificQuota(null);
+        }
       })
       .finally(() => {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setScientificQuotaLoading(false);
+        }
       });
     return () => {
       mounted = false;
@@ -386,7 +404,19 @@ export function NewCalculationDialog({
   function reload() {
     setLoading(true);
     setLoadError("");
+    setScientificQuotaLoading(true);
     setRevision((value) => value + 1);
+  }
+
+  async function refreshScientificQuota() {
+    setScientificQuotaLoading(true);
+    try {
+      setScientificQuota(await api.scientificInputQuota());
+    } catch {
+      setScientificQuota(null);
+    } finally {
+      setScientificQuotaLoading(false);
+    }
   }
 
   async function deletePendingInput(id: string) {
@@ -395,6 +425,7 @@ export function NewCalculationDialog({
     try {
       await api.deletePendingScientificInput(id);
       setScientificInputs((current) => current.filter((item) => item.id !== id));
+      void refreshScientificQuota();
       setUploadField((current) => current?.existing?.id === id ? null : current);
     } catch (nextError) {
       setSubmitError(errorMessage(nextError));
@@ -1014,6 +1045,13 @@ export function NewCalculationDialog({
                     <p className="mt-1 text-sm text-muted-foreground">
                       Выберите ранее загруженные файлы или сохраните новые. Go проверит их научный формат и совместимость при запуске.
                     </p>
+                    <p className="mt-2 text-sm text-muted-foreground" aria-live="polite">
+                      {scientificQuotaLoading
+                        ? "Проверяем расход квоты научных файлов…"
+                        : scientificQuota
+                          ? `Зарезервировано ${scientificQuota.usedCount} из ${scientificQuota.limitCount} файлов · ${quotaSize(scientificQuota.usedBytes)} из ${quotaSize(scientificQuota.limitBytes)} заявленного объёма. Незавершённые загрузки учитываются.`
+                          : "Расход квоты сейчас недоступен. Лимит будет проверен при загрузке."}
+                    </p>
                     {(kind === "erosion_file" || kind === "all_file" || kind === "calibrate_cerc") && (
                       <p className="mt-2 text-sm text-muted-foreground">
                         Батиметрия — JSON с простым именем файла (латиница, цифры, точка, дефис или подчёркивание) и паспортом, у которого dataset_file и SHA-256 соответствуют этому JSON. Для CSV волн укажите источник в форме загрузки.
@@ -1554,8 +1592,11 @@ export function NewCalculationDialog({
         {uploadField && (
           <ScientificInputUpload key={`${uploadField.field}-${uploadField.existing?.id ?? "new"}`}
             role={uploadField.role} existing={uploadField.existing}
-            onPending={(pending) => setScientificInputs((current) =>
-              current.some((item) => item.id === pending.id) ? current : [pending, ...current])}
+            onPending={(pending) => {
+              setScientificInputs((current) =>
+                current.some((item) => item.id === pending.id) ? current : [pending, ...current]);
+              void refreshScientificQuota();
+            }}
             onSaved={(saved) => {
               setScientificInputs((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
               setSelectedScientific((current) => ({ ...current, [uploadField.field]: saved.id }));

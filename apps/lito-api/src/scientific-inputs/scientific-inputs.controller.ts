@@ -31,7 +31,7 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { AuthGuard, type AuthRequest } from "../auth/auth.guard.js";
-import { ObservedShorelineSeriesResponse, ReusableScientificArtifactResponse, ScientificInputResponse } from "../http-models.js";
+import { ObservedShorelineSeriesResponse, ReusableScientificArtifactResponse, ScientificInputQuotaResponse, ScientificInputResponse } from "../http-models.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
 import { ScientificInputsRepository } from "./scientific-inputs.repository.js";
 import { validateScientificInput } from "./validation.js";
@@ -56,6 +56,14 @@ export class ScientificInputsController {
   @ApiResponse({ status: 200, type: [ScientificInputResponse] })
   list(@Req() req: AuthRequest) {
     return this.inputs.list(req.user.id);
+  }
+
+  @Get("quota")
+  @ApiOperation({ summary: "Расход и пределы квоты своих научных файлов" })
+  @ApiResponse({ status: 200, type: ScientificInputQuotaResponse })
+  @Header("Cache-Control", "no-store")
+  quota(@Req() req: AuthRequest) {
+    return this.inputs.quota(req.user.id);
   }
 
   @Get(":id/shoreline-series")

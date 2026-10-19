@@ -16,6 +16,7 @@ import type {
   ReleaseDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
+  ScientificInputQuotaDto,
   ObservedShorelineSeriesDto,
   ShorelinePointSeriesDto,
   ShorelineVisualizationChunkDto,
@@ -290,6 +291,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
     createDataset: (body: CreateDatasetDto) =>
       send<DatasetDto>("/datasets", "POST", body),
     scientificInputs: () => send<ScientificInputDto[]>("/scientific-inputs"),
+    scientificInputQuota: () => send<ScientificInputQuotaDto>("/scientific-inputs/quota"),
     shorelineObservationSeries: (id: string) =>
       send<ObservedShorelineSeriesDto>(
         `/scientific-inputs/${encodeURIComponent(id)}/shoreline-series`,

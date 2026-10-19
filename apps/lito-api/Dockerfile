@@ -31,6 +31,15 @@ CMD ["node", "dist/main.js"]
 
 FROM runtime AS heavy
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends gmsh ca-certificates \
+ARG TARGETARCH
+RUN test "${TARGETARCH}" = "amd64" || \
+    (echo "Образ heavy с Gmsh 4.15.2 поддерживает только linux/amd64" >&2; exit 1)
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:2f81d19efb0dd94426bdab010131da59b7dac1939a3073890dc32c86ecbaa8db \
+    https://gmsh.info/bin/Linux/gmsh-4.15.2-nox-Linux64-sdk.tgz /tmp/gmsh-sdk.tgz
+RUN mkdir -p /opt/gmsh && \
+    tar -xzf /tmp/gmsh-sdk.tgz -C /opt/gmsh --strip-components=1 && \
+    ln -s /opt/gmsh/bin/gmsh /usr/local/bin/gmsh && \
+    gmsh --version && rm /tmp/gmsh-sdk.tgz
 USER node

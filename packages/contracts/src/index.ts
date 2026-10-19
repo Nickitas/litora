@@ -583,6 +583,13 @@ export interface ScientificInputDto extends CreateScientificInputDto {
   createdAt: string;
 }
 
+export interface ScientificInputQuotaDto {
+  usedCount: number;
+  limitCount: number;
+  usedBytes: number;
+  limitBytes: number;
+}
+
 export interface ReusableScientificArtifactDto {
   id: string;
   jobId: string;

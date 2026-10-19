@@ -20,6 +20,27 @@ cmd/bathymetry/convert/download_bathymetry.sh \
   output/source/black-sea-bathymetry-gebco2026-0.01deg-derived.json
 ```
 
+Если нужен именно зафиксированный региональный срез GEBCO_2026 из OPeNDAP,
+используйте отдельную команду. Она выбирает только 40,5–47,5° с. ш. и
+27,0–42,5° в. д., проверяет размер сетки 1680×3720, не перезаписывает файл
+и печатает SHA-256 фактически сохранённого NetCDF:
+
+```bash
+python3 cmd/bathymetry/convert/fetch_gebco_region.py \
+  output/source/netcdf/GEBCO_2026_Black_Sea_40.5_47.5_27.0_42.5.nc
+python3 cmd/bathymetry/convert/convert_bathymetry.py \
+  --input output/source/netcdf/GEBCO_2026_Black_Sea_40.5_47.5_27.0_42.5.nc \
+  --output output/source/gebco2026-0.02deg-derived.json \
+  --resolution 0.02 \
+  --source-url 'https://dap.ceda.ac.uk/thredds/dodsC/bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/GEBCO_2026.nc' \
+  --downloaded-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+Сохраняйте исходный NetCDF, производный JSON и паспорт вместе вне Git.
+Хеш NetCDF относится к конкретной сериализации xarray; совпадение размеров
+и диапазона значений само по себе не доказывает побайтовое совпадение со старым
+паспортом. Не используйте конфликтующие старые SHA без исходного файла.
+
 Скрипт:
 
 1. сохраняет исходный NetCDF в `output/source/netcdf/`;

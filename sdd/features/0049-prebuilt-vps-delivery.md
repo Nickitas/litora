@@ -1,7 +1,7 @@
 # 0049 — Поставка готовых образов на VPS
 
 - Статус: реализация в репозитории, staging-приёмка открыта.
-- Дата: 17.10.2026; исходная ветка `development`, SHA выпуска фиксируется после коммита.
+- Дата: обновлено 19.10.2026; исходная ветка `development`, SHA выпуска фиксируется после коммита.
 - Область: GitHub Actions, GHCR, Docker Compose, runbook; ADR-007/008/022.
 
 ## Проблема и границы
@@ -37,6 +37,8 @@ PostgreSQL migrations. Первичный bootstrap роли/БД ручной, 
 ## Проверки и выпуск
 
 - [x] Статическая проверка Compose, shell syntax, YAML и `git diff --check`.
+- [x] Локально собран `linux/amd64` heavy-образ с Gmsh 4.15.2-nox и пройден
+  малый `mesh` через API → worker → приватный S3; [протокол 0056](0056-heavy-pilot-acceptance.md).
 - [ ] Реальный CI run и pull private GHCR на staging.
 - [ ] Чистая БД, S3, TLS и стандартный контрольный расчёт.
 - [ ] Heavy job, замер RAM/temp/time и повторный rollout без потери данных.
