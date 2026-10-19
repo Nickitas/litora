@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 const base = process.env.TEST_API_URL ?? "http://localhost:3000/api";
 const invitations = JSON.parse(process.env.TEST_INVITATIONS_JSON ?? "{}").invitations;
@@ -241,6 +248,9 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
     file.filename.endsWith("manifest.json"),
   );
   assert.ok(artifact, "CLI должен создать манифест");
+  const signedArtifactUrl = new URL(artifact.downloadUrl);
+  assert.equal(signedArtifactUrl.searchParams.get("X-Amz-Expires"), "900");
+  assert.ok(signedArtifactUrl.searchParams.has("X-Amz-Signature"));
   if (kind === "map") deletableMap = { id: job.id, manifestUrl: artifact.downloadUrl };
   const download = await fetch(artifact.downloadUrl);
   assert.equal(download.status, 200);
@@ -279,6 +289,9 @@ if (process.env.TEST_HEAVY_ENABLED === "true") {
     kind: "source_file", input: { coastlineInputId: scientificRecord.id },
   }, 404);
   let inputId = scientificRecord.id;
+  let sourceJobId;
+  let sourceManifestUrl;
+  const dependentJobs = [];
   for (const kind of ["source_file", "map_file", "dimension_file"]) {
     const job = await first.request("/calculations", "POST", {
       kind, input: { coastlineInputId: inputId },
@@ -307,6 +320,8 @@ if (process.env.TEST_HEAVY_ENABLED === "true") {
     assert.equal(result.methodId, kind === "source_file" ? null :
       kind === "map_file" ? "black-sea-overview" : "box-counting");
     if (kind === "source_file") {
+      sourceJobId = job.id;
+      sourceManifestUrl = manifestArtifact.downloadUrl;
       const reusable = await first.request("/scientific-inputs/reusable-artifacts");
       const snapshot = reusable.find((item) => item.jobId === job.id &&
         item.role === "coastline_geojson");
@@ -316,9 +331,131 @@ if (process.env.TEST_HEAVY_ENABLED === "true") {
       await second.request("/calculations", "POST", {
         kind: "map_file", input: { coastlineInputId: snapshot.id },
       }, 404);
+    } else {
+      dependentJobs.push({ id: job.id, manifestUrl: manifestArtifact.downloadUrl });
+      await second.request(`/calculations/${sourceJobId}`, "DELETE", undefined, 404);
+      const conflict = await first.request(
+        `/calculations/${sourceJobId}`, "DELETE", undefined, 409);
+      assert.match(JSON.stringify(conflict), /используется другими расчётами/);
+      assert.equal((await first.request(`/calculations/${sourceJobId}`)).status,
+        "succeeded", "Источник должен сохраниться после отказа в удалении");
     }
     console.log(`${kind}: готово, ${result.artifacts.length} файлов`);
   }
+  let deletionOverview;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    deletionOverview = await first.request("/calculations/deletion-overview");
+    if (deletionOverview.settlingCount === 0) break;
+    await delay(1000);
+  }
+  assert.equal(deletionOverview.settlingCount, 0,
+    "Worker должен освободить завершённые расчёты перед удалением");
+  for (const [index, dependent] of dependentJobs.entries()) {
+    const deletion = await first.request(`/calculations/${dependent.id}`, "DELETE", undefined, 202);
+    assert.equal(deletion.scope, "single");
+    let state;
+    for (let attempt = 0; attempt < 60; attempt++) {
+      state = await first.request(`/calculations/deletions/${deletion.id}`);
+      if (state.status === "completed") break;
+      await delay(1000);
+    }
+    assert.equal(state.status, "completed", JSON.stringify(state));
+    assert.equal(state.deletedCount, 1);
+    await first.request(`/calculations/${dependent.id}`, "GET", undefined, 404);
+    assert.notEqual((await fetch(dependent.manifestUrl)).status, 200,
+      "Удалённый потомок не должен оставлять доступный объект S3");
+    if (index === 0) {
+      const conflict = await first.request(
+        `/calculations/${sourceJobId}`, "DELETE", undefined, 409);
+      assert.match(JSON.stringify(conflict), /используется другими расчётами/);
+    }
+  }
+  const sourceDeletion = await first.request(
+    `/calculations/${sourceJobId}`, "DELETE", undefined, 202);
+  let sourceDeletionState;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    sourceDeletionState = await first.request(
+      `/calculations/deletions/${sourceDeletion.id}`);
+    if (sourceDeletionState.status === "completed") break;
+    await delay(1000);
+  }
+  assert.equal(sourceDeletionState.status, "completed", JSON.stringify(sourceDeletionState));
+  assert.equal(sourceDeletionState.deletedCount, 1);
+  await first.request(`/calculations/${sourceJobId}`, "GET", undefined, 404);
+  assert.equal((await first.request("/scientific-inputs/reusable-artifacts"))
+    .some((item) => item.jobId === sourceJobId), false);
+  assert.notEqual((await fetch(sourceManifestUrl)).status, 200,
+    "Удалённый источник не должен оставлять доступный объект S3");
+  console.log("Зависимые расчёты и источник удалены в правильном порядке");
+}
+if (process.env.TEST_MESH_ENABLED === "true") {
+  const coastlineBytes = await readFile(new URL("../apps/lito-cli/data/examples/sochi-local-segment.geojson", import.meta.url));
+  const coastline = await first.request("/scientific-inputs", "POST", {
+    name: "Технический сегмент Сочи для Gmsh", role: "coastline_geojson",
+    filename: "sochi-local-segment.geojson", sizeBytes: coastlineBytes.length,
+    source: "OpenStreetMap, way 59530506, выгрузка 2026-08-17",
+    license: "ODbL, технический пример Litora", crs: "EPSG:4326",
+    coordinateUnit: "degrees",
+  }, 201);
+  await first.upload(`/scientific-inputs/${coastline.id}/content`, coastlineBytes);
+  await second.request("/calculations", "POST", {
+    kind: "mesh", input: { coastlineInputId: coastline.id,
+      cellSizes: "2000", boundaryDetails: "2000", generators: "frontal-quad",
+      maxCells: 1000, generatorTimeoutMinutes: 1 },
+  }, 404);
+  const job = await first.request("/calculations", "POST", {
+    kind: "mesh", input: { coastlineInputId: coastline.id,
+      cellSizes: "2000", boundaryDetails: "2000", generators: "frontal-quad",
+      maxCells: 1000, generatorTimeoutMinutes: 1 },
+  }, 201);
+  let result;
+  for (let attempt = 0; attempt < 150; attempt++) {
+    result = await first.request(`/calculations/${job.id}`);
+    if (!["queued", "running"].includes(result.status)) break;
+    await delay(1000);
+  }
+  assert.equal(result.status, "succeeded", JSON.stringify(result));
+  assert.equal(result.methodId, null);
+  const manifestFile = result.artifacts.find((file) => file.filename === "manifest.json");
+  const meshFile = result.artifacts.find((file) => file.filename.endsWith(".msh"));
+  const reportFile = result.artifacts.find((file) => file.filename === "mesh/mesh-comparison.json");
+  assert.ok(manifestFile && meshFile && reportFile, "Heavy mesh должен сохранить MSH, отчёт и манифест");
+  const signedUrl = new URL(meshFile.downloadUrl);
+  assert.equal(signedUrl.searchParams.get("X-Amz-Expires"), "900");
+  signedUrl.search = "";
+  assert.equal((await fetch(signedUrl)).status, 403, "MSH должен оставаться приватным");
+  const bytes = [];
+  for (const file of [manifestFile, meshFile, reportFile]) {
+    const response = await fetch(file.downloadUrl);
+    assert.equal(response.status, 200);
+    const data = Buffer.from(await response.arrayBuffer());
+    assert.equal(createHash("sha256").update(data).digest("hex"), file.sha256);
+    bytes.push(data);
+  }
+  const manifest = JSON.parse(bytes[0]);
+  const report = JSON.parse(bytes[2]);
+  assert.equal(manifest.schemaVersion, 2);
+  assert.equal(manifest.command, "lito mesh");
+  assert.ok(manifest.artifacts.some((file) => file.sha256 === meshFile.sha256));
+  assert.ok(report.levels[0].results[0].metrics.cell_count > 0);
+  assert.ok(process.env.TEST_MESH_CLI_BINARY,
+    "Для сравнения CLI и worker передайте TEST_MESH_CLI_BINARY");
+  const localOutput = await mkdtemp(join(tmpdir(), "litora-mesh-parity-"));
+  try {
+    await execFileAsync(process.env.TEST_MESH_CLI_BINARY, [
+      "mesh", "--input", "data/examples/sochi-local-segment.geojson",
+      "--cell-sizes", "2000", "--boundary-details", "2000",
+      "--generators", "frontal-quad", "--max-cells", "1000",
+      "--generator-timeout", "1m", "--output", localOutput,
+    ], { cwd: fileURLToPath(new URL("../apps/lito-cli/", import.meta.url)), timeout: 120_000 });
+    const localMesh = await readFile(join(localOutput, "mesh/msh", meshFile.filename.split("/").at(-1)));
+    assert.equal(createHash("sha256").update(localMesh).digest("hex"), meshFile.sha256,
+      "CLI и heavy worker должны создать одинаковую MSH на одном входе");
+  } finally {
+    await rm(localOutput, { recursive: true, force: true });
+  }
+  await second.request(`/calculations/${job.id}`, "GET", undefined, 404);
+  console.log(`mesh: готово, ${result.artifacts.length} файлов, CLI и worker создали одинаковую MSH`);
 }
 const rejectedDataset = await first.request("/datasets", "POST", {
   name: "Контур вне Чёрного моря",

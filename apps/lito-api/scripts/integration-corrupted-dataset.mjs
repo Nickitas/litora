@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 assert.equal(
   process.env.TEST_S3_CORRUPTION,
@@ -73,19 +73,26 @@ const storage = new S3Client({
     secretAccessKey: process.env.S3_SECRET_KEY,
   },
 });
-await storage.send(
-  new PutObjectCommand({
-    Bucket: process.env.S3_BUCKET,
-    Key: `users/${auth.user.id}/datasets/${dataset.id}.geojson`,
-    Body: Buffer.from(
-      JSON.stringify({
-        type: "LineString",
-        coordinates: [[39.66, 43.64], [39.67, 43.63]],
-      }),
-    ),
-    ContentType: "application/geo+json",
-  }),
-);
+const key = `users/${auth.user.id}/datasets/${dataset.id}.geojson`;
+const saved = await storage.send(new GetObjectCommand({
+  Bucket: process.env.S3_BUCKET, Key: key,
+}));
+assert.ok(saved.Body);
+const original = Buffer.from(await saved.Body.transformToByteArray());
+assert.equal(createHash("sha256").update(original).digest("hex"), dataset.sha256);
+const tampered = Buffer.from(original);
+const coordinate = Buffer.from("39.667927");
+const offset = tampered.indexOf(coordinate);
+assert.notEqual(offset, -1, "В сохранённом файле не найдена тестовая координата");
+tampered[offset + coordinate.length - 1] = "8".charCodeAt(0);
+assert.equal(tampered.length, original.length);
+assert.notEqual(createHash("sha256").update(tampered).digest("hex"), dataset.sha256);
+await storage.send(new PutObjectCommand({
+  Bucket: process.env.S3_BUCKET,
+  Key: key,
+  Body: tampered,
+  ContentType: "application/geo+json",
+}));
 storage.destroy();
 
 const job = await post(
@@ -106,8 +113,6 @@ for (let attempt = 0; attempt < 30; attempt++) {
 assert.equal(result.status, "failed", `Неверный статус задания ${job.id}`);
 assert.match(result.errorMessage, /Контрольная сумма или размер набора не совпадает/);
 assert.equal(result.resultSummary, null);
-assert.equal(
-  result.artifacts.some((artifact) => artifact.filename === "manifest.json"),
-  false,
-);
+assert.deepEqual(result.artifacts.map((artifact) => artifact.filename),
+  ["failure.log"], "Подменённый вход не должен публиковать частичный результат");
 console.log("Подменённый S3-объект отклонён до запуска научного расчёта");

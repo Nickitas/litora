@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   CreateBucketCommand,
   DeleteBucketCommand,
@@ -65,7 +66,23 @@ try {
   const response = await fetch(signedUrl);
   assert.equal(response.status, 200, "Подписанная ссылка не открылась");
   assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
-  console.log("Локальный S3: bucket, upload, download и signed URL работают");
+  const shortUrl = await getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: 2 },
+  );
+  assert.equal((await fetch(shortUrl)).status, 200);
+  await delay(3500);
+  assert.equal((await fetch(shortUrl)).status, 403,
+    "Истёкшая подписанная ссылка не должна открывать объект");
+  const renewedUrl = await getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: 60 },
+  );
+  assert.equal((await fetch(renewedUrl)).status, 200,
+    "Новая подпись должна снова открыть приватный объект");
+  console.log("Локальный S3: upload/download, истечение и повторная подпись URL работают");
 } finally {
   try {
     if (objectCreated) await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
