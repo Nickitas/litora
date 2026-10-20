@@ -278,7 +278,7 @@ func runAll(cmd *cobra.Command, args []string) error {
 	// Отчёт dimension использует исходную наблюдаемую линию, а не упрощённую
 	// базу эрозионной модели, и наследует статус внешнего сценария.
 	if err := cli.WriteDimensionSVG(result.Points, outputMgr, result.DatasetName, result.Source, result.Validation, model.ScenarioClassification); err != nil {
-		fmt.Printf("Предупреждение: не удалось создать SVG для размерности: %v\n", err)
+		return fmt.Errorf("создание отчёта размерности: %w", err)
 	}
 
 	// Erosion series SVG
@@ -288,7 +288,7 @@ func runAll(cmd *cobra.Command, args []string) error {
 	}
 	if err := cli.WriteErosionSVGSeriesWithLimit(result.Points, snapshots, simulationSteps, 0, 0,
 		waveOptions, outputMgr, result.DatasetName, result.Source, result.Validation, allMaxSVGFrames, model.ScenarioClassification); err != nil {
-		fmt.Printf("Предупреждение: не удалось создать SVG для эрозии: %v\n", err)
+		return fmt.Errorf("создание отчёта эрозии: %w", err)
 	}
 	writeModel := cli.WriteLongshoreModelJSON
 	if allSteps == 0 {
@@ -298,7 +298,7 @@ func runAll(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("сохранение баланса наносов: %w", err)
 	}
 	if err := cli.WriteShorelineVisualization(model, outputMgr); err != nil {
-		fmt.Printf("Предупреждение: не удалось подготовить интерактивную карту: %v\n", err)
+		return fmt.Errorf("создание интерактивной карты: %w", err)
 	}
 	if err := exportErosionArtifacts(outputMgr, snapshots, nil, allOutputCSV, allCSVFormat, allOutputGIF, allGIFFPS, allGIFSkip); err != nil {
 		return err

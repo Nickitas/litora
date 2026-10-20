@@ -3,6 +3,7 @@ import type {
   CreateScientificInputDto,
   ScientificInputRole,
 } from "@litora/contracts";
+import { scientificInputFormat } from "./format-catalog.js";
 
 export const maxScientificInputBytes = 512 * 1024 * 1024;
 export const maxFullBlackSeaMeshBytes = 256 * 1024 * 1024;
@@ -64,6 +65,9 @@ export function validateScientificInput(body: unknown): CreateScientificInputDto
     throw new BadRequestException("Неизвестное поле научного файла");
   if (!roles.has(data.role as ScientificInputRole))
     throw new BadRequestException("Неизвестная роль научного файла");
+  const format = scientificInputFormat(data.role as ScientificInputRole);
+  if (typeof data.sizeBytes === "number" && data.sizeBytes > format.maxBytes)
+    throw new BadRequestException(`Для этого формата допускается не более ${format.maxBytes / 1024 / 1024} МиБ`);
   if (
     !Number.isSafeInteger(data.sizeBytes) ||
     Number(data.sizeBytes) < 1 ||

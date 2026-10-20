@@ -126,6 +126,7 @@ type seabedBuildArtifacts struct {
 	CellsCSV           string `json:"cells_csv"`
 	ProfilesCSV        string `json:"profiles_csv"`
 	ExportMetadataJSON string `json:"export_metadata_json"`
+	SourceMetadataJSON string `json:"source_metadata_json"`
 	ReconciliationJSON string `json:"reconciliation_json"`
 	CorrectionsCSV     string `json:"reconciliation_corrections_csv"`
 	CellDerivationJSON string `json:"cell_derivation_json"`
@@ -246,6 +247,7 @@ func executeSeabedBuild(options seabedBuildOptions) (seabedBuildReport, error) {
 		CellsCSV:           filepath.Join(options.OutputDirectory, "cells.csv"),
 		ProfilesCSV:        filepath.Join(options.OutputDirectory, "profiles.csv"),
 		ExportMetadataJSON: filepath.Join(options.OutputDirectory, "export-metadata.json"),
+		SourceMetadataJSON: filepath.Join(options.OutputDirectory, "bathymetry-source.json"),
 		ReconciliationJSON: filepath.Join(options.OutputDirectory, "reconciliation.json"),
 		CorrectionsCSV:     filepath.Join(options.OutputDirectory, "reconciliation-corrections.csv"),
 		CellDerivationJSON: filepath.Join(options.OutputDirectory, "cell-derivation.json"),
@@ -270,8 +272,15 @@ func executeSeabedBuild(options seabedBuildOptions) (seabedBuildReport, error) {
 			return report, err
 		}
 		metadata := seabed.NewExportMetadata(domain.Projection, passport.VerticalReference, passport.VerticalReferenceCaveat)
+		sourceMetadata, err := json.MarshalIndent(passport, "", "  ")
+		if err != nil {
+			return report, fmt.Errorf("подготовка паспорта источника батиметрии: %w", err)
+		}
 		if err := seabed.WriteMSH2(artifacts.BathymetricMSH, model); err != nil {
 			return report, err
+		}
+		if err := os.WriteFile(artifacts.SourceMetadataJSON, append(sourceMetadata, '\n'), 0o644); err != nil {
+			return report, fmt.Errorf("сохранение паспорта источника батиметрии: %w", err)
 		}
 		if err := seabed.WriteReconciliationJSON(artifacts.ReconciliationJSON, model.Reconciliation); err != nil {
 			return report, err

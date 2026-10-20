@@ -29,7 +29,7 @@ func TestResultManifest(t *testing.T) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.SchemaVersion != 2 || result.Method == nil || result.Method.ID != "box-counting" || result.Method.Revision != "baseline-1" {
+	if result.SchemaVersion != 2 || result.Method == nil || result.Method.ID != "box-counting" || result.Method.Revision != "reports-2" {
 		t.Fatalf("неверная ревизия метода в манифесте: %+v", result)
 	}
 	if len(result.Artifacts) != 1 || result.Artifacts[0].Path != "result.json" || result.Artifacts[0].SizeBytes != 2 || len(result.Artifacts[0].SHA256) != 64 {

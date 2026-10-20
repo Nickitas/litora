@@ -59,7 +59,7 @@ export const installationPageContent = {
     },
     {
       command:
-        "./lito real coastline --source-url '' --input data/black-sea.json",
+        "./lito real coastline --source-url '' --input data/coastline/black-sea.geojson",
       description: "Использование локального файла",
     },
     {

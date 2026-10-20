@@ -153,7 +153,7 @@ assert.equal(uploaded.sourceRevision, "test-snapshot-1");
 assert.match(uploaded.sha256, /^[a-f0-9]{64}$/);
 assert.equal((await first.request("/datasets"))[0].id, uploaded.id);
 assert.deepEqual(await second.request("/datasets"), []);
-const scientificBytes = await readFile(new URL("../apps/lito-cli/data/black-sea.json", import.meta.url));
+const scientificBytes = await readFile(new URL("../apps/lito-cli/data/coastline/black-sea.geojson", import.meta.url));
 const emptyScientificQuota = {
   usedCount: 0, limitCount: 20, usedBytes: 0, limitBytes: 2 * 1024 ** 3,
 };
@@ -162,10 +162,10 @@ assert.deepEqual(await second.request("/scientific-inputs/quota"), emptyScientif
 const scientificRecord = await first.request("/scientific-inputs", "POST", {
   name: "Контур для проверки веб-сценариев",
   role: "coastline_geojson",
-  filename: "black-sea.json",
+  filename: "black-sea.geojson",
   sizeBytes: scientificBytes.length,
-  source: "Поставляемый контур Litora, копия для интеграционного теста",
-  license: "Только для интеграционного теста",
+  source: "MarineRegions MRGID 3319, закреплённый снимок Litora",
+  license: "CC-BY; https://www.marineregions.org/disclaimer.php",
   crs: "EPSG:4326",
   coordinateUnit: "degrees",
 }, 201);
@@ -201,17 +201,20 @@ await second.request("/calculations", "POST", {
   kind: "dimension_dataset", input: { datasetId: uploaded.id },
 }, 404);
 let deletableMap;
-for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
+for (const kind of ["dimension", "dimension_dataset", "map", "erosion", "all_demo"]) {
+  const demo = kind === "erosion" || kind === "all_demo";
   const expectedMethod = {
     dimension: "box-counting",
     dimension_dataset: "box-counting",
     map: "black-sea-overview",
     erosion: "cerc-one-line",
+    all_demo: null,
   }[kind];
+  const expectedRevision = kind === "map" ? "scientific-map-3" : "reports-2";
   const job = await first.request(
     "/calculations",
     "POST",
-    { kind, input: kind === "erosion" ? {
+    { kind, input: demo ? {
       steps: 2, cercCoefficient: 0.5, outputCsv: true, csvFormat: "wide",
     } :
       kind === "dimension_dataset" ? { datasetId: uploaded.id } : {} },
@@ -236,11 +239,11 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
   assert.equal(result.inputSchemaVersion, observedInputSchemaVersion);
   assert.equal(result.resultSchemaVersion, 1);
   assert.equal(result.methodId, expectedMethod);
-  assert.equal(result.methodRevision, "baseline-1");
-  assert.deepEqual(result.resultSummary.method, {
+  assert.equal(result.methodRevision, expectedMethod ? expectedRevision : null);
+  assert.deepEqual(result.resultSummary.method, expectedMethod ? {
     id: expectedMethod,
-    revision: "baseline-1",
-  });
+    revision: expectedRevision,
+  } : null);
   const inputFiles = result.resultSummary.provenance.files;
   assert.ok(Array.isArray(inputFiles) && inputFiles.length > 0);
   for (const file of inputFiles) {
@@ -250,12 +253,31 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
   }
   if (kind === "map")
     assert.ok(inputFiles.some((file) => file.path === "data/examples/sochi-local-segment.geojson"));
-  if (kind === "erosion")
+  if (kind === "dimension" || kind === "map") {
+    assert.ok(inputFiles.some((file) => file.path === "data/coastline/black-sea.geojson" &&
+      file.sha256 === "116dcbc076ff0086e8bb3d72a34fc1df5353dc3c93c5cad91a99c336e039d246"));
+    assert.match(result.commandLine, /--input data\/coastline\/black-sea.geojson/);
+  }
+  if (kind === "dimension") {
+    const metrics = result.resultSummary.metrics["dimension.metrics.json"];
+    assert.equal(metrics.reproducibility.input_point_count, 9635);
+    assert.equal(metrics.reproducibility.input_geometry_sha256, "f6922e461df150852cc07e6532116cbf37a042ca504d1a40fc908825ee917fe9");
+    assert.ok(Math.abs(metrics.iterations[0].dimension.dimension - 1.108395268193275) < 1e-10);
+    const svg = result.artifacts.find((file) => file.filename === "svg/dimension_0.svg");
+    assert.ok(svg && svg.sizeBytes > 100_000, "Ожидается полный SVG рисунка 1");
+    const bytes = Buffer.from(await (await fetch(svg.downloadUrl)).arrayBuffer());
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), svg.sha256);
+    assert.match(bytes.toString("utf8"), /D=1\.10840/);
+    assert.ok(result.artifacts.some((file) => file.filename === "svg/dimension_loglog_0.svg"));
+  }
+  if (demo)
     assert.match(result.resultSummary.provenance.declaredSources.waves, /Open-Meteo/);
-  if (kind === "erosion") {
+  if (demo) {
     assert.match(result.commandLine, /--black-sea-sochi --offline/);
     assert.match(result.commandLine, /--cerc-coefficient 0\.5/);
-    assert.match(result.commandLine, /--output-csv erosion-metrics\.csv --csv-format wide/);
+    assert.match(result.commandLine, kind === "all_demo"
+      ? /--output-csv all-metrics\.csv --csv-format wide/
+      : /--output-csv erosion-metrics\.csv --csv-format wide/);
   }
   if (kind === "dimension_dataset") {
     assert.equal(result.resultSummary.provenance.datasetId, uploaded.id);
@@ -264,6 +286,21 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
     assert.equal(result.resultSummary.scenario, "user-data");
   }
   assert.ok(result.artifacts.length > 1);
+  const execution = result.artifacts.find((file) => file.filename === "execution.log");
+  assert.ok(execution);
+  const logResponse = await fetch(execution.downloadUrl);
+  assert.match(logResponse.headers.get("content-type") ?? "", /text\/plain;\s*charset=utf-8/i);
+  const logBytes = Buffer.from(await logResponse.arrayBuffer());
+  const logText = new TextDecoder("utf8", { fatal: true }).decode(logBytes);
+  assert.ok(!logText.includes("\ufffd"), "Журнал Go не должен содержать повреждённую кириллицу");
+  assert.equal(createHash("sha256").update(logBytes).digest("hex"), execution.sha256);
+  if (kind === "map") {
+    const map = result.artifacts.find((file) => file.filename === "svg/black-sea-coast.svg");
+    assert.ok(map);
+    const svg = await (await fetch(map.downloadUrl)).text();
+    assert.match(svg, /id="coordinate-grid"/);
+    assert.doesNotMatch(svg, /локальную съёмку|фрактальные итерации|Данные карты/);
+  }
   const artifact = result.artifacts.find((file) =>
     file.filename.endsWith("manifest.json"),
   );
@@ -281,17 +318,18 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
   );
   const manifest = JSON.parse(data);
   assert.equal(manifest.schemaVersion, 2);
-  assert.deepEqual(manifest.method, {
+  assert.deepEqual(manifest.method, expectedMethod ? {
     id: expectedMethod,
-    revision: "baseline-1",
-  });
+    revision: expectedRevision,
+  } : undefined);
   assert.ok(manifest.artifacts.length > 0);
-  if (kind === "erosion") {
-    const csv = result.artifacts.find((file) => file.filename === "csv/erosion-metrics.csv");
+  if (demo) {
+    const csvName = kind === "all_demo" ? "csv/all-metrics.csv" : "csv/erosion-metrics.csv";
+    const csv = result.artifacts.find((file) => file.filename === csvName);
     assert.ok(csv, "CLI должен создать CSV для демонстрационного расчёта");
     const csvBytes = Buffer.from(await (await fetch(csv.downloadUrl)).arrayBuffer());
     assert.equal(createHash("sha256").update(csvBytes).digest("hex"), csv.sha256);
-    assert.ok(manifest.artifacts.some((file) => file.path === "csv/erosion-metrics.csv"));
+    assert.ok(manifest.artifacts.some((file) => file.path === csvName));
   }
   const unsigned = new URL(artifact.downloadUrl);
   unsigned.search = "";
@@ -303,6 +341,41 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion"]) {
   console.log(
     `${kind}: готово, ${result.artifacts.length} файлов, проверены манифест, SHA-256 и приватность S3`,
   );
+}
+{
+  const observations = Buffer.from(JSON.stringify({ type: "FeatureCollection", features:
+    ["2020-01-01T00:00:00Z", "2022-01-01T00:00:00Z"].map((date) => ({
+      type: "Feature", properties: { date, satname: "test" },
+      geometry: { type: "LineString", coordinates: [[39.6, 43.6], [39.8, 43.61]] },
+    })),
+  }));
+  const input = await first.request("/scientific-inputs", "POST", {
+    name: "Контролируемый ряд для проверки аудита", role: "shoreline_timeseries_geojson",
+    filename: "observations.geojson", sizeBytes: observations.length,
+    source: "Тестовая серия, не наблюдения", license: "Только для теста",
+    crs: "EPSG:4326", coordinateUnit: "degrees",
+  }, 201);
+  await first.upload(`/scientific-inputs/${input.id}/content`, observations);
+  const job = await first.request("/calculations", "POST", {
+    kind: "shoreline_data_audit", input: { observationsInputId: input.id },
+  }, 201);
+  await second.request(`/calculations/${job.id}`, "GET", undefined, 404);
+  let result;
+  for (let attempt = 0; attempt < 150; attempt++) {
+    result = await first.request(`/calculations/${job.id}`);
+    if (!["queued", "running"].includes(result.status)) break;
+    await delay(1000);
+  }
+  assert.equal(result.status, "succeeded");
+  const report = result.resultSummary.metrics["shoreline-data-audit.json"];
+  assert.equal(report.observationCount, 2);
+  assert.deepEqual(report.years.map((year) => year.count), [1, 0, 1]);
+  assert.equal(report.observationSha256, createHash("sha256").update(observations).digest("hex"));
+  const artifact = result.artifacts.find((file) => file.filename === "shoreline-data-audit.json");
+  assert.ok(artifact);
+  const bytes = Buffer.from(await (await fetch(artifact.downloadUrl)).arrayBuffer());
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), artifact.sha256);
+  console.log("shoreline_data_audit: готово, проверены даты, пробел ряда и SHA-256 отчёта");
 }
 if (process.env.TEST_HEAVY_ENABLED === "true") {
   await second.request("/calculations", "POST", {
@@ -551,8 +624,7 @@ if (process.env.TEST_MESH_ENABLED === "true") {
       };
       const modelInputId = ownedArtifact(build.id, "seabed_msh");
       const exportMetadataInputId = ownedArtifact(build.id, "export_metadata_json");
-      const sourceMetadataInputId = await uploadInput(process.env.TEST_SEABED_BATHY_METADATA,
-        "bathymetry_source_json", "Источник GEBCO для технической цепочки");
+      const sourceMetadataInputId = ownedArtifact(build.id, "bathymetry_source_json");
       const runSeabed = async (kind, input, expectedFilename) => {
         const next = await first.request("/calculations", "POST", { kind, input }, 201);
         let state;
@@ -568,6 +640,18 @@ if (process.env.TEST_MESH_ENABLED === "true") {
         assert.equal(response.status, 200);
         assert.equal(createHash("sha256").update(Buffer.from(await response.arrayBuffer()))
           .digest("hex"), artifact.sha256);
+        const expectedFigures = kind === "seabed_render"
+          ? [["seabed/svg/bathymetry-overview.svg", "map-title"], ["seabed/svg/mesh-details.svg", 'data-unthinned="true"']]
+          : kind === "seabed_adapt" ? [["seabed/svg/size-field.svg", 'data-adaptive-mesh-generated="false"']] : [];
+        for (const [filename, marker] of expectedFigures) {
+          const figure = state.artifacts.find((file) => file.filename === filename);
+          assert.ok(figure, `Нет научного рисунка ${filename}`);
+          const imageResponse = await fetch(figure.downloadUrl);
+          assert.equal(imageResponse.status, 200);
+          const svg = await imageResponse.text();
+          assert.ok(svg.includes(marker), `SVG ${filename} не содержит ${marker}`);
+          assert.equal(createHash("sha256").update(svg).digest("hex"), figure.sha256);
+        }
         await second.request(`/calculations/${next.id}`, "GET", undefined, 404);
         console.log(`${kind}: готово, ${state.artifacts.length} файлов`);
         return next.id;

@@ -6,6 +6,7 @@ import { Input } from "@/shared/shadcn/components/ui/input";
 import { Label } from "@/shared/shadcn/components/ui/label";
 import { errorMessage } from "../model/use-calculations";
 import { scientificRoleLabels } from "../model/scientific-role-labels";
+import { ScientificDataHelp } from "./scientific-data-help";
 
 export function ScientificInputUpload({
   role,
@@ -35,7 +36,8 @@ export function ScientificInputUpload({
   const isCercProfile = role === "longshore_sediment_sources_json" || role === "longshore_structures_json";
   const isAIInput = role === "adaptive_comparison_report_json" || role === "expert_organizer_key_json" || role === "expert_ratings_tsv";
   const maximum = isCercProfile ? 1 : role === "mesh_comparison_report_json" || isAIInput ? 2
-    : role === "wave_climate" || role === "shoreline_observations_json" || role === "shoreline_timeseries_geojson" ? 16 : 512;
+    : role === "coastline_geojson" || role === "wave_climate" || role === "shoreline_observations_json" || role === "shoreline_timeseries_geojson" ? 16
+      : role === "flat_mesh_msh" || role === "seabed_msh" || role === "adaptive_field_csv" ? 512 : 64;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -84,6 +86,7 @@ export function ScientificInputUpload({
         </p>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <ScientificDataHelp role={role} />
       <div className="space-y-2">
         <Label htmlFor="scientific-file">Файл (до {maximum} МиБ)</Label>
         <Input id="scientific-file" type="file" required disabled={busy}

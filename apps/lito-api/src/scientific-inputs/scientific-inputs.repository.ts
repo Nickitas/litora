@@ -187,6 +187,7 @@ export class ScientificInputsRepository {
        WHERE j.user_id=$1 AND j.status='succeeded' AND j.deletion_requested_at IS NULL AND a.category='output'
          AND a.bucket=$2 AND a.size_bytes BETWEEN 1 AND $3
          AND (
+           (j.kind='coastline_region' AND a.filename LIKE 'region/segments/segment-%.geojson') OR
            (j.kind='source_file' AND
              (a.filename LIKE '%.geojson' OR a.filename LIKE '%.json')) OR
            (j.kind='mesh' AND (a.filename LIKE 'mesh/msh/%.msh' OR
@@ -194,7 +195,7 @@ export class ScientificInputsRepository {
            (j.kind='seabed_generate_adaptive' AND
              a.filename='seabed/adaptive/gmsh/black-sea-adaptive.msh') OR
            (j.kind='seabed_build' AND a.filename IN
-             ('seabed/black-sea-depth.msh','seabed/export-metadata.json')) OR
+             ('seabed/black-sea-depth.msh','seabed/export-metadata.json','seabed/bathymetry-source.json')) OR
            (j.kind='seabed_adapt' AND a.filename IN
              ('seabed/adaptive/size-field.csv','seabed/adaptive/size-field.json'))
          )

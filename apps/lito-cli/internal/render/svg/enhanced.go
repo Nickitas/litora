@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+const scientificTickCount = 5
+
 // EnhancedDocument extends Document with additional map elements
 type EnhancedDocument struct {
 	Document
@@ -242,8 +244,12 @@ func DrawEnhancedSVG(doc EnhancedDocument, filename string) error {
 	// Build additional elements
 	var gridElements, compassElements, markerElements, sedimentElements, boxCountingGridElements, erosionGridElements, erosionChangeElements, axisElements, gridAnnotationElements string
 
-	if !minimalMap && doc.GridOptions != nil && doc.GridOptions.Show {
-		gridElements = buildCoordinateGrid(*doc.GridOptions, minLat, maxLat, minLon, maxLon, originX, originY, contentWidth, contentHeight, scale)
+	if doc.GridOptions != nil && doc.GridOptions.Show {
+		if minimalMap {
+			gridElements = buildScientificCoordinateGrid(*doc.GridOptions, originX, originY, contentWidth, contentHeight)
+		} else {
+			gridElements = buildCoordinateGrid(*doc.GridOptions, minLat, maxLat, minLon, maxLon, originX, originY, contentWidth, contentHeight, scale)
+		}
 	}
 
 	if doc.CompassOptions != nil && doc.CompassOptions.Show {
@@ -302,18 +308,23 @@ func DrawEnhancedSVG(doc EnhancedDocument, filename string) error {
 	highlights.WriteString(erosionChangeElements)
 
 	documentHeight := canvasHeight
-	if minimalMap {
-		documentHeight = canvasHeight
-	}
-	sidebarBottom := max(max(legendBottom, statCardsBottom), max(chartsBottom, alertsBottom))
-	sidebarBottom = max(sidebarBottom, metaBottom)
-	requiredHeight := int(math.Ceil(sidebarBottom + padding))
-	if requiredHeight > documentHeight {
-		documentHeight = requiredHeight
+	if !minimalMap {
+		sidebarBottom := max(max(legendBottom, statCardsBottom), max(chartsBottom, alertsBottom))
+		sidebarBottom = max(sidebarBottom, metaBottom)
+		if required := int(math.Ceil(sidebarBottom + padding)); required > documentHeight {
+			documentHeight = required
+		}
 	}
 
 	scaleBarY := math.Max(float64(documentHeight)-padding-scaleBarYGap, originY+contentHeight+68)
+	// Подписи осей и масштаб лежат за рамкой карты и должны помещаться в SVG.
+	if required := int(math.Ceil(scaleBarY + padding + 8)); required > documentHeight {
+		documentHeight = required
+	}
 	scaleBar := buildScaleBar(minLat, maxLat, minLon, maxLon, plotWidth, scale, padding, scaleBarY)
+	mapElements := boxCountingGridElements + erosionGridElements + gridElements + layers.String() +
+		highlights.String() + markerElements + sedimentElements
+	sidebarElements := legend + statCards + charts + alerts + meta
 
 	sidebarBackground := fmt.Sprintf(`<rect x="%.0f" y="20" width="%.0f" height="%d" rx="24" fill="#f0ece2" stroke="#d6d0c4"/>`, padding+plotWidth+8, sidebarWidth-16, documentHeight-40)
 	if minimalMap {
@@ -328,39 +339,19 @@ func DrawEnhancedSVG(doc EnhancedDocument, filename string) error {
   <defs>
     <clipPath id="map-clip"><rect x="%.2f" y="%.2f" width="%.2f" height="%.2f"/></clipPath>
   </defs>
-  <g>
+  <g id="report-header">
 %s  </g>
-  <g>
+  <g id="grid-annotation">
 %s  </g>
-  <g clip-path="url(#map-clip)">
+  <g id="map-data" clip-path="url(#map-clip)">
 %s  </g>
-  <g>
+  <g id="map-axes">
 %s  </g>
-  <g clip-path="url(#map-clip)">
+  <g id="report-sidebar">
 %s  </g>
-  <g clip-path="url(#map-clip)">
+  <g id="map-compass">
 %s  </g>
-  <g>
-%s  </g>
-  <g>
-%s  </g>
-  <g clip-path="url(#map-clip)">
-%s  </g>
-  <g>
-%s  </g>
-  <g>
-%s  </g>
-  <g>
-%s  </g>
-  <g>
-%s  </g>
-  <g>
-%s  </g>
-  <g>
-%s  </g>
-  <g>
-%s  </g>
-  <g>
+  <g id="map-scale">
 %s  </g>
 </svg>
 `, canvasWidth, documentHeight, canvasWidth, documentHeight,
@@ -368,20 +359,10 @@ func DrawEnhancedSVG(doc EnhancedDocument, filename string) error {
 		sidebarBackground,
 		originX, originY, contentWidth, contentHeight,
 		header,
-		boxCountingGridElements,
-		erosionGridElements,
-		axisElements,
 		gridAnnotationElements,
-		gridElements,
-		layers.String(),
-		highlights.String(),
-		markerElements,
-		sedimentElements,
-		legend,
-		statCards,
-		charts,
-		alerts,
-		meta,
+		mapElements,
+		axisElements,
+		sidebarElements,
 		compassElements,
 		scaleBar,
 	)
@@ -416,9 +397,8 @@ func buildScientificHeader(title, subtitle string, x float64) (string, float64) 
 // buildScientificAxes добавляет значения координат на осях OX и OY научной карты.
 func buildScientificAxes(minLat, maxLat, minLon, maxLon, originX, originY, contentWidth, contentHeight float64) string {
 	var out strings.Builder
-	const tickCount = 5
-	for i := 0; i <= tickCount; i++ {
-		ratio := float64(i) / tickCount
+	for i := 0; i <= scientificTickCount; i++ {
+		ratio := float64(i) / scientificTickCount
 		x := originX + contentWidth*ratio
 		lon := minLon + (maxLon-minLon)*ratio
 		out.WriteString(fmt.Sprintf(
@@ -449,6 +429,31 @@ func buildScientificAxes(minLat, maxLat, minLon, maxLon, originX, originY, conte
 		`    <text x="%.1f" y="%.1f" font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#16324f" text-anchor="middle" transform="rotate(-90, %.1f, %.1f)">OY — широта, °</text>`+"\n",
 		originX-24, originY+contentHeight/2, originX-24, originY+contentHeight/2,
 	))
+	return out.String()
+}
+
+// buildScientificCoordinateGrid согласует линии сетки с делениями научных осей.
+func buildScientificCoordinateGrid(opts GridOptions, originX, originY, width, height float64) string {
+	color := opts.LineColor
+	if color == "" {
+		color = "#aebdc5"
+	}
+	opacity := opts.Opacity
+	if opacity <= 0 {
+		opacity = 0.55
+	}
+	var out strings.Builder
+	out.WriteString("<g id=\"coordinate-grid\">\n")
+	for i := 0; i <= scientificTickCount; i++ {
+		ratio := float64(i) / scientificTickCount
+		x := originX + width*ratio
+		y := originY + height*(1-ratio)
+		fmt.Fprintf(&out, `<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="%s" stroke-width="0.8" stroke-opacity="%.2f"/>`+"\n",
+			x, originY, x, originY+height, escapeText(color), opacity)
+		fmt.Fprintf(&out, `<line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="%s" stroke-width="0.8" stroke-opacity="%.2f"/>`+"\n",
+			originX, y, originX+width, y, escapeText(color), opacity)
+	}
+	out.WriteString("</g>\n")
 	return out.String()
 }
 
@@ -547,8 +552,8 @@ func buildCompass(opts CompassOptions, originX, originY, contentWidth, contentHe
 	}
 	y := opts.Y
 	if y <= 0 {
-		// Position below the plot area, well below to avoid overlap
-		y = originY + contentHeight + size + 70
+		// Общая строка футера с масштабом; её высота учтена в DrawEnhancedSVG.
+		y = originY + contentHeight + 68
 	}
 
 	style := opts.Style

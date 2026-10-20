@@ -250,7 +250,7 @@ func runErosion(cmd *cobra.Command, args []string) error {
 	}
 	if err := cli.WriteErosionSVGSeriesWithLimit(result.Points, snapshots, simulationSteps, 0, 0,
 		waveOptions, outputMgr, result.DatasetName, result.Source, result.Validation, erosionMaxSVGFrames, model.ScenarioClassification); err != nil {
-		fmt.Printf("Предупреждение: не удалось создать SVG: %v\n", err)
+		return fmt.Errorf("создание отчёта эрозии: %w", err)
 	}
 	writeModel := cli.WriteLongshoreModelJSON
 	if erosionSteps == 0 {
@@ -260,7 +260,7 @@ func runErosion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("сохранение баланса наносов: %w", err)
 	}
 	if err := cli.WriteShorelineVisualization(model, outputMgr); err != nil {
-		fmt.Printf("Предупреждение: не удалось подготовить интерактивную карту: %v\n", err)
+		return fmt.Errorf("создание интерактивной карты: %w", err)
 	}
 	if err := exportErosionArtifacts(outputMgr, snapshots, nil, erosionOutputCSV, erosionCSVFormat, erosionOutputGIF, erosionGIFFPS, erosionGIFSkip); err != nil {
 		return err

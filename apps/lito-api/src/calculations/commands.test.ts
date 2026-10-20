@@ -16,6 +16,11 @@ test("пользователь не может передать shell, пути 
   }
 });
 test("допустимый запрос преобразуется в фиксированные аргументы", () => {
+  for (const kind of ["dimension", "map"] as const) {
+    const args = commandArguments(validateCalculation({ kind }), "/tmp/job");
+    assert.equal(args[args.indexOf("--input") + 1], "data/coastline/black-sea.geojson");
+    assert.ok(!args.includes("--source-url"));
+  }
   assert.deepEqual(commandArguments({ kind: "erosion" }, "/tmp/job"), [
     "erosion",
     "--black-sea-sochi",

@@ -26,8 +26,8 @@ var mapCmd = &cobra.Command{
 	Use:   "map black-sea",
 	Short: "Постройте обзорную карту побережья Чёрного моря",
 	Long: `Создаёт обзорную SVG-карту всего побережья Чёрного моря и GeoJSON-экспорт.
-По умолчанию программа сама получает открытый контур MarineRegions и хранит
-его кэш. Стартовый участок Сочи отмечается отдельно. Эта карта даёт контекст
+По умолчанию используется полный закреплённый контур MarineRegions без сети.
+Стартовый участок Сочи отмечается отдельно. Эта карта даёт контекст
 для исследования и не является входом одномерной модели CERC.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 1 || args[0] != "black-sea" {
@@ -40,7 +40,7 @@ var mapCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(mapCmd)
-	mapCmd.Flags().StringVar(&mapInput, "input", "", "путь к локальному GeoJSON/JSON контуру вместо автоматической загрузки")
+	mapCmd.Flags().StringVar(&mapInput, "input", "", "путь к локальному GeoJSON/JSON контуру вместо поставляемого снимка")
 	mapCmd.Flags().StringVar(&mapSourceURL, "source-url", "", "URL GeoJSON контура вместо источника MarineRegions")
 	mapCmd.Flags().BoolVar(&mapRefresh, "refresh", false, "обновить кэш открытого контура")
 	mapCmd.Flags().StringVar(&mapOutput, "output", defaultBlackSeaMapOutput, "каталог результатов карты")
@@ -65,39 +65,35 @@ func runMap(cmd *cobra.Command, args []string) error {
 	}
 
 	svgPath := output.SVGPath("black-sea-coast.svg")
-	if err := svg.DrawDocument(svg.Document{
-		Title:    "Обзорная карта побережья Чёрного моря",
-		Subtitle: "Открытый контур MarineRegions; участок Сочи выделен для стартового сценария Lito",
-		Layers: []svg.Layer{
-			{
-				Label:       "Побережье и граница Чёрного моря",
-				Points:      contour.Points,
-				LengthKM:    geometry.PolylineLength(contour.Points),
-				Stroke:      "#176b87",
-				StrokeWidth: 2.2,
-				Opacity:     1,
+	source := contour.DatasetName
+	if contour.Source == coastline.DefaultBlackSeaCoastlinePath {
+		source = "MarineRegions · MRGID 3319"
+	}
+	if err := svg.DrawEnhancedSVG(svg.EnhancedDocument{
+		MinimalMap:  true,
+		GridOptions: &svg.GridOptions{Show: true, LineColor: "#aebdc5", Opacity: 0.55},
+		Document: svg.Document{
+			Title: "Береговая линия Чёрного моря",
+			Subtitle: fmt.Sprintf("WGS 84 (EPSG:4326) · %d вершин · длина %.1f км\nИсточник: %s\nСиний — контур моря; оранжевый — участок Сочи",
+				len(contour.Points), geometry.PolylineLength(contour.Points), source),
+			Layers: []svg.Layer{
+				{
+					Label:       "Побережье и граница Чёрного моря",
+					Points:      contour.Points,
+					LengthKM:    geometry.PolylineLength(contour.Points),
+					Stroke:      "#176b87",
+					StrokeWidth: 2.2,
+					Opacity:     1,
+				},
+				{
+					Label:       "Сочи: стартовый участок CERC",
+					Points:      sochi.Points,
+					LengthKM:    geometry.PolylineLength(sochi.Points),
+					Stroke:      "#c2410c",
+					StrokeWidth: 4.2,
+					Opacity:     1,
+				},
 			},
-			{
-				Label:       "Сочи: стартовый участок CERC",
-				Points:      sochi.Points,
-				LengthKM:    geometry.PolylineLength(sochi.Points),
-				Stroke:      "#c2410c",
-				StrokeWidth: 4.2,
-				Opacity:     1,
-			},
-		},
-		StatCards: []svg.StatCard{{
-			Title: "Данные карты",
-			Items: []svg.StatItem{
-				{Label: "Вершин контура", Value: fmt.Sprintf("%d", len(contour.Points)), Tone: "#176b87"},
-				{Label: "Вершин Сочи", Value: fmt.Sprintf("%d", len(sochi.Points)), Tone: "#c2410c"},
-			},
-		}},
-		Alerts: alerts,
-		Meta: []string{
-			"Источник контура: " + contour.Source,
-			"Локальный участок: " + blackSeaSochiCoastlinePath,
-			"Карта предназначена для обзора, а не для проектирования берегозащиты.",
 		},
 	}, svgPath); err != nil {
 		return fmt.Errorf("создание SVG-карты: %w", err)
@@ -117,12 +113,15 @@ func runMap(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// loadBlackSeaMapContour получает точный открытый контур или его кэш. Только
-// при полной недоступности источника применяется поставляемая схема, и это
-// обязательно фиксируется предупреждением в результате.
+// loadBlackSeaMapContour использует закреплённый снимок, явный файл или
+// явно запрошенный удалённый источник. Подмена неполной схемой запрещена.
 func loadBlackSeaMapContour(input, sourceURL string, refresh bool) (coastline.LoadResult, []string, error) {
 	if sourceURL == "" && input == "" {
-		sourceURL = coastline.DefaultCoastlineGeoJSONURL
+		if refresh {
+			sourceURL = coastline.DefaultCoastlineGeoJSONURL
+		} else {
+			input = coastline.DefaultBlackSeaCoastlinePath
+		}
 	}
 	result, err := coastline.Load(coastline.LoadOptions{
 		LocalPath:    input,
@@ -132,21 +131,9 @@ func loadBlackSeaMapContour(input, sourceURL string, refresh bool) (coastline.Lo
 	})
 	if err == nil {
 		alerts := append([]string(nil), result.LoadWarnings...)
-		alerts = append(alerts, "Граница морского района служит обзорным контуром; локальную съёмку для CERC она не заменяет.")
 		return result, alerts, nil
 	}
-	if input != "" || sourceURL != coastline.DefaultCoastlineGeoJSONURL {
-		return coastline.LoadResult{}, nil, err
-	}
-
-	fallback, fallbackErr := coastline.Load(coastline.LoadOptions{LocalPath: coastline.DefaultCoastlineJSONPath})
-	if fallbackErr != nil {
-		return coastline.LoadResult{}, nil, fmt.Errorf("открытый источник недоступен: %v; резервная схема: %w", err, fallbackErr)
-	}
-	return fallback, []string{
-		"Открытый контур и его кэш недоступны: показана поставляемая схематическая линия, не полный точный контур побережья.",
-		"Для повторной попытки получить открытые данные запустите: lito map black-sea --refresh.",
-	}, nil
+	return coastline.LoadResult{}, nil, err
 }
 
 type blackSeaMapGeoJSON struct {

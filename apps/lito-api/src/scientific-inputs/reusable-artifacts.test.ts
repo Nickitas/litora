@@ -29,6 +29,8 @@ test("только известные результаты Go становятс
 });
 
 test("повторное использование проверяет владельца, успех, bucket, роль и размер", async () => {
+  assert.equal(reusableArtifactRole("seabed_build", "seabed/bathymetry-source.json"), "bathymetry_source_json");
+  assert.equal(reusableArtifactRole("seabed_render", "seabed/bathymetry-source.json"), null);
   const queries: { sql: string; params: unknown[] }[] = [];
   let artifact = {
     id: "artifact", job_id: "job", job_kind: "seabed_build",
@@ -76,6 +78,7 @@ test("список для ЛК фильтрует неизвестные вых�
       queries.push({ sql, params });
       return { rows: [
         base,
+        { ...base, id: "source", job_kind: "seabed_build", filename: "seabed/bathymetry-source.json" },
         { ...base, id: "adaptive", job_kind: "seabed_generate_adaptive", filename: "seabed/adaptive/gmsh/black-sea-adaptive.msh" },
         { ...base, id: "log", filename: "execution.log" },
       ] };
@@ -83,9 +86,11 @@ test("список для ЛК фильтрует неизвестные вых�
   } as unknown as DatabaseService;
   const repository = new ScientificInputsRepository(database);
   const result = await repository.listReusableArtifacts("owner", "private-bucket");
-  assert.equal(result.length, 2);
+  assert.equal(result.length, 3);
   assert.equal(result[0].role, "adaptive_field_csv");
-  assert.equal(result[1].role, "flat_mesh_msh");
+  assert.equal(result[1].role, "bathymetry_source_json");
+  assert.equal(result[2].role, "flat_mesh_msh");
+  assert.match(queries[0].sql, /'seabed\/bathymetry-source\.json'/);
   assert.equal("objectKey" in result[0], false);
   assert.equal(queries[0].params[0], "owner");
   assert.equal(queries[0].params[1], "private-bucket");

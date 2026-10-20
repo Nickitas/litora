@@ -8,17 +8,22 @@ type Identity struct {
 	Revision string `json:"revision"`
 }
 
-// BoxCounting — текущая базовая ревизия оценки фрактальной размерности.
+// CoastlineRegion — текущая ревизия отсечения отдельных береговых линий рамкой WGS84.
+func CoastlineRegion() Identity {
+	return Identity{ID: "coastline-region", Revision: "clip-1"}
+}
+
+// BoxCounting — текущая ревизия оценки фрактальной размерности и её отчётов.
 func BoxCounting() Identity {
-	return Identity{ID: "box-counting", Revision: "baseline-1"}
+	return Identity{ID: "box-counting", Revision: "reports-2"}
 }
 
-// OverviewMap — текущая базовая ревизия построения обзорной карты.
+// OverviewMap — текущая ревизия построения обзорной карты.
 func OverviewMap() Identity {
-	return Identity{ID: "black-sea-overview", Revision: "baseline-1"}
+	return Identity{ID: "black-sea-overview", Revision: "scientific-map-3"}
 }
 
-// LongshoreCERC — текущая базовая ревизия одномерной модели CERC.
+// LongshoreCERC — текущая ревизия одномерной модели CERC и её отчётов.
 func LongshoreCERC() Identity {
-	return Identity{ID: "cerc-one-line", Revision: "baseline-1"}
+	return Identity{ID: "cerc-one-line", Revision: "reports-2"}
 }

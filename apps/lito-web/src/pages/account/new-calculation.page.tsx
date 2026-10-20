@@ -48,6 +48,10 @@ import { DatasetUpload } from "./ui/dataset-upload";
 import { ScientificInputUpload } from "./ui/scientific-input-upload";
 import { CercCalibrationFields } from "./ui/cerc-calibration-fields";
 import { scientificRoleLabels } from "./model/scientific-role-labels";
+import { seabedWorkflows, workflowInputs, type SeabedWorkflowId } from "./model/seabed-workflows";
+import { SeabedWorkflowPicker } from "./ui/seabed-workflow-picker";
+import { CoastlineRegionPicker, type RegionFields } from "./ui/coastline-region-picker";
+import type { CoastlineContinuation } from "./model/coastline-continuation";
 
 const articleSizeFieldPreset = {
   minSize: "50",
@@ -72,10 +76,16 @@ function quotaSize(bytes: number) {
 
 export function NewCalculationDialog({
   repeatJobId,
+  workflow,
+  sourceJobId,
+  coastlineContinuation,
   onOpenChange,
   onRestoreFocus,
 }: {
   repeatJobId?: string;
+  workflow?: SeabedWorkflowId;
+  sourceJobId?: string;
+  coastlineContinuation?: CoastlineContinuation;
   onOpenChange: (open: boolean) => void;
   onRestoreFocus: () => void;
 }) {
@@ -89,6 +99,7 @@ export function NewCalculationDialog({
   const [selectedScientific, setSelectedScientific] = useState<Record<string, string>>({});
   const [uploadField, setUploadField] = useState<{ field: string; role: ScientificInputRole; existing?: ScientificInputDto } | null>(null);
   const [kind, setKind] = useState<CalculationKind>("dimension");
+  const [regionBounds, setRegionBounds] = useState<RegionFields>({ west: "27", south: "40.5", east: "42.5", north: "47.5" });
   const [datasetId, setDatasetId] = useState("");
   const [datasetSelectOpen, setDatasetSelectOpen] = useState(false);
   const [erosionOptions, setErosionOptions] = useState<CercOptionsDto>(erosionDemoDefaults);
@@ -147,6 +158,11 @@ export function NewCalculationDialog({
   const [missingRepeatInputs, setMissingRepeatInputs] = useState<string[]>([]);
   const [missingRepeatDataset, setMissingRepeatDataset] = useState(false);
   const repeatApplied = useRef(false);
+  const workflowApplied = useRef(false);
+  const continuationApplied = useRef(false);
+  const [workflowSource, setWorkflowSource] = useState<CalculationJobDto | null>(null);
+  const [workflowNote, setWorkflowNote] = useState("");
+  const [workflowError, setWorkflowError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [revision, setRevision] = useState(0);
   const [datasetUploadOpen, setDatasetUploadOpen] = useState(false);
@@ -198,6 +214,9 @@ export function NewCalculationDialog({
       setMissingRepeatInputs(missing);
     }
     switch (original.kind) {
+      case "coastline_region":
+        setRegionBounds({ west: String(input.west ?? 27), south: String(input.south ?? 40.5), east: String(input.east ?? 42.5), north: String(input.north ?? 47.5) });
+        break;
       case "erosion":
       case "erosion_file":
       case "all_demo":
@@ -346,6 +365,33 @@ export function NewCalculationDialog({
     }
   }, []);
 
+  const selectWorkflow = useCallback((
+    selected: SeabedWorkflowId,
+    source: CalculationJobDto | null,
+    inputs: ScientificInputDto[],
+    artifacts: ReusableScientificArtifactDto[],
+  ) => {
+    const scenario = seabedWorkflows.find((item) => item.id === selected)!;
+    setKind(scenario.kind);
+    setSelectedScientific(workflowInputs(selected, source, inputs, artifacts));
+    setMissingRepeatDataset(false);
+    setMissingRepeatInputs([]);
+    setDatasetUploadOpen(false);
+    setUploadField(null);
+    setArticlePresetApplied(null);
+    setSubmitError("");
+    if (scenario.kind === "seabed_render") {
+      setIsobaths("20,50,100,200,500,1000,1500,2000");
+      setVerticalExaggeration(40);
+      setControlPoints(true);
+    } else if (scenario.kind === "seabed_adapt") {
+      setAdaptSizes({ ...articleSizeFieldPreset, minSize: "200", coastSize: "300", shelfSize: "500", deepSize: "1000" });
+    }
+    setWorkflowNote(`${scenario.title}. ${source?.status === "succeeded" && !source.deletionRequestedAt
+      ? "Совместимые файлы исходного расчёта подставлены. Проверьте выбор и заполните недостающие входы."
+      : "Выберите входные файлы ниже."} Параметры можно изменить перед запуском.`);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const repeat = repeatJobId
@@ -356,14 +402,19 @@ export function NewCalculationDialog({
     void Promise.all([
       api.calculationKinds(), api.datasets(), api.scientificInputs(),
       api.scientificInputQuota().catch(() => null), api.reusableScientificArtifacts(), repeat,
+      workflow && sourceJobId
+        ? api.calculation(sourceJobId).then((job) => ({ job, error: "" }))
+            .catch((error: unknown) => ({ job: null, error: errorMessage(error) }))
+        : Promise.resolve({ job: null, error: "" }),
     ])
-      .then(([nextKinds, nextDatasets, nextScientific, nextQuota, nextArtifacts, original]) => {
+      .then(([nextKinds, nextDatasets, nextScientific, nextQuota, nextArtifacts, original, source]) => {
         if (!mounted) return;
         setKinds(nextKinds);
         setDatasets(nextDatasets);
         setScientificInputs(nextScientific);
         setScientificQuota(nextQuota);
         setReusableArtifacts(nextArtifacts);
+        setWorkflowSource(source.job);
         setKind((current) =>
           nextKinds.some((item) => item.kind === current)
             ? current
@@ -372,6 +423,31 @@ export function NewCalculationDialog({
         setLoadError("");
         if (original.error) setRepeatError(`Не удалось открыть исходный расчёт: ${original.error}`);
         else setRepeatError("");
+        if (coastlineContinuation && !continuationApplied.current && !repeatJobId) {
+          continuationApplied.current = true;
+          setKind(coastlineContinuation.kind);
+          const artifact = nextArtifacts.find((item) => item.id === coastlineContinuation.artifactId && item.jobId === coastlineContinuation.sourceJobId && item.role === "coastline_geojson");
+          if (!nextKinds.some((item) => item.kind === coastlineContinuation.kind)) setRepeatError("Этот сценарий сейчас отключён на сервере.");
+          else if (!artifact) setRepeatError("Выбранная линия недоступна. Выберите другой собственный файл явно.");
+          else {
+            setSelectedScientific({ coastlineInputId: artifact.id });
+            setWorkflowNote("Выделенная береговая линия подставлена. Для CERC выберите совместимые волны и батиметрию этого участка; расчёт запускается только после проверки формы.");
+          }
+        }
+        setWorkflowError(source.error ? `Не удалось открыть исходный расчёт: ${source.error}` :
+          source.job && (source.job.status !== "succeeded" || source.job.deletionRequestedAt)
+            ? "Исходный расчёт не завершён успешно или удаляется. Выберите доступные файлы вручную."
+            : "");
+        if (workflow && !workflowApplied.current && !repeatJobId) {
+          const target = seabedWorkflows.find((item) => item.id === workflow)!;
+          if (nextKinds.some((item) => item.kind === target.kind)) {
+            workflowApplied.current = true;
+            selectWorkflow(workflow, source.job, nextScientific, nextArtifacts);
+          } else {
+            setKind(target.kind);
+            setWorkflowError("Этот расчёт дна отключён на сервере. Доступность настраивает администратор вычислительного окружения.");
+          }
+        }
         if (original.job && !repeatApplied.current) {
           if (!nextKinds.some((item) => item.kind === original.job.kind)) {
             setRepeatError("Сценарий исходного расчёта больше недоступен. Выберите другой сценарий.");
@@ -399,7 +475,7 @@ export function NewCalculationDialog({
     return () => {
       mounted = false;
     };
-  }, [revision, repeatJobId, applyStoredCalculation]);
+  }, [revision, repeatJobId, applyStoredCalculation, workflow, sourceJobId, selectWorkflow, coastlineContinuation]);
 
   function reload() {
     setLoading(true);
@@ -456,7 +532,7 @@ export function NewCalculationDialog({
     if (optional) {
       for (const field of Object.keys(optional)) {
         if (missingRepeatInputs.includes(field) && !selectedScientific[field]) {
-          setSubmitError("Исходный индексный профиль больше недоступен. Выберите замену или явно уберите профиль.");
+          setSubmitError(kind === "coastline_region" ? "Исходный контур недоступен. Выберите замену или явно включите встроенный контур." : "Исходный индексный профиль больше недоступен. Выберите замену или явно уберите профиль.");
           return;
         }
         if (selectedScientific[field]) scientificParameters[field] = selectedScientific[field];
@@ -484,6 +560,7 @@ export function NewCalculationDialog({
         kind,
         input: {
           ...scientificParameters,
+          ...(kind === "coastline_region" ? Object.fromEntries(Object.entries(regionBounds).map(([key, value]) => [key, Number(value)])) : {}),
           ...(kind === "erosion" ? erosionOptions : {}),
           ...(kind === "erosion_file" ? erosionFileOptions : {}),
           ...(kind === "all_demo" ? allDemoOptions : {}),
@@ -661,6 +738,8 @@ export function NewCalculationDialog({
           </p>
         )}
 
+        {workflowError && <p role="alert" className="rounded-xl border border-destructive bg-status-failed-background p-4 text-sm text-status-failed">{workflowError}</p>}
+
         {repeatJobId && !loading && !repeatError && (
           <div role="status" className="rounded-xl border bg-muted/35 p-4 text-sm">
             <p>Параметры перенесены из вашего расчёта. Создастся новое задание; старый результат не изменится.</p>
@@ -719,6 +798,8 @@ export function NewCalculationDialog({
                     onValueChange={(value) => {
                       setKind(value as CalculationKind);
                       setArticlePresetApplied(null);
+                      setWorkflowNote("");
+                      setWorkflowError("");
                       setSelectedScientific({});
                       setMissingRepeatDataset(false);
                       setMissingRepeatInputs([]);
@@ -742,6 +823,8 @@ export function NewCalculationDialog({
                     </SelectContent>
                   </Select>
                 </div>
+                <SeabedWorkflowPicker kinds={kinds} onSelect={(selected) => selectWorkflow(selected, workflowSource, scientificInputs, reusableArtifacts)} />
+                {workflowNote && <p role="status" className="mt-3 rounded-xl border bg-muted/35 p-4 text-sm">{workflowNote}</p>}
                 {!kinds.length && !loadError && (
                   <p className="mt-3 text-sm text-muted-foreground">
                     Сейчас нет доступных сценариев для запуска.
@@ -1067,7 +1150,8 @@ export function NewCalculationDialog({
                         Выберите закрытый ключ и отчёт того же AI-01/ADAPT-03, исходные модель, паспорт и контур, а также заполненный TSV оценок. Go сверит SHA-256; пути из старого задания не используются. Ключ не передавайте экспертам.
                       </p>
                     )}
-                    {optionalScientificRequirements && kind !== "shoreline_data_audit" && (
+                    {kind === "coastline_region" && <p className="mt-2 text-sm text-muted-foreground">По умолчанию используется наш полный закреплённый контур. Чтобы выделить область по своим данным, выберите или загрузите GeoJSON ниже.</p>}
+                    {optionalScientificRequirements && kind !== "shoreline_data_audit" && kind !== "coastline_region" && (
                       <p className="mt-2 text-sm text-muted-foreground">
                         Дополнительные профили CERC необязательны. Их индексы относятся к точкам после нормализации контура в Go: для источника point_index, для сооружения left_point_index. Проверьте порядок и число точек на том же входном GeoJSON. Положительный source_rate_m3_s добавляет наносы, отрицательный удаляет; transmission_coefficient сооружения задаётся от 0 до 1. Каждый элемент требует data_source.
                         {kind === "all_file" && " При выборе профиля упрощение базовой модели выключается: иначе индексы сместятся."}
@@ -1123,12 +1207,12 @@ export function NewCalculationDialog({
                               return next;
                             });
                             setMissingRepeatInputs((current) => current.filter((item) => item !== field));
-                          }}>{kind === "shoreline_data_audit" ? "Без волнового ряда" : "Не использовать этот профиль"}</Button>
+                          }}>{kind === "coastline_region" ? "Использовать встроенный контур" : kind === "shoreline_data_audit" ? "Без волнового ряда" : "Не использовать этот профиль"}</Button>
                         )}
                         {isOptional && missingRepeatInputs.includes(field) && !selectedScientific[field] && (
                           <Button type="button" variant="ghost" onClick={() =>
                             setMissingRepeatInputs((current) => current.filter((item) => item !== field))
-                          }>{kind === "shoreline_data_audit" ? "Продолжить без волнового ряда" : "Продолжить без недоступного профиля"}</Button>
+                          }>{kind === "coastline_region" ? "Продолжить со встроенным контуром" : kind === "shoreline_data_audit" ? "Продолжить без волнового ряда" : "Продолжить без недоступного профиля"}</Button>
                         )}
                         {chosenArtifact && (
                           <p className="text-xs text-muted-foreground">
@@ -1157,6 +1241,7 @@ export function NewCalculationDialog({
                   })}
                 </section>
               )}
+              {kind === "coastline_region" && <CoastlineRegionPicker key={selectedScientific.coastlineInputId ?? "bundled"} value={regionBounds} onChange={setRegionBounds} sourceId={selectedScientific.coastlineInputId} />}
               {kind === "mesh" && (
                 <section className="space-y-4 border-t pt-6" aria-label="Параметры плоской сетки">
                   <h3 className="text-lg font-semibold">3. Параметры сетки</h3>
@@ -1412,7 +1497,7 @@ export function NewCalculationDialog({
                       Заполнить как рисунки 6–7: сетки 125–250 м
                     </Button>
                     <Button type="button" variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal text-left" onClick={() => applyArticleComparisonPreset(true)}>
-                      Заполнить как рисунок 5: три фрагмента 125–250 м
+                      Компоновка AI-01: три фрагмента 125–250 м
                     </Button>
                     <p className="text-muted-foreground">
                       Нужны совместимые модель дна, поле размера, контур и паспорта. Расчёт требует Gmsh и значительных ресурсов; совпадение с архивными SVG зависит от входов и версии генератора.
@@ -1625,7 +1710,7 @@ export function NewCalculationDialog({
         <Button
           type="submit"
           form="new-calculation-form"
-          disabled={loading || busy || !kinds.length}
+          disabled={loading || busy || !scenario}
           className="sm:min-w-48"
         >
           {busy ? "Ставим в очередь…" : "Запустить расчёт"}

@@ -4,6 +4,8 @@ import type {
   CalculationDeletionOverviewDto,
   CalculationDeletionRequestDto,
   CalculationKindDto,
+  CoastlinePreviewDto,
+  ScientificInputFormatDto,
   CalculationPageDto,
   CalculationPageQueryDto,
   CreateCalculationDto,
@@ -287,6 +289,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
       });
     },
     calculationKinds: () => send<CalculationKindDto[]>("/calculations/kinds"),
+    blackSeaCoastline: () => send<CoastlinePreviewDto>("/calculations/coastline-preview"),
+    scientificCoastline: (id: string) => send<CoastlinePreviewDto>(`/scientific-inputs/${encodeURIComponent(id)}/coastline-preview`),
+    scientificInputFormats: () => send<ScientificInputFormatDto[]>("/scientific-inputs/formats"),
     datasets: () => send<DatasetDto[]>("/datasets"),
     createDataset: (body: CreateDatasetDto) =>
       send<DatasetDto>("/datasets", "POST", body),

@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import { bundledBlackSeaPath } from "./input-provenance.js";
 import { aiNecessityDefaults, allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
 import type {
   CalculationKind,
@@ -11,11 +12,12 @@ import type {
 } from "@litora/contracts";
 
 export const calculationKinds: CalculationKindDto[] = [
+  { kind: "coastline_region", title: "Выбрать участок побережья", description: "Любая область Чёрного моря из полного контура или своего GeoJSON: карта и отдельные линии для следующих расчётов." },
   { kind: "source_file", title: "Проверить источник береговой линии", description: "Проверка загруженного контура и сохранение его снимка с манифестом." },
-  { kind: "dimension", title: "Фрактальная размерность", description: "Box-counting поставляемой береговой линии: метрики и SVG." },
+  { kind: "dimension", title: "Фрактальная размерность", description: "Box-counting полного закреплённого контура MarineRegions: карта, регрессия и метрики." },
   { kind: "dimension_dataset", title: "Размерность своей береговой линии", description: "Box-counting небольшого GeoJSON LineString." },
   { kind: "dimension_file", title: "Размерность полного контура", description: "Box-counting загруженного GeoJSON, включая полный контур Чёрного моря." },
-  { kind: "map", title: "Карта Чёрного моря", description: "Обзорная SVG и GeoJSON на поставляемой геометрии." },
+  { kind: "map", title: "Карта Чёрного моря", description: "Полный закреплённый контур MarineRegions: обзорная SVG и GeoJSON." },
   { kind: "map_file", title: "Карта своего контура", description: "Обзорная SVG и GeoJSON по загруженному контуру Чёрного моря." },
   { kind: "erosion", title: "Эрозия: демонстрационный сценарий Сочи", description: "CERC на закреплённых данных; демонстрация, не прогноз." },
   { kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC по загруженным контуру, волнам и батиметрии с проверяемым паспортом; не калиброванный прогноз." },
@@ -325,6 +327,15 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
     throw new BadRequestException("input должен быть объектом");
   const p = input as Record<string, unknown>;
   switch (data.kind) {
+    case "coastline_region": {
+      rejectUnknown(p, ["west", "south", "east", "north", "coastlineInputId"]);
+      const west = numberIn(p.west, "Западная долгота", 27, 42.5);
+      const east = numberIn(p.east, "Восточная долгота", 27, 42.5);
+      const south = numberIn(p.south, "Южная широта", 40.5, 47.5);
+      const north = numberIn(p.north, "Северная широта", 40.5, 47.5);
+      if (west >= east || south >= north) throw new BadRequestException("Запад должен быть меньше востока, а юг — меньше севера");
+      return { kind: "coastline_region", input: { west, east, south, north, ...optionalReferences(p, "coastline_region") } };
+    }
     case "dimension":
     case "map":
       rejectUnknown(p, []);
@@ -561,8 +572,11 @@ export function commandArguments(
     ...(input.structuresInputId ? ["--structures", required("structuresInputId")] : []),
   ];
   switch (validated.kind) {
+    case "coastline_region":
+      return ["region", "--input", input.coastlineInputId ? required("coastlineInputId") : bundledBlackSeaPath,
+        "--west", String(input.west), "--east", String(input.east), "--south", String(input.south), "--north", String(input.north), "--output", output];
     case "dimension":
-      return ["dimension", "--input", "data/black-sea.json", "--output", output];
+      return ["dimension", "--input", bundledBlackSeaPath, "--output", output];
     case "dimension_dataset":
       if (!datasetPath) throw new Error("Для пользовательского расчёта нужен серверный путь набора");
       return ["dimension", "--input", datasetPath, "--output", output];
@@ -571,7 +585,7 @@ export function commandArguments(
     case "source_file":
       return ["source", "--input", required("coastlineInputId"), "--output", output];
     case "map":
-      return ["map", "black-sea", "--input", "data/black-sea.json", "--output", output];
+      return ["map", "black-sea", "--input", bundledBlackSeaPath, "--output", output];
     case "map_file":
       return ["map", "black-sea", "--input", required("coastlineInputId"), "--output", output];
     case "erosion":

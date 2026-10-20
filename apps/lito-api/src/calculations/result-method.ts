@@ -6,6 +6,7 @@ export interface ResultMethod {
 }
 
 const expected = {
+  coastline_region: { command: "lito region", id: "coastline-region" },
   source_file: { command: "lito source", id: null },
   dimension: { command: "lito dimension", id: "box-counting" },
   dimension_dataset: { command: "lito dimension", id: "box-counting" },

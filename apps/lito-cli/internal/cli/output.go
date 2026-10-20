@@ -510,7 +510,9 @@ func writeFractalSeries(opts fractalSeriesOptions, output string, ctx exportCont
 				renderConfig.BoxCountingRegressionMin, renderConfig.BoxCountingRegressionMax = regressionBoxSizeRange(dimensions[iter])
 				renderConfig.BoxCountingLogLogSVGFile = logLogFilename
 			}
-			enhancedDoc := wrapDocumentForEnhanced(doc, renderConfig, referenceRender, 0, nil, nil)
+			// Аналитическая сетка строится по тем же исходным точкам, что и N(ε).
+			// Упрощение допустимо только для видимой линии SVG.
+			enhancedDoc := wrapDocumentForEnhanced(doc, renderConfig, curves[iter], 0, nil, nil)
 			if err := svgrender.DrawEnhancedSVG(enhancedDoc, filename); err != nil {
 				return err
 			}

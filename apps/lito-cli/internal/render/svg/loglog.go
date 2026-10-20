@@ -117,7 +117,7 @@ func DrawLogLogSVG(options LogLogPlotOptions, filename string) error {
 		left, top, left, top+plotHeight,
 		left+plotWidth/2, float64(height)-30,
 		left-64, top+plotHeight/2, left-64, top+plotHeight/2,
-		left+plotWidth-260, float64(height)-28, left+plotWidth-170, float64(height)-28, options.Dimension, options.RSquared)
+		left+plotWidth-260, float64(height)-54, left+plotWidth-170, float64(height)-28, options.Dimension, options.RSquared)
 
 	return os.WriteFile(filename, []byte(svg), 0o644)
 }

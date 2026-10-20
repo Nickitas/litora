@@ -866,6 +866,9 @@ func resolveSourcePayload(localPath, remoteURL, cachePath string, refresh bool, 
 		if err != nil {
 			return resolvedSourcePayload{}, fmt.Errorf("ошибка чтения JSON береговой линии %q: %w", localPath, err)
 		}
+		if err := validateBundledBlackSea(localPath, payload); err != nil {
+			return resolvedSourcePayload{}, err
+		}
 		return resolvedSourcePayload{
 			Payload: payload,
 			Source:  localPath,
@@ -873,15 +876,7 @@ func resolveSourcePayload(localPath, remoteURL, cachePath string, refresh bool, 
 	}
 
 	if remoteURL == "" {
-		localPath = DefaultCoastlineJSONPath
-		payload, err := os.ReadFile(localPath)
-		if err != nil {
-			return resolvedSourcePayload{}, fmt.Errorf("ошибка чтения JSON береговой линии %q: %w", localPath, err)
-		}
-		return resolvedSourcePayload{
-			Payload: payload,
-			Source:  localPath,
-		}, nil
+		return resolveSourcePayload(DefaultBlackSeaCoastlinePath, "", "", false, client)
 	}
 
 	if strings.TrimSpace(cachePath) == "" {

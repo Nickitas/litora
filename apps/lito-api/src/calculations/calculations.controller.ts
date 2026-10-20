@@ -33,6 +33,7 @@ import {
   CalculationResponse,
 } from "../http-models.js";
 import { parseHistoryPageQuery } from "./history-page.js";
+import { bundledCoastlinePreview } from "./coastline-preview.js";
 
 const deletionRequestSchema = {
   type: "object" as const,
@@ -67,6 +68,11 @@ export class CalculationsController {
       environment.heavyEnabled || resourceProfileForKind(item.kind) === "standard");
   }
 
+  @Get("coastline-preview")
+  @ApiOperation({ summary: "Полный закреплённый GeoJSON Чёрного моря для выбора области", description: "WGS84 [долгота, широта], источник, лицензия и SHA-256. Вычисление участка выполняет отдельное задание Go." })
+  @ApiResponse({ status: 200, description: "CoastlinePreviewDto: source, sourceRevision, license, sha256, crs, geojson" })
+  coastlinePreview() { return bundledCoastlinePreview(); }
+
   @Post()
   @ApiOperation({ summary: "Поставить расчёт в очередь" })
   @ApiBody({
@@ -83,6 +89,10 @@ export class CalculationsController {
           type: "object",
           additionalProperties: false,
           properties: {
+            west: { type: "number", minimum: 27, maximum: 42.5, description: "coastline_region: западная долгота" },
+            east: { type: "number", minimum: 27, maximum: 42.5, description: "coastline_region: восточная долгота" },
+            south: { type: "number", minimum: 40.5, maximum: 47.5, description: "coastline_region: южная широта" },
+            north: { type: "number", minimum: 40.5, maximum: 47.5, description: "coastline_region: северная широта" },
             steps: {
               type: "integer",
               minimum: 0,

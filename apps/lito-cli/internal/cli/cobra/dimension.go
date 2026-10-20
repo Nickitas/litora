@@ -3,7 +3,6 @@ package cobra
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"text/tabwriter"
 
 	"coastal-geometry/internal/cli"
@@ -40,7 +39,7 @@ func init() {
 	dimensionCmd.Flags().StringVar(&dimSourceURL, "source-url", "", "явно включить удалённый GeoJSON-источник")
 	dimensionCmd.Flags().BoolVar(&dimRefresh, "refresh", false, "принудительное обновление удалённого кэша")
 	dimensionCmd.Flags().StringVar(&dimOutput, "output", "", "каталог для вывода (по умолчанию: ./output)")
-	dimensionCmd.Flags().BoolVar(&dimFullBlackSea, "full-black-sea", false, "анализировать полный открытый контур Чёрного моря, а не упрощённый локальный JSON")
+	dimensionCmd.Flags().BoolVar(&dimFullBlackSea, "full-black-sea", false, "использовать полный поставляемый контур Чёрного моря (также применяется по умолчанию)")
 }
 
 func runDimension(_ *cobra.Command, _ []string) error {
@@ -52,17 +51,8 @@ func runDimension(_ *cobra.Command, _ []string) error {
 		RemoteURL: dimSourceURL,
 		Refresh:   dimRefresh,
 	}
-	if dimFullBlackSea {
-		cachePath := filepath.Join(coastline.DefaultCoastlineCacheDir, "black-sea.geojson")
-		if !dimRefresh {
-			if _, statErr := os.Stat(cachePath); statErr == nil {
-				loadOptions.LocalPath = cachePath
-			} else {
-				loadOptions.RemoteURL = coastline.DefaultCoastlineGeoJSONURL
-			}
-		} else {
-			loadOptions.RemoteURL = coastline.DefaultCoastlineGeoJSONURL
-		}
+	if dimRefresh && dimInput == "" && dimSourceURL == "" {
+		loadOptions.RemoteURL = coastline.DefaultCoastlineGeoJSONURL
 	}
 	result, err := coastline.Load(loadOptions)
 	if err != nil {
@@ -75,7 +65,7 @@ func runDimension(_ *cobra.Command, _ []string) error {
 
 	outputMgr := cli.NewOutputPathManager(dimOutput)
 	if err := cli.WriteDimensionSVG(result.Points, outputMgr, result.DatasetName, result.Source, result.Validation); err != nil {
-		fmt.Printf("Предупреждение: не удалось создать SVG: %v\n", err)
+		return fmt.Errorf("создание отчёта размерности: %w", err)
 	}
 
 	return nil

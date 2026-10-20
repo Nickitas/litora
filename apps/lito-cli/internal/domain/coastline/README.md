@@ -24,7 +24,6 @@
   - [Формула гаверсинуса](#формула-гаверсинуса)
   - [Длина полилинии](#длина-полилинии)
   - [Площадь полигона](#площадь-полигона)
-- [Sanity Check](#sanity-check)
 - [Упрощение геометрии](#упрощение-геометрии)
   - [Алгоритм Рамера — Дугласа — Пекера](#алгоритм-рамера--дугласа--пекера)
 - [Эрозия](#эрозия)
@@ -52,7 +51,6 @@ internal/domain/coastline/
 ├── validation.go          # Валидация геометрии, self-intersection
 ├── validation_summary.go  # Агрегация проблем валидации
 ├── visualization.go       # Подсветка проблемных сегментов для SVG
-├── sanity.go              # Sanity check длины береговой линии
 ├── metrics.go             # Консольный вывод метрик
 ├── locations.go           # Справочник известных локаций
 ├── utils.go               # Вспомогательные функции для валидации строк
@@ -125,7 +123,7 @@ type LoadResult struct {
 ```go
 // Пути к файлам
 const (
-    DefaultCoastlineJSONPath = "data/black-sea.json"
+    DefaultBlackSeaCoastlinePath = "data/coastline/black-sea.geojson"
     DefaultCoastlineCacheDir = "data/cache"
     DefaultCoastlineSnapshotDir = "data/snapshots"
 )
@@ -183,13 +181,13 @@ var DefaultBlackSeaBounds = GeoBounds{
    Ошибка чтения немедленно возвращается вызывающему коду; кэш и URL не
    используются.
 2. **Удалённый режим** — если `LocalPath` пуст, используется `RemoteURL` и его
-   кэш. Если URL также пуст, читается `data/black-sea.json`.
+   кэш. Если URL также пуст, читается `data/coastline/black-sea.geojson`.
 
 Константы по умолчанию:
 
 ```go
 const (
-    DefaultCoastlineJSONPath   = "data/black-sea.json"
+    DefaultBlackSeaCoastlinePath   = "data/coastline/black-sea.geojson"
     DefaultCoastlineCacheDir   = "data/cache"
     marineRegionsWFSURL        = "https://geo.vliz.be/geoserver/MarineRegions/wfs"
     blackSeaMarineRegionID     = 3319
@@ -428,35 +426,6 @@ A = |Σ(xᵢ₋₁ × yᵢ - xᵢ × yᵢ₋₁)| / 2
 ```
 
 Результат в м² конвертируется в км² делением на 1 000 000.
-
----
-
-## Sanity Check
-
-Функция `SanityCheck(dataset string, lengthKM float64)` проверяет корректность расчёта длины.
-
-**Эталонные диапазоны** (для известных наборов данных):
-
-```go
-var knownCoastlineEstimates = map[string]coastlineEstimate{
-    "black-sea.json": {MinKM: 4000, MaxKM: 4987},
-}
-```
-
-**Допуск:** `sanityTolerance = 0.40` (±40%)
-
-```
-minAllowed = MinKM × (1 - 0.40) = MinKM × 0.60
-maxAllowed = MaxKM × (1 + 0.40) = MaxKM × 1.40
-
-Если lengthKM ∈ [minAllowed, maxAllowed] → Valid = true
-Иначе → Valid = false + Warning
-```
-
-**Warning при ошибке** содержит возможные причины:
-- Неправильный порядок точек
-- Пропущенные участки береговой линии
-- Сегменты, пересекающие море
 
 ---
 
@@ -725,34 +694,24 @@ data/snapshots/
 
 | Функция | Описание | Возвращает |
 |---------|----------|------------|
-| `SanityCheck(dataset, lengthKM)` | Проверка длины береговой линии | `SanityCheckResult` |
 | `BuildValidationSummary(points)` | Структурированная сводка проблем | `ValidationSummary` |
 | `BuildVisualizationHints(points)` | Подсказки для рендерера (подсветка) | `VisualizationHints` |
-| `MainCalculation(coast, name, source)` | Консольный вывод полных метрик | `SanityCheckResult` |
+| `MainCalculation(coast, name, source)` | Консольный вывод полных метрик | — |
 
 ### Константы и конфигурация
 
 | Константа | Значение | Описание |
 |-----------|----------|----------|
-| `DefaultCoastlineJSONPath` | `"data/black-sea.json"` | Локальный путь по умолчанию |
+| `DefaultBlackSeaCoastlinePath` | `"data/coastline/black-sea.geojson"` | Локальный путь по умолчанию |
 | `DefaultCoastlineCacheDir` | `"data/cache"` | Директория кэша |
 | `DefaultCoastlineSnapshotDir` | `"data/snapshots"` | Директория snapshot-ов |
 | `EarthRadiusKM` | `6371.0` | Средний радиус Земли |
 | `metersPerDegLat` | `111194.9` | Метров в градусе широты |
-| `sanityTolerance` | `0.40` | Допуск sanity check (±40%) |
 | `longSegmentWarningKM` | `450.0` | Порог предупреждения о длинном сегменте |
 | `defaultHTTPTimeout` | `12s` | Таймаут HTTP-запроса |
 | `erosionChunkSize` | `512` | Размер чанка для параллельной эрозии |
 | `maxConsolePoints` | `30` | Макс. точек в консольном выводе |
 | `locationThreshold` | `0.15°` | Порог привязки к ориентиру (~16 км) |
-
-### Оценки береговых линий
-
-| Набор данных | Min (км) | Max (км) |
-|--------------|----------|----------|
-| `black-sea.json` | 4000 | 4987 |
-
----
 
 ## Примеры использования API
 
@@ -766,7 +725,7 @@ import (
 )
 
 func main() {
-    points, report, err := coastline.LoadFromJSON("data/black-sea.json")
+    points, report, err := coastline.LoadFromJSON("data/coastline/black-sea.geojson")
     if err != nil {
         panic(err)
     }
@@ -782,7 +741,7 @@ func main() {
 ```go
 func main() {
     result, err := coastline.Load(coastline.LoadOptions{
-        LocalPath:    "data/black-sea.json",
+        LocalPath:    "data/coastline/black-sea.geojson",
         RemoteURL:    coastline.DefaultCoastlineGeoJSONURL,
         RemoteBounds: coastline.DefaultBlackSeaBounds,
         CachePath:    "data/cache/black-sea.geojson",
@@ -833,7 +792,7 @@ func main() {
 
 ```go
 func main() {
-    points, _, err := coastline.LoadFromJSON("data/black-sea.json")
+    points, _, err := coastline.LoadFromJSON("data/coastline/black-sea.geojson")
     if err != nil {
         panic(err)
     }
@@ -862,7 +821,7 @@ func main() {
 ```go
 func main() {
     result, err := coastline.Load(coastline.LoadOptions{
-        LocalPath: "data/black-sea.json",
+        LocalPath: "data/coastline/black-sea.geojson",
     })
     if err != nil {
         panic(err)
@@ -961,7 +920,6 @@ go test ./internal/domain/coastline/...
 | `LoadFromJSON` | ✅ Загрузка валидных данных<br>✅ Ошибка при невалидной широте<br>✅ Удаление дубликатов |
 | `validateAndNormalizePoints` | ✅ Переупорядочивание точек при self-intersection<br>✅ Предупреждения о длинных сегментах и дубликатах |
 | `findSelfIntersections` | ✅ Обнаружение пересекающихся сегментов |
-| `SanityCheck` |✅ Warning для известного набора с некорректной длиной<br>✅ Пропуск для неизвестного набора |
 | `FetchCoastlineData` | ✅ Парсинг GeoJSON Polygon с фильтрацией по bounds<br>✅ Сохранение замкнутого кольца |
 | `Load` | ✅ Приоритет явного локального файла<br>✅ Ошибка без локального fallback<br>✅ Использование удалённого GeoJSON<br>✅ Сохранение замкнутого кольца<br>✅ Использование кэша без remote-запроса<br>✅ Обновление кэша при `Refresh=true`<br>✅ Использование stale-кэша при ошибке refresh |
 | `InspectSource` | ✅ Строгий выбор локального или удалённого режима<br>✅ Сохранение snapshot + извлечение метаданных из GeoJSON |

@@ -6,11 +6,15 @@ import { cn } from "@/shared/shadcn/lib/utils";
 export function CalculationImagePreview({
   file,
   alt,
+  caption,
+  description,
   compact = false,
   onRefreshLinks,
 }: {
   file: CalculationArtifactDto;
   alt: string;
+  caption?: string;
+  description?: string;
   compact?: boolean;
   onRefreshLinks?: () => void;
 }) {
@@ -95,7 +99,9 @@ export function CalculationImagePreview({
         </div>
       )}
       <figcaption className={cn("text-sm break-all", compact ? "p-2" : "p-3")}>
-        {file.filename}
+        {caption && <p className="font-medium">{caption}</p>}
+        {description && <p className="mt-1 text-sm break-normal text-muted-foreground">{description}</p>}
+        <p className={caption ? "mt-2 text-xs text-muted-foreground" : undefined}>{file.filename}</p>
       </figcaption>
     </figure>
   );

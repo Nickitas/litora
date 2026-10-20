@@ -11,6 +11,11 @@ export interface InputFileProvenance {
 
 export interface BundledInputProvenance {
   files: InputFileProvenance[];
+  source?: string;
+  sourceRevision?: string;
+  license?: string;
+  crs?: string;
+  coordinateUnit?: string;
   declaredSources?: {
     generatedAt: string;
     coastline: string;
@@ -20,6 +25,9 @@ export interface BundledInputProvenance {
     structuresWarning: string;
   };
 }
+
+export const bundledBlackSeaPath = "data/coastline/black-sea.geojson";
+const blackSeaMetadataPath = "coastline/black-sea.metadata.json";
 
 // Хеши поставляемого демо: менять только после проверки происхождения и обновления спецификации.
 const pinnedSochiFiles = {
@@ -58,7 +66,7 @@ async function fingerprint(
 
 function requiredString(value: unknown, key: string): string {
   if (typeof value !== "string" || !value.trim())
-    throw new Error(`В паспорте демонстрационных данных нет ${key}`);
+    throw new Error(`В паспорте поставляемых данных нет ${key}`);
   return value;
 }
 
@@ -77,13 +85,25 @@ export async function bundledInputProvenance(
   kind: string,
   dataDirectory: string,
 ): Promise<BundledInputProvenance> {
-  if (kind === "dimension" || kind === "map") {
-    const paths = ["black-sea.json"];
+  if (kind === "dimension" || kind === "map" || kind === "coastline_region") {
+    const paths = [bundledBlackSeaPath.slice("data/".length), blackSeaMetadataPath];
     if (kind === "map") paths.push("examples/sochi-local-segment.geojson");
+    const files = await Promise.all(paths.map((path) => fingerprint(dataDirectory, path)));
+    const raw: unknown = JSON.parse(await readFile(join(dataDirectory, blackSeaMetadataPath), "utf8"));
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+      throw new Error("Некорректный паспорт полного контура Чёрного моря");
+    const metadata = raw as Record<string, unknown>;
+    if (metadata.schemaVersion !== 1 || metadata.crs !== "EPSG:4326" ||
+        metadata.coordinateUnit !== "degree" || metadata.sha256 !== files[0].sha256 ||
+        metadata.sizeBytes !== files[0].sizeBytes)
+      throw new Error("Полный контур Чёрного моря не совпадает с паспортом источника");
     return {
-      files: await Promise.all(
-        paths.map((path) => fingerprint(dataDirectory, path)),
-      ),
+      files,
+      source: requiredString(metadata.source, "source"),
+      sourceRevision: requiredString(metadata.sourceRevision, "sourceRevision"),
+      license: requiredString(metadata.license, "license"),
+      crs: metadata.crs,
+      coordinateUnit: metadata.coordinateUnit,
     };
   }
   if (kind !== "erosion" && kind !== "all_demo") throw new Error(`Нет паспорта входов для ${kind}`);

@@ -77,6 +77,7 @@ func TestExecuteSeabedBuildCreatesExportBundleAndJournal(t *testing.T) {
 	for _, path := range []string{
 		report.Artifacts.BathymetricMSH, report.Artifacts.VTU, report.Artifacts.NodesCSV,
 		report.Artifacts.CellsCSV, report.Artifacts.ProfilesCSV, report.Artifacts.ExportMetadataJSON,
+		report.Artifacts.SourceMetadataJSON,
 		report.Artifacts.ReconciliationJSON, report.Artifacts.CorrectionsCSV,
 		report.Artifacts.CellDerivationJSON, report.Artifacts.BuildReportJSON, report.Artifacts.BuildLog,
 	} {
@@ -84,6 +85,21 @@ func TestExecuteSeabedBuildCreatesExportBundleAndJournal(t *testing.T) {
 		if statErr != nil || info.Size() == 0 {
 			t.Fatalf("артефакт seabed build не создан: %s (%v)", path, statErr)
 		}
+	}
+	source, checksum, _, err := resolveBathymetryAttribution("", report.Artifacts.SourceMetadataJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	passport, err := geometry.LoadBathymetryPassportFromFile(fixture.bathymetryMetadataPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source != passport.Attribution || checksum != passport.DatasetSHA256 {
+		t.Fatalf("источник отчётов отличается от проверенной батиметрии: %s, %s", source, checksum)
+	}
+	savedPassport, err := geometry.LoadBathymetryPassportFromFile(report.Artifacts.SourceMetadataJSON)
+	if err != nil || savedPassport.VerticalReference != passport.VerticalReference || savedPassport.SourceProduct != passport.SourceProduct {
+		t.Fatalf("паспорт потерял происхождение или вертикальную систему: %+v, %v", savedPassport, err)
 	}
 	document, err := seabed.ReadMSH2(report.Artifacts.BathymetricMSH)
 	if err != nil {

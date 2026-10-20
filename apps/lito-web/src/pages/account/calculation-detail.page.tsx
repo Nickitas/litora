@@ -26,6 +26,9 @@ import { CalculationImagePreview } from "./ui/calculation-image-preview";
 import { isPreviewableImage } from "./ui/calculation-image-preview.utils";
 import { CalculationMetadataDownload } from "./ui/calculation-metadata-download";
 import { CalculationTitle } from "./ui/calculation-title";
+import { seabedReportLabels } from "./model/seabed-workflows";
+import { SeabedNextSteps } from "./ui/seabed-next-steps";
+import { CoastlineRegionResults } from "./ui/coastline-region-results";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -444,6 +447,9 @@ function CalculationDetail({ jobId }: { jobId: string }) {
             <AINecessityResults summary={summary ?? null} />
           )}
 
+          <SeabedNextSteps job={job} kinds={kinds} />
+          <CoastlineRegionResults job={job} kinds={kinds} />
+
           {images && images.length > 0 && (
             <section aria-labelledby="visual-reports-heading">
               <h2
@@ -457,7 +463,9 @@ function CalculationDetail({ jobId }: { jobId: string }) {
                   <CalculationImagePreview
                     key={file.id}
                     file={file}
-                    alt={`Отчёт: ${file.filename}`}
+                    alt={seabedReportLabels[file.filename]?.title ?? `Отчёт: ${file.filename}`}
+                    caption={seabedReportLabels[file.filename]?.title}
+                    description={seabedReportLabels[file.filename]?.description}
                     onRefreshLinks={reload}
                   />
                 ))}

@@ -1,8 +1,10 @@
 package svg
 
 import (
+	"encoding/xml"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -148,6 +150,10 @@ func TestDrawEnhancedBoxCountingLegendAndLogLogLink(t *testing.T) {
 		BoxCountingGridOptions: &BoxCountingGridOptions{
 			Show:               true,
 			Points:             points,
+			MinLat:             40,
+			MaxLat:             41,
+			MinLon:             30,
+			MaxLon:             32,
 			BoxSize:            10000,
 			ShowCoveredBoxes:   true,
 			ShowAllBoxes:       true,
@@ -170,6 +176,53 @@ func TestDrawEnhancedBoxCountingLegendAndLogLogLink(t *testing.T) {
 	for _, expected := range []string{"плотность прохождения", "регрессионном окне", "dimension_loglog_0.svg"} {
 		if !strings.Contains(svg, expected) {
 			t.Fatalf("expected box-counting SVG to contain %q", expected)
+		}
+	}
+	var rendered struct {
+		Height string `xml:"height,attr"`
+		Groups []struct {
+			ID      string `xml:"id,attr"`
+			Clip    string `xml:"clip-path,attr"`
+			Content string `xml:",innerxml"`
+			Lines   []struct {
+				Y1 float64 `xml:"y1,attr"`
+				Y2 float64 `xml:"y2,attr"`
+			} `xml:"line"`
+		} `xml:"g"`
+	}
+	if err := xml.Unmarshal(content, &rendered); err != nil {
+		t.Fatal(err)
+	}
+	height, err := strconv.Atoi(rendered.Height)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, group := range rendered.Groups {
+		seen[group.ID] = true
+		switch group.ID {
+		case "grid-annotation":
+			if group.Clip != "" || !strings.Contains(group.Content, "плотность прохождения") {
+				t.Fatal("пояснение аналитической сетки должно быть вне клиппинга карты")
+			}
+		case "map-data":
+			if group.Clip != "url(#map-clip)" || !strings.Contains(group.Content, "<rect") || !strings.Contains(group.Content, "<polyline") {
+				t.Fatal("сетка и береговая линия должны ограничиваться рамкой карты")
+			}
+		case "map-scale":
+			if group.Clip != "" || len(group.Lines) != 3 {
+				t.Fatal("масштабная линейка должна отображаться вне рамки карты")
+			}
+			for _, line := range group.Lines {
+				if line.Y1 >= float64(height) || line.Y2 >= float64(height) {
+					t.Fatal("масштабная линейка обрезается границей документа")
+				}
+			}
+		}
+	}
+	for _, id := range []string{"grid-annotation", "map-data", "map-axes", "map-scale"} {
+		if !seen[id] {
+			t.Fatalf("в SVG отсутствует слой %s", id)
 		}
 	}
 }

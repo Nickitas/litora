@@ -8,8 +8,6 @@ import (
 
 // Константы для путей к файлам по умолчанию
 const (
-	// DefaultCoastlineJSONPath - путь к файлу береговой линии по умолчанию
-	DefaultCoastlineJSONPath = "data/black-sea.json"
 	// DefaultCoastlineCacheDir - директория для кэширования данных береговой линии
 	DefaultCoastlineCacheDir = "data/cache"
 	// DefaultCoastlineSnapshotDir - директория для снимков береговой линии

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "name": "Black Sea — MarineRegions MRGID 3319",
+  "source": "Flanders Marine Institute (VLIZ), MarineRegions: IHO Sea Area, Black Sea, MRGID 3319",
+  "sourceUrl": "https://www.marineregions.org/gazetteer.php?p=details&id=3319",
+  "license": "CC-BY",
+  "licenseUrl": "https://www.marineregions.org/disclaimer.php",
+  "sourceRevision": "WFS timeStamp 2026-08-19T19:01:44.672Z; архив article_1",
+  "crs": "EPSG:4326",
+  "coordinateUnit": "degree",
+  "sha256": "116dcbc076ff0086e8bb3d72a34fc1df5353dc3c93c5cad91a99c336e039d246",
+  "sizeBytes": 299701,
+  "usageLimitations": [
+    "Граница морского района, включая границы акватории; не геодезическая съёмка берега.",
+    "Для научных и учебных исследований; не для навигации и проектирования берегозащиты.",
+    "Для актуальной версии и оригинальной загрузки обращаться в MarineRegions."
+  ]
+}

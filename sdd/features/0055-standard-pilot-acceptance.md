@@ -22,7 +22,7 @@ API и standard worker запущены из дерева исходного п�
 
 | Вход | SHA-256 | Использование |
 | --- | --- | --- |
-| `apps/lito-cli/data/black-sea.json` | `129acf35c0df06ddfb3c4e9d6e28f7b3d110cb5368796eadd5b778a9d6392b40` | Приватная тестовая загрузка; в дополнении запущен `source_file` без Gmsh |
+| Прежняя схема из 15 точек (архивный вход, удалён из поставки) | `129acf35c0df06ddfb3c4e9d6e28f7b3d110cb5368796eadd5b778a9d6392b40` | Приватная тестовая загрузка; в дополнении запущен `source_file` без Gmsh |
 | `apps/lito-cli/data/examples/sochi-local-segment.geojson` | `5fc2e8625fc57021fb760cccc63cb6ff20848edd70e159453f34402faa99129a` | Встроенный вход `map` |
 | `packages/generated-data/src/coastline-examples.ts`, пример Сочи | `a09a982cea1b548825da784a0a6ed02d08dafdbcdad078fbc88920b6b8a9bae2` | Сохранённый набор в live-сценарии; та же линия, отдельная сериализация |
 | GeoJSON из `scripts/integration-test.mjs` | Код теста на указанном HEAD и текущем diff | Малый набор для `dimension_dataset` и отрицательный контур вне Чёрного моря |
@@ -61,7 +61,7 @@ API и standard worker запущены из дерева исходного п�
   версией Node.js здесь не проверялся; это обязательная проверка [0049](0049-prebuilt-vps-delivery.md).
 - 19.10.2026 дополнительный прогон использовал те же локальные image ID
   PostgreSQL и MinIO, новые tmpfs-контейнеры и тестовую БД, API, standard и
-  heavy worker из HEAD `efc34f6` с diff теста. Вход `black-sea.json` имеет
+  heavy worker из HEAD `efc34f6` с diff теста. Прежний схематический вход имеет
   указанный выше SHA-256. Прогон завершился успешно дважды, второй раз с
   проверкой причины 409. Gmsh и seabed не запускались. Контейнеры с `--rm`
   остановлены и удалены после каждого прогона.

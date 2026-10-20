@@ -16,6 +16,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Upload } from "@aws-sdk/lib-storage";
 import { environment } from "../config/environment.js";
+import { artifactContentType } from "./artifact-content-type.js";
 
 @Injectable()
 export class ObjectStorageService implements OnModuleInit {
@@ -87,7 +88,7 @@ export class ObjectStorageService implements OnModuleInit {
         Bucket: this.bucket,
         Key: objectKey,
         Body: createReadStream(path),
-        ContentType: contentType,
+        ContentType: artifactContentType(contentType),
       },
       queueSize: 2,
       partSize: 16 * 1024 * 1024,
@@ -106,7 +107,7 @@ export class ObjectStorageService implements OnModuleInit {
         Key: objectKey,
         Body: bytes,
         ContentLength: bytes.length,
-        ContentType: contentType,
+        ContentType: artifactContentType(contentType),
       }),
     );
   }
@@ -217,10 +218,12 @@ export class ObjectStorageService implements OnModuleInit {
     }
   }
 
-  downloadUrl(objectKey: string, expiresIn = 900): Promise<string> {
+  downloadUrl(objectKey: string, expiresIn = 900, contentType?: string): Promise<string> {
     return getSignedUrl(
       this.signingClient,
-      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey,
+        ...(contentType ? { ResponseContentType: artifactContentType(contentType) } : {}),
+      }),
       { expiresIn },
     );
   }

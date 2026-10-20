@@ -250,6 +250,7 @@ export type CalculationKind =
   | "all_file"
   | "calibrate_cerc"
   | "shoreline_data_audit"
+  | "coastline_region"
   | "mesh"
   | "seabed_build"
   | "seabed_render"
@@ -267,6 +268,32 @@ export interface CalculationKindDto {
   kind: CalculationKind;
   title: string;
   description: string;
+}
+
+export interface CoastlineRegionBoundsDto {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+export interface CoastlinePreviewDto {
+  source: string;
+  sourceRevision: string | null;
+  license: string | null;
+  sha256: string;
+  crs: "EPSG:4326";
+  geojson: Record<string, unknown>;
+}
+
+export interface ScientificInputFormatDto {
+  role: ScientificInputRole;
+  schemaVersion: 1;
+  format: "json" | "csv" | "tsv" | "msh2";
+  schema: Record<string, unknown> | null;
+  columns?: string[];
+  description: string;
+  maxBytes: number;
 }
 
 /** Управляемые параметры CERC; научный расчёт выполняет только Go. */
@@ -477,6 +504,7 @@ const ownCercInputRequirements = {
 } as const;
 
 export const scientificInputRequirements = {
+  coastline_region: {},
   source_file: { coastlineInputId: "coastline_geojson" },
   dimension_file: { coastlineInputId: "coastline_geojson" },
   map_file: { coastlineInputId: "coastline_geojson" },
@@ -547,6 +575,7 @@ export const scientificInputRequirements = {
 
 /** Необязательные индексные профили CERC, привязанные к нормализованному Go-контуру. */
 export const optionalScientificInputRequirements = {
+  coastline_region: { coastlineInputId: "coastline_geojson" },
   erosion_file: {
     sedimentSourcesInputId: "longshore_sediment_sources_json",
     structuresInputId: "longshore_structures_json",

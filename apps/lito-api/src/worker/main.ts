@@ -48,6 +48,8 @@ import { stageErosionBathymetry } from "./erosion-inputs.js";
 import { auditableCommandLine, redactExecutionLog } from "./command-line.js";
 import { assertFullBlackSeaStagingLimit } from "./full-black-sea-inputs.js";
 import { includeJsonMetric } from "./output-metrics.js";
+import { ExecutionLog } from "./execution-log.js";
+import { assertResultArtifacts } from "./result-artifacts.js";
 import { markHeavyScratch } from "./scratch-cleanup.js";
 import { WorkerPresence } from "./worker-presence.js";
 
@@ -147,6 +149,8 @@ async function run(job: JobRow) {
     );
     if (job.kind === "erosion" || job.kind === "all_demo")
       await assertPinnedSochiInputs(join(directory, "data"));
+    if (job.kind === "dimension" || job.kind === "map" || job.kind === "coastline_region")
+      await bundledInputProvenance(job.kind, join(directory, "data"));
     const validated = validateCalculation({ kind: job.kind, input: job.input });
     let datasetPath: string | undefined;
     let provenance: Record<string, unknown> | undefined;
@@ -261,20 +265,24 @@ async function run(job: JobRow) {
         });
     }, 1000);
     const exitCode = await new Promise<number | null>((resolve, reject) => {
+      const executionLog = new ExecutionLog();
       active = spawn(environment.cliBinary, args, {
         cwd: directory,
         shell: false,
         detached: true,
         stdio: ["ignore", "pipe", "pipe"],
       });
-      const append = (chunk: Buffer) => {
-        if (log.length < 1_000_000)
-          log += chunk.toString("utf8").slice(0, 1_000_000 - log.length);
+      const append = (stream: "stdout" | "stderr", chunk: Buffer) => {
+        executionLog.append(stream, chunk);
+        log = executionLog.text;
       };
-      active.stdout!.on("data", append);
-      active.stderr!.on("data", append);
+      active.stdout!.on("data", (chunk: Buffer) => append("stdout", chunk));
+      active.stderr!.on("data", (chunk: Buffer) => append("stderr", chunk));
       active.once("error", reject);
-      active.once("close", resolve);
+      active.once("close", (code) => {
+        log = executionLog.finish();
+        resolve(code);
+      });
     });
     clearInterval(outputMonitor);
     outputMonitor = undefined;
@@ -308,6 +316,8 @@ async function run(job: JobRow) {
     const method = scientificRejection ? null : resultMethodFromManifest(
       await readFile(join(output, "manifest.json")), validated.kind,
     );
+    const verifiedArtifacts = scientificRejection ? undefined
+      : await assertResultArtifacts(output, validated.kind, outputs);
     if (job.kind !== "dimension_dataset" && scientificFiles.length === 0)
       provenance = {
         ...(await bundledInputProvenance(job.kind, join(directory, "data"))),
@@ -322,7 +332,7 @@ async function run(job: JobRow) {
       const filename = relative(output, path);
       const objectKey = `users/${job.id}/${filename}`;
       const contentType = mime.lookup(path) || "application/octet-stream";
-      const digest = await sha256(path);
+      const digest = verifiedArtifacts?.get(filename) ?? await sha256(path);
       await storage.uploadFile(objectKey, path, contentType);
       uploadedKeys.add(objectKey);
       await repository.addArtifact({

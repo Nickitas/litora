@@ -13,6 +13,7 @@
     "dev:worker": "cd apps/lito-api && node --import tsx src/worker/main.ts",
     "dev:web": "pnpm --filter litora-web dev",
     "test:api": "pnpm --filter litora-api test",
+    "test:reports": "pnpm --filter litora-api test:reports",
     "test:api:db": "pnpm --filter litora-api test:db",
     "test:backup": "node --test scripts/backup-manifest.test.mjs && pnpm --filter litora-api test:backup-s3",
     "test:integration": "node scripts/integration-test.mjs",
@@ -26,7 +27,7 @@
     "test:web": "pnpm --filter litora-web test:verify",
     "test:web:e2e": "pnpm --filter litora-web test:e2e",
     "test:bundle": "pnpm --filter litora-web analyze:bundle --check",
-    "verify": "pnpm check:workspace && pnpm typecheck && pnpm lint && pnpm test:web && pnpm test:api && pnpm test:backup && pnpm test:cli && pnpm build:api && pnpm build:web && pnpm test:bundle",
+    "verify": "pnpm check:workspace && pnpm typecheck && pnpm lint && pnpm test:web && pnpm test:api && pnpm test:backup && pnpm test:cli && pnpm test:reports && pnpm build:api && pnpm build:web && pnpm test:bundle",
     "typecheck": "pnpm --filter @litora/api-client typecheck && pnpm --filter @litora/contracts typecheck && pnpm --filter litora-api typecheck && pnpm --filter litora-web typecheck",
     "test:cli": "cd apps/lito-cli && go test ./..."
   }

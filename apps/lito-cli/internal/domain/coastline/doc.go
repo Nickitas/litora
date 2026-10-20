@@ -18,7 +18,7 @@
 // Пример использования:
 //
 //	result, err := coastline.Load(coastline.LoadOptions{
-//	    LocalPath: "data/black-sea.json",
+//	    LocalPath: "data/coastline/black-sea.geojson",
 //	})
 //	if err != nil {
 //	    log.Fatal(err)

@@ -5,6 +5,8 @@ dist/
 .env.*
 !.env.example
 
+todo/examples_figures
+
 .DS_Store
 .litora/
 apps/lito-cli/bin/

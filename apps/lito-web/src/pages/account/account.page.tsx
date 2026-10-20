@@ -1,16 +1,21 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/features/auth";
 import { LAB_NAV_ITEMS } from "@/shared/config/routes";
 import { Button } from "@/shared/shadcn/components/ui/button";
 import { Dialog } from "@/shared/shadcn/components/ui/dialog";
 import { NewCalculationDialog } from "./new-calculation.page";
+import { parseSeabedWorkflow } from "./model/seabed-workflows";
+import { parseCoastlineContinuation } from "./model/coastline-continuation";
 
 export function AccountPage() {
   const auth = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const repeatJobId = searchParams.get("repeat");
   const createRequested = searchParams.get("new") === "1";
+  const workflow = parseSeabedWorkflow(searchParams.get("workflow"));
+  const sourceJobId = searchParams.get("source") ?? undefined;
+  const coastlineContinuation = useMemo(() => workflow ? undefined : parseCoastlineContinuation(searchParams), [searchParams, workflow]);
   const [newCalculationOpen, setNewCalculationOpen] = useState(false);
   const newCalculationTriggerRef = useRef<HTMLElement | null>(null);
   const calculationsLinkRef = useRef<HTMLAnchorElement>(null);
@@ -26,6 +31,10 @@ export function AccountPage() {
           const next = new URLSearchParams(current);
           next.delete("repeat");
           next.delete("new");
+          next.delete("workflow");
+          next.delete("source");
+          next.delete("scenario");
+          next.delete("coastline");
           return next;
         },
         { replace: true }
@@ -91,8 +100,11 @@ export function AccountPage() {
         </div>
         {(newCalculationOpen || repeatJobId || createRequested) && (
           <NewCalculationDialog
-            key={repeatJobId ?? "new"}
+            key={repeatJobId ?? `${workflow ?? "new"}:${sourceJobId ?? ""}:${coastlineContinuation?.kind ?? ""}:${coastlineContinuation?.artifactId ?? ""}`}
             repeatJobId={repeatJobId ?? undefined}
+            workflow={repeatJobId ? undefined : workflow}
+            sourceJobId={sourceJobId}
+            coastlineContinuation={repeatJobId ? undefined : coastlineContinuation}
             onOpenChange={changeNewCalculationOpen}
             onRestoreFocus={() => {
               const trigger = newCalculationTriggerRef.current;

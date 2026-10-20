@@ -33,6 +33,8 @@ type ResultManifest struct {
 func methodForCommand(command string) *methods.Identity {
 	var method methods.Identity
 	switch command {
+	case "lito region":
+		method = methods.CoastlineRegion()
 	case "lito dimension":
 		method = methods.BoxCounting()
 	case "lito map":

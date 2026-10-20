@@ -2,6 +2,7 @@ import type { ScientificInputRole } from "@litora/contracts";
 
 /** Только эти артефакты Go имеют однозначную роль входного научного файла. */
 export function reusableArtifactRole(jobKind: string, filename: string): ScientificInputRole | null {
+  if (jobKind === "coastline_region" && /^region\/segments\/segment-\d{3}\.geojson$/.test(filename)) return "coastline_geojson";
   if (jobKind === "source_file" && /^[a-z0-9-]+-\d{8}-\d{6}\.(geojson|json)$/.test(filename))
     return "coastline_geojson";
   if (jobKind === "mesh" &&
@@ -15,6 +16,7 @@ export function reusableArtifactRole(jobKind: string, filename: string): Scienti
   if (jobKind === "seabed_build") {
     if (filename === "seabed/black-sea-depth.msh") return "seabed_msh";
     if (filename === "seabed/export-metadata.json") return "export_metadata_json";
+    if (filename === "seabed/bathymetry-source.json") return "bathymetry_source_json";
   }
   if (jobKind === "seabed_adapt") {
     if (filename === "seabed/adaptive/size-field.csv") return "adaptive_field_csv";

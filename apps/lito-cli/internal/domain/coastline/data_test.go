@@ -64,7 +64,7 @@ func TestLoadFromJSONRejectsInvalidLatitude(t *testing.T) {
 
 func TestLoadFromJSONRejectsCoordinatesOutsideBlackSea(t *testing.T) {
 	dir := t.TempDir()
-	filename := filepath.Join(dir, "outside-black-sea.json")
+	filename := filepath.Join(dir, "outside-region.json")
 	content := `[
 		{"lat": 53.2, "lon": 107.4},
 		{"lat": 53.3, "lon": 107.5}
@@ -165,22 +165,5 @@ func TestValidateAndNormalizePointsWarnsOnLongSegmentsAndDuplicateLocations(t *t
 	}
 	if !strings.Contains(warnings, "больше порога") {
 		t.Fatalf("expected long segment warning, got %+v", report.Warnings)
-	}
-}
-
-func TestSanityCheckWarningForBlackSea(t *testing.T) {
-	result := SanityCheck("black-sea.json", 2104)
-	if result.Valid {
-		t.Fatalf("expected invalid sanity result, got %+v", result)
-	}
-	if !strings.Contains(result.Warning, "ПРЕДУПРЕЖДЕНИЕ: длина береговой линии, вероятно, неверна") {
-		t.Fatalf("expected sanity warning, got %q", result.Warning)
-	}
-}
-
-func TestSanityCheckWarningSkippedForUnknownDataset(t *testing.T) {
-	result := SanityCheck("custom.json", 2104)
-	if result.Checked {
-		t.Fatalf("expected unchecked sanity result for unknown dataset, got %+v", result)
 	}
 }

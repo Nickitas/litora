@@ -36,6 +36,8 @@ import { ObjectStorageService } from "../infrastructure/object-storage.service.j
 import { ScientificInputsRepository } from "./scientific-inputs.repository.js";
 import { validateScientificInput } from "./validation.js";
 import { parseObservedShorelines } from "./observed-shorelines.js";
+import { scientificInputFormats } from "./format-catalog.js";
+import { previewGeoJSON } from "../calculations/coastline-preview.js";
 
 const maxObservedSeriesBytes = 16 * 1024 * 1024;
 
@@ -56,6 +58,19 @@ export class ScientificInputsController {
   @ApiResponse({ status: 200, type: [ScientificInputResponse] })
   list(@Req() req: AuthRequest) {
     return this.inputs.list(req.user.id);
+  }
+
+  @Get("formats")
+  @ApiOperation({ summary: "Фиксированные схемы, форматы и пределы научных файлов", description: "Каталог v1 генерируется из Go-типов. JSON Schema можно скачать до загрузки." })
+  formats() { return scientificInputFormats(); }
+
+  @Get(":id/coastline-preview")
+  @ApiOperation({ summary: "GeoJSON своего контура или собственного научного артефакта для выбора области" })
+  async coastlinePreview(@Req() req: AuthRequest, @Param("id", new ParseUUIDPipe()) id: string) {
+    const source = await this.inputs.resolveOwnedSource(id, req.user.id, "coastline_geojson", this.storage.bucket);
+    const bytes = await this.storage.readObjectBytes(source.object_key, 16 * 1024 * 1024);
+    return { source: source.source, sourceRevision: source.source_revision, license: source.license,
+      sha256: source.sha256, crs: "EPSG:4326", geojson: previewGeoJSON(bytes) };
   }
 
   @Get("quota")

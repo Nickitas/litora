@@ -1,0 +1,3206 @@
+[
+  {
+    "role": "bathymetry_grid_metadata_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:bathymetry_grid_metadata_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "attribution": {
+          "type": "string"
+        },
+        "bounds": {
+          "additionalProperties": false,
+          "properties": {
+            "max_lat": {
+              "type": "number"
+            },
+            "max_lon": {
+              "type": "number"
+            },
+            "min_lat": {
+              "type": "number"
+            },
+            "min_lon": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "min_lat",
+            "max_lat",
+            "min_lon",
+            "max_lon"
+          ],
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "dataset_file": {
+          "type": "string"
+        },
+        "dataset_sha256": {
+          "type": "string"
+        },
+        "horizontal_reference": {
+          "type": "string"
+        },
+        "land_filter": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "license_url": {
+          "type": "string"
+        },
+        "limitations": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "point_count": {
+          "type": "integer"
+        },
+        "processing_script": {
+          "type": "string"
+        },
+        "processing_software": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resampling_method": {
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0"
+        },
+        "source_downloaded_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_grid_interval_arc_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_netcdf": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_netcdf_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_product": {
+          "type": "string"
+        },
+        "source_product_doi": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "target_resolution_arc_seconds": {
+          "type": "number"
+        },
+        "target_resolution_degrees": {
+          "type": "number"
+        },
+        "title": {
+          "type": "string"
+        },
+        "vertical_reference": {
+          "type": "string"
+        },
+        "vertical_reference_caveat": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "title",
+        "status",
+        "dataset_file",
+        "dataset_sha256",
+        "created_at",
+        "point_count",
+        "bounds",
+        "target_resolution_degrees",
+        "target_resolution_arc_seconds",
+        "source_product",
+        "source_downloaded_at",
+        "source_netcdf",
+        "source_netcdf_sha256",
+        "source_grid_interval_arc_seconds",
+        "horizontal_reference",
+        "vertical_reference",
+        "resampling_method",
+        "processing_script",
+        "license"
+      ],
+      "type": "object"
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 67108864
+  },
+  {
+    "role": "export_metadata_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:export_metadata_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "code_tables": {
+          "additionalProperties": false,
+          "properties": {
+            "boundary_kind": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cell_quality_flag": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cell_region": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "quality_flag": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sampling_method": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "sampling_method",
+            "quality_flag",
+            "boundary_kind",
+            "cell_region",
+            "cell_quality_flag"
+          ],
+          "type": "object"
+        },
+        "elevation_positive_direction": {
+          "type": "string"
+        },
+        "horizontal_angular_unit": {
+          "type": "string"
+        },
+        "horizontal_axis_order": {
+          "type": "string"
+        },
+        "horizontal_linear_unit": {
+          "type": "string"
+        },
+        "horizontal_mesh_crs": {
+          "type": "string"
+        },
+        "horizontal_source_crs": {
+          "type": "string"
+        },
+        "horizontal_source_epsg": {
+          "type": "integer"
+        },
+        "no_data_sentinel": {
+          "type": "number"
+        },
+        "projection_reference_latitude_deg": {
+          "type": "number"
+        },
+        "projection_reference_longitude_deg": {
+          "type": "number"
+        },
+        "region_thresholds": {
+          "additionalProperties": false,
+          "properties": {
+            "coast_max_depth_m": {
+              "type": "number"
+            },
+            "shelf_max_depth_m": {
+              "type": "number"
+            },
+            "slope_max_depth_m": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "coast_max_depth_m",
+            "shelf_max_depth_m",
+            "slope_max_depth_m"
+          ],
+          "type": "object"
+        },
+        "schema_version": {
+          "const": "lito-seabed/v1"
+        },
+        "vertical_caveat": {
+          "type": "string"
+        },
+        "vertical_epsg": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "vertical_exaggeration": {
+          "type": "number"
+        },
+        "vertical_reference": {
+          "type": "string"
+        },
+        "vertical_unit": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "horizontal_source_crs",
+        "horizontal_source_epsg",
+        "horizontal_axis_order",
+        "horizontal_angular_unit",
+        "horizontal_mesh_crs",
+        "projection_reference_latitude_deg",
+        "projection_reference_longitude_deg",
+        "horizontal_linear_unit",
+        "vertical_reference",
+        "vertical_epsg",
+        "vertical_unit",
+        "elevation_positive_direction",
+        "vertical_exaggeration",
+        "vertical_caveat",
+        "no_data_sentinel",
+        "region_thresholds",
+        "code_tables"
+      ],
+      "type": "object"
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 67108864
+  },
+  {
+    "role": "relief_reference_passport_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:relief_reference_passport_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "dataset_sha256": {
+          "type": "string"
+        },
+        "excluded_sources": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "horizontal_resolution_m": {
+          "type": "number"
+        },
+        "limitations": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sampling_design": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "source_product": {
+          "type": "string"
+        },
+        "source_version": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "validation_class": {
+          "type": "string"
+        },
+        "vertical_reference": {
+          "type": "string"
+        },
+        "vertical_uncertainty_m": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "schema_version",
+        "title",
+        "source_product",
+        "source_version",
+        "dataset_sha256",
+        "horizontal_resolution_m",
+        "vertical_uncertainty_m",
+        "vertical_reference",
+        "validation_class",
+        "sampling_design",
+        "excluded_sources",
+        "limitations"
+      ],
+      "type": "object"
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 67108864
+  },
+  {
+    "role": "adaptive_field_report_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:adaptive_field_report_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "adaptive_mesh_generated": {
+          "type": "boolean"
+        },
+        "bathymetry_sha256": {
+          "type": "string"
+        },
+        "bathymetry_source": {
+          "type": "string"
+        },
+        "config": {
+          "additionalProperties": false,
+          "properties": {
+            "coast_influence_m": {
+              "type": "number"
+            },
+            "curvature_reference_deg": {
+              "type": "number"
+            },
+            "deep_size_m": {
+              "type": "number"
+            },
+            "flat_deep_max_slope_deg": {
+              "type": "number"
+            },
+            "max_neighbour_ratio": {
+              "type": "number"
+            },
+            "max_size_gradient_per_m": {
+              "type": "number"
+            },
+            "min_size_m": {
+              "type": "number"
+            },
+            "shelf_size_m": {
+              "type": "number"
+            },
+            "slope_reference_deg": {
+              "type": "number"
+            },
+            "straight_coast_size_m": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "min_size_m",
+            "straight_coast_size_m",
+            "shelf_size_m",
+            "deep_size_m",
+            "coast_influence_m",
+            "curvature_reference_deg",
+            "slope_reference_deg",
+            "flat_deep_max_slope_deg",
+            "max_neighbour_ratio",
+            "max_size_gradient_per_m"
+          ],
+          "type": "object"
+        },
+        "field_csv": {
+          "type": "string"
+        },
+        "formula": {
+          "additionalProperties": false,
+          "properties": {
+            "base_size": {
+              "type": "string"
+            },
+            "coast_curvature": {
+              "type": "string"
+            },
+            "coast_distance": {
+              "type": "string"
+            },
+            "depth_gradient": {
+              "type": "string"
+            },
+            "growth_limit": {
+              "type": "string"
+            },
+            "raw_target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "base_size",
+            "coast_distance",
+            "coast_curvature",
+            "depth_gradient",
+            "raw_target",
+            "growth_limit"
+          ],
+          "type": "object"
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "horizontal_reference": {
+          "type": "string"
+        },
+        "horizontal_unit": {
+          "type": "string"
+        },
+        "input_msh": {
+          "type": "string"
+        },
+        "map_svg": {
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "lito-adaptive-size-field/v1"
+        },
+        "summary": {
+          "additionalProperties": false,
+          "properties": {
+            "cell_count": {
+              "type": "integer"
+            },
+            "coastline_segment_count": {
+              "type": "integer"
+            },
+            "final_max_adjacent_ratio": {
+              "type": "number"
+            },
+            "final_max_size_gradient_per_m": {
+              "type": "number"
+            },
+            "growth_limited_node_count": {
+              "type": "integer"
+            },
+            "max_coast_curvature_deg": {
+              "type": "number"
+            },
+            "max_depth_gradient_deg": {
+              "type": "number"
+            },
+            "max_distance_to_coast_m": {
+              "type": "number"
+            },
+            "no_data_node_count": {
+              "type": "integer"
+            },
+            "node_count": {
+              "type": "integer"
+            },
+            "raw_max_adjacent_ratio": {
+              "type": "number"
+            },
+            "raw_max_size_gradient_per_m": {
+              "type": "number"
+            },
+            "raw_target_size_m": {
+              "additionalProperties": false,
+              "properties": {
+                "max_m": {
+                  "type": "number"
+                },
+                "mean_m": {
+                  "type": "number"
+                },
+                "median_m": {
+                  "type": "number"
+                },
+                "min_m": {
+                  "type": "number"
+                },
+                "p05_m": {
+                  "type": "number"
+                },
+                "p95_m": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "min_m",
+                "p05_m",
+                "median_m",
+                "mean_m",
+                "p95_m",
+                "max_m"
+              ],
+              "type": "object"
+            },
+            "target_size_m": {
+              "additionalProperties": false,
+              "properties": {
+                "max_m": {
+                  "type": "number"
+                },
+                "mean_m": {
+                  "type": "number"
+                },
+                "median_m": {
+                  "type": "number"
+                },
+                "min_m": {
+                  "type": "number"
+                },
+                "p05_m": {
+                  "type": "number"
+                },
+                "p95_m": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "min_m",
+                "p05_m",
+                "median_m",
+                "mean_m",
+                "p95_m",
+                "max_m"
+              ],
+              "type": "object"
+            },
+            "zones": {
+              "anyOf": [
+                {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "node_count": {
+                        "type": "integer"
+                      },
+                      "target_size_m": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "max_m": {
+                            "type": "number"
+                          },
+                          "mean_m": {
+                            "type": "number"
+                          },
+                          "median_m": {
+                            "type": "number"
+                          },
+                          "min_m": {
+                            "type": "number"
+                          },
+                          "p05_m": {
+                            "type": "number"
+                          },
+                          "p95_m": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "min_m",
+                          "p05_m",
+                          "median_m",
+                          "mean_m",
+                          "p95_m",
+                          "max_m"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "node_count",
+                      "target_size_m"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 0,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "node_count",
+            "cell_count",
+            "coastline_segment_count",
+            "no_data_node_count",
+            "growth_limited_node_count",
+            "raw_target_size_m",
+            "target_size_m",
+            "raw_max_adjacent_ratio",
+            "final_max_adjacent_ratio",
+            "raw_max_size_gradient_per_m",
+            "final_max_size_gradient_per_m",
+            "max_distance_to_coast_m",
+            "max_coast_curvature_deg",
+            "max_depth_gradient_deg",
+            "zones"
+          ],
+          "type": "object"
+        },
+        "target_size_unit": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "horizontal_reference",
+        "horizontal_unit",
+        "target_size_unit",
+        "adaptive_mesh_generated",
+        "config",
+        "formula",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 67108864
+  },
+  {
+    "role": "mesh_comparison_report_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:mesh_comparison_report_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "criterion": {
+          "additionalProperties": false,
+          "properties": {
+            "method": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            },
+            "weights": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "weights",
+            "note"
+          ],
+          "type": "object"
+        },
+        "dataset_name": {
+          "type": "string"
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "gmsh_path": {
+          "type": "string"
+        },
+        "gmsh_version": {
+          "type": "string"
+        },
+        "levels": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "best_generator": {
+                    "type": "string"
+                  },
+                  "boundary_detail_meters": {
+                    "type": "number"
+                  },
+                  "effective_boundary_detail_meters": {
+                    "type": "number"
+                  },
+                  "estimated_cell_count": {
+                    "type": "integer"
+                  },
+                  "original_point_count": {
+                    "type": "integer"
+                  },
+                  "results": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "algorithm": {
+                              "type": "string"
+                            },
+                            "duration_seconds": {
+                              "type": "number"
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "geo_file": {
+                              "type": "string"
+                            },
+                            "log_file": {
+                              "type": "string"
+                            },
+                            "mesh_file": {
+                              "type": "string"
+                            },
+                            "mesh_sha256": {
+                              "type": "string"
+                            },
+                            "metrics": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "boundary_hausdorff_meters": {
+                                  "type": "number"
+                                },
+                                "boundary_rms_meters": {
+                                  "type": "number"
+                                },
+                                "cell_count": {
+                                  "type": "integer"
+                                },
+                                "coastal_area_deviation_percent": {
+                                  "type": "number"
+                                },
+                                "composite_score": {
+                                  "type": "number"
+                                },
+                                "cumulative_feature_area_deviation_km2": {
+                                  "type": "number"
+                                },
+                                "max_edge_meters": {
+                                  "type": "number"
+                                },
+                                "mean_cell_quality": {
+                                  "type": "number"
+                                },
+                                "mean_edge_meters": {
+                                  "type": "number"
+                                },
+                                "mesh_area_deviation_km2": {
+                                  "type": "number"
+                                },
+                                "mesh_area_km2": {
+                                  "type": "number"
+                                },
+                                "min_edge_meters": {
+                                  "type": "number"
+                                },
+                                "p05_cell_quality": {
+                                  "type": "number"
+                                },
+                                "quad_count": {
+                                  "type": "integer"
+                                },
+                                "quad_share_percent": {
+                                  "type": "number"
+                                },
+                                "reference_area_km2": {
+                                  "type": "number"
+                                },
+                                "simplified_boundary_area_km2": {
+                                  "type": "number"
+                                },
+                                "triangle_count": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "reference_area_km2",
+                                "simplified_boundary_area_km2",
+                                "mesh_area_km2",
+                                "cumulative_feature_area_deviation_km2",
+                                "mesh_area_deviation_km2",
+                                "coastal_area_deviation_percent",
+                                "boundary_rms_meters",
+                                "boundary_hausdorff_meters",
+                                "cell_count",
+                                "quad_count",
+                                "triangle_count",
+                                "quad_share_percent",
+                                "mean_edge_meters",
+                                "min_edge_meters",
+                                "max_edge_meters",
+                                "mean_cell_quality",
+                                "p05_cell_quality",
+                                "composite_score"
+                              ],
+                              "type": "object"
+                            },
+                            "rank": {
+                              "type": "integer"
+                            },
+                            "svg_file": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "algorithm",
+                            "duration_seconds",
+                            "metrics",
+                            "geo_file",
+                            "log_file"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "simplified_point_count": {
+                    "type": "integer"
+                  },
+                  "target_edge_meters": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "target_edge_meters",
+                  "boundary_detail_meters",
+                  "effective_boundary_detail_meters",
+                  "estimated_cell_count",
+                  "original_point_count",
+                  "simplified_point_count",
+                  "best_generator",
+                  "results"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "projection": {
+          "type": "string"
+        },
+        "projection_round_trip_max_error_meters": {
+          "type": "number"
+        },
+        "schema_version": {
+          "const": "lito-mesh-comparison/v1"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "generated_at",
+        "dataset_name",
+        "source",
+        "gmsh_path",
+        "gmsh_version",
+        "projection",
+        "projection_round_trip_max_error_meters",
+        "criterion",
+        "levels"
+      ],
+      "type": "object"
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 2097152
+  },
+  {
+    "role": "adaptive_comparison_report_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:adaptive_comparison_report_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "boundary_detail_meters": {
+          "type": "number"
+        },
+        "criterion": {
+          "additionalProperties": false,
+          "properties": {
+            "bathymetry_score": {
+              "type": "string"
+            },
+            "coastline_score": {
+              "type": "string"
+            },
+            "efficiency_score": {
+              "type": "string"
+            },
+            "geometry_score": {
+              "type": "string"
+            },
+            "limitation": {
+              "type": "string"
+            },
+            "method": {
+              "type": "string"
+            },
+            "target_size_score": {
+              "type": "string"
+            },
+            "weights": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "weights",
+            "coastline_score",
+            "bathymetry_score",
+            "geometry_score",
+            "target_size_score",
+            "efficiency_score",
+            "limitation"
+          ],
+          "type": "object"
+        },
+        "effective_boundary_detail_meters": {
+          "type": "number"
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "generator_timeout": {
+          "type": "string"
+        },
+        "gmsh_path": {
+          "type": "string"
+        },
+        "gmsh_version": {
+          "type": "string"
+        },
+        "inputs": {
+          "additionalProperties": false,
+          "properties": {
+            "coastline": {
+              "type": "string"
+            },
+            "coastline_sha256": {
+              "type": "string"
+            },
+            "export_metadata": {
+              "type": "string"
+            },
+            "export_metadata_sha256": {
+              "type": "string"
+            },
+            "input_msh": {
+              "type": "string"
+            },
+            "input_msh_sha256": {
+              "type": "string"
+            },
+            "size_field_csv": {
+              "type": "string"
+            },
+            "size_field_csv_sha256": {
+              "type": "string"
+            },
+            "size_field_report": {
+              "type": "string"
+            },
+            "size_field_report_sha256": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "input_msh",
+            "input_msh_sha256",
+            "export_metadata",
+            "export_metadata_sha256",
+            "size_field_csv",
+            "size_field_csv_sha256",
+            "size_field_report",
+            "size_field_report_sha256",
+            "coastline",
+            "coastline_sha256"
+          ],
+          "type": "object"
+        },
+        "large_run_allowed": {
+          "type": "boolean"
+        },
+        "levels": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "best_generator": {
+                    "type": "string"
+                  },
+                  "boundary_rms_spread_m": {
+                    "type": "number"
+                  },
+                  "coastline_deviation_spread_percent": {
+                    "type": "number"
+                  },
+                  "common_boundary_confirmed": {
+                    "type": "boolean"
+                  },
+                  "failed_generator_count": {
+                    "type": "integer"
+                  },
+                  "level": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "maximum_size_m": {
+                        "type": "number"
+                      },
+                      "minimum_size_m": {
+                        "type": "number"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "minimum_size_m",
+                      "maximum_size_m"
+                    ],
+                    "type": "object"
+                  },
+                  "preflight": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "estimated_cell_count": {
+                        "type": "integer"
+                      },
+                      "estimated_disk_bytes": {
+                        "type": "integer"
+                      },
+                      "estimated_memory_bytes": {
+                        "type": "integer"
+                      },
+                      "method": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "estimated_cell_count",
+                      "estimated_memory_bytes",
+                      "estimated_disk_bytes",
+                      "method"
+                    ],
+                    "type": "object"
+                  },
+                  "runs": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "algorithm": {
+                              "type": "string"
+                            },
+                            "artifacts": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "background_pos": {
+                                  "type": "string"
+                                },
+                                "geo": {
+                                  "type": "string"
+                                },
+                                "log": {
+                                  "type": "string"
+                                },
+                                "mesh_preview_svg": {
+                                  "type": "string"
+                                },
+                                "mesh_window_publication_svg": {
+                                  "type": "string"
+                                },
+                                "mesh_window_svg": {
+                                  "type": "string"
+                                },
+                                "msh": {
+                                  "type": "string"
+                                },
+                                "run_report_json": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "background_pos",
+                                "geo",
+                                "log"
+                              ],
+                              "type": "object"
+                            },
+                            "bathymetry": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "depth_bias_m": {
+                                  "type": "number"
+                                },
+                                "depth_mae_m": {
+                                  "type": "number"
+                                },
+                                "depth_p95_absolute_error_m": {
+                                  "type": "number"
+                                },
+                                "depth_rmse_m": {
+                                  "type": "number"
+                                },
+                                "duration_seconds": {
+                                  "type": "number"
+                                },
+                                "evaluation_cell_count": {
+                                  "type": "integer"
+                                },
+                                "isobaths": {
+                                  "anyOf": [
+                                    {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "absolute_deviation_km2": {
+                                            "type": "number"
+                                          },
+                                          "absolute_deviation_percent": {
+                                            "type": "number"
+                                          },
+                                          "depth_m": {
+                                            "type": "number"
+                                          },
+                                          "reconstructed_area_km2": {
+                                            "type": "number"
+                                          },
+                                          "reference_area_km2": {
+                                            "type": "number"
+                                          }
+                                        },
+                                        "required": [
+                                          "depth_m",
+                                          "reference_area_km2",
+                                          "reconstructed_area_km2",
+                                          "absolute_deviation_km2",
+                                          "absolute_deviation_percent"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "minItems": 0,
+                                      "type": "array"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "mean_isobath_area_deviation_percent": {
+                                  "type": "number"
+                                },
+                                "method": {
+                                  "type": "string"
+                                },
+                                "nearest_fallback_node_count": {
+                                  "type": "integer"
+                                },
+                                "nearest_fallback_node_percent": {
+                                  "type": "number"
+                                },
+                                "reconstructed_water_volume_km3": {
+                                  "type": "number"
+                                },
+                                "reference_mean_depth_m": {
+                                  "type": "number"
+                                },
+                                "reference_p95_depth_m": {
+                                  "type": "number"
+                                },
+                                "reference_water_volume_km3": {
+                                  "type": "number"
+                                },
+                                "slope_evaluation_cell_count": {
+                                  "type": "integer"
+                                },
+                                "slope_mae_deg": {
+                                  "type": "number"
+                                },
+                                "slope_rmse_deg": {
+                                  "type": "number"
+                                },
+                                "water_volume_deviation_percent": {
+                                  "type": "number"
+                                },
+                                "worst_cells": {
+                                  "anyOf": [
+                                    {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "absolute_error_m": {
+                                            "type": "number"
+                                          },
+                                          "cell_id": {
+                                            "type": "integer"
+                                          },
+                                          "latitude_deg": {
+                                            "type": "number"
+                                          },
+                                          "longitude_deg": {
+                                            "type": "number"
+                                          },
+                                          "reconstructed_depth_m": {
+                                            "type": "number"
+                                          },
+                                          "reference_depth_m": {
+                                            "type": "number"
+                                          },
+                                          "x_m": {
+                                            "type": "number"
+                                          },
+                                          "y_m": {
+                                            "type": "number"
+                                          }
+                                        },
+                                        "required": [
+                                          "cell_id",
+                                          "x_m",
+                                          "y_m",
+                                          "longitude_deg",
+                                          "latitude_deg",
+                                          "reference_depth_m",
+                                          "reconstructed_depth_m",
+                                          "absolute_error_m"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "minItems": 0,
+                                      "type": "array"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "method",
+                                "evaluation_cell_count",
+                                "reference_mean_depth_m",
+                                "reference_p95_depth_m",
+                                "depth_bias_m",
+                                "depth_mae_m",
+                                "depth_rmse_m",
+                                "depth_p95_absolute_error_m",
+                                "reference_water_volume_km3",
+                                "reconstructed_water_volume_km3",
+                                "water_volume_deviation_percent",
+                                "slope_evaluation_cell_count",
+                                "slope_mae_deg",
+                                "slope_rmse_deg",
+                                "nearest_fallback_node_count",
+                                "nearest_fallback_node_percent",
+                                "mean_isobath_area_deviation_percent",
+                                "isobaths",
+                                "worst_cells",
+                                "duration_seconds"
+                              ],
+                              "type": "object"
+                            },
+                            "edge_zones": {
+                              "anyOf": [
+                                {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "actual_max_m": {
+                                        "type": "number"
+                                      },
+                                      "actual_mean_m": {
+                                        "type": "number"
+                                      },
+                                      "actual_min_m": {
+                                        "type": "number"
+                                      },
+                                      "actual_p05_m": {
+                                        "type": "number"
+                                      },
+                                      "actual_p95_m": {
+                                        "type": "number"
+                                      },
+                                      "edge_observation_count": {
+                                        "type": "integer"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "ratio_mean": {
+                                        "type": "number"
+                                      },
+                                      "ratio_p05": {
+                                        "type": "number"
+                                      },
+                                      "ratio_p95": {
+                                        "type": "number"
+                                      },
+                                      "target_max_m": {
+                                        "type": "number"
+                                      },
+                                      "target_mean_m": {
+                                        "type": "number"
+                                      },
+                                      "target_min_m": {
+                                        "type": "number"
+                                      },
+                                      "within_tolerance_percent": {
+                                        "type": "number"
+                                      },
+                                      "zone": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "zone",
+                                      "name",
+                                      "edge_observation_count",
+                                      "target_min_m",
+                                      "target_mean_m",
+                                      "target_max_m",
+                                      "actual_min_m",
+                                      "actual_p05_m",
+                                      "actual_mean_m",
+                                      "actual_p95_m",
+                                      "actual_max_m",
+                                      "ratio_p05",
+                                      "ratio_mean",
+                                      "ratio_p95",
+                                      "within_tolerance_percent"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "minItems": 0,
+                                  "type": "array"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "error": {
+                              "type": "string"
+                            },
+                            "geometry": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "boundary_hausdorff_meters": {
+                                  "type": "number"
+                                },
+                                "boundary_rms_meters": {
+                                  "type": "number"
+                                },
+                                "cell_count": {
+                                  "type": "integer"
+                                },
+                                "coastal_area_deviation_percent": {
+                                  "type": "number"
+                                },
+                                "composite_score": {
+                                  "type": "number"
+                                },
+                                "cumulative_feature_area_deviation_km2": {
+                                  "type": "number"
+                                },
+                                "max_edge_meters": {
+                                  "type": "number"
+                                },
+                                "mean_cell_quality": {
+                                  "type": "number"
+                                },
+                                "mean_edge_meters": {
+                                  "type": "number"
+                                },
+                                "mesh_area_deviation_km2": {
+                                  "type": "number"
+                                },
+                                "mesh_area_km2": {
+                                  "type": "number"
+                                },
+                                "min_edge_meters": {
+                                  "type": "number"
+                                },
+                                "p05_cell_quality": {
+                                  "type": "number"
+                                },
+                                "quad_count": {
+                                  "type": "integer"
+                                },
+                                "quad_share_percent": {
+                                  "type": "number"
+                                },
+                                "reference_area_km2": {
+                                  "type": "number"
+                                },
+                                "simplified_boundary_area_km2": {
+                                  "type": "number"
+                                },
+                                "triangle_count": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "reference_area_km2",
+                                "simplified_boundary_area_km2",
+                                "mesh_area_km2",
+                                "cumulative_feature_area_deviation_km2",
+                                "mesh_area_deviation_km2",
+                                "coastal_area_deviation_percent",
+                                "boundary_rms_meters",
+                                "boundary_hausdorff_meters",
+                                "cell_count",
+                                "quad_count",
+                                "triangle_count",
+                                "quad_share_percent",
+                                "mean_edge_meters",
+                                "min_edge_meters",
+                                "max_edge_meters",
+                                "mean_cell_quality",
+                                "p05_cell_quality",
+                                "composite_score"
+                              ],
+                              "type": "object"
+                            },
+                            "rank": {
+                              "type": "integer"
+                            },
+                            "resources": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "final_cell_count": {
+                                  "type": "integer"
+                                },
+                                "final_node_count": {
+                                  "type": "integer"
+                                },
+                                "gmsh_duration_seconds": {
+                                  "type": "number"
+                                },
+                                "lito_heap_in_use_bytes": {
+                                  "type": "integer"
+                                },
+                                "output_msh_bytes": {
+                                  "type": "integer"
+                                },
+                                "output_round_trip_verified": {
+                                  "type": "boolean"
+                                },
+                                "peak_rss_bytes": {
+                                  "type": "integer"
+                                },
+                                "postprocess_duration_seconds": {
+                                  "type": "number"
+                                },
+                                "raw_cell_count": {
+                                  "type": "integer"
+                                },
+                                "raw_node_count": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "gmsh_duration_seconds",
+                                "postprocess_duration_seconds",
+                                "peak_rss_bytes",
+                                "lito_heap_in_use_bytes",
+                                "raw_node_count",
+                                "raw_cell_count",
+                                "final_node_count",
+                                "final_cell_count",
+                                "output_msh_bytes",
+                                "output_round_trip_verified"
+                              ],
+                              "type": "object"
+                            },
+                            "score": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "bathymetry": {
+                                  "type": "number"
+                                },
+                                "cell_geometry": {
+                                  "type": "number"
+                                },
+                                "coastline": {
+                                  "type": "number"
+                                },
+                                "efficiency": {
+                                  "type": "number"
+                                },
+                                "overall": {
+                                  "type": "number"
+                                },
+                                "target_size_compliance": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "coastline",
+                                "bathymetry",
+                                "cell_geometry",
+                                "target_size_compliance",
+                                "efficiency",
+                                "overall"
+                              ],
+                              "type": "object"
+                            },
+                            "success": {
+                              "type": "boolean"
+                            },
+                            "topology": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "accepted": {
+                                  "type": "boolean"
+                                },
+                                "boundary_edge_count": {
+                                  "type": "integer"
+                                },
+                                "boundary_tag_counts": {
+                                  "anyOf": [
+                                    {
+                                      "additionalProperties": {
+                                        "type": "integer"
+                                      },
+                                      "type": "object"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "cell_count": {
+                                  "type": "integer"
+                                },
+                                "degenerate_cell_count": {
+                                  "type": "integer"
+                                },
+                                "invalid_boundary_tag_count": {
+                                  "type": "integer"
+                                },
+                                "node_count": {
+                                  "type": "integer"
+                                },
+                                "non_manifold_edge_count": {
+                                  "type": "integer"
+                                },
+                                "non_quad_cell_count": {
+                                  "type": "integer"
+                                },
+                                "reasons": {
+                                  "anyOf": [
+                                    {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "minItems": 0,
+                                      "type": "array"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "triangle_count": {
+                                  "type": "integer"
+                                },
+                                "unmatched_interior_edge_count": {
+                                  "type": "integer"
+                                },
+                                "untagged_boundary_edge_count": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "node_count",
+                                "cell_count",
+                                "triangle_count",
+                                "non_quad_cell_count",
+                                "degenerate_cell_count",
+                                "non_manifold_edge_count",
+                                "unmatched_interior_edge_count",
+                                "boundary_edge_count",
+                                "untagged_boundary_edge_count",
+                                "invalid_boundary_tag_count",
+                                "boundary_tag_counts",
+                                "accepted",
+                                "reasons"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "algorithm",
+                            "success",
+                            "resources",
+                            "topology",
+                            "geometry",
+                            "edge_zones",
+                            "bathymetry",
+                            "score",
+                            "artifacts"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 0,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "successful_generator_count": {
+                    "type": "integer"
+                  },
+                  "transformation": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "level",
+                  "transformation",
+                  "preflight",
+                  "successful_generator_count",
+                  "failed_generator_count",
+                  "coastline_deviation_spread_percent",
+                  "boundary_rms_spread_m",
+                  "common_boundary_confirmed",
+                  "runs"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maximum_cell_count": {
+          "type": "integer"
+        },
+        "projection": {
+          "type": "string"
+        },
+        "projection_round_trip_max_error_meters": {
+          "type": "number"
+        },
+        "reasons": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schema_version": {
+          "const": "lito-adaptive-generator-comparison/v1"
+        }
+      },
+      "required": [
+        "schema_version",
+        "generated_at",
+        "inputs",
+        "projection",
+        "projection_round_trip_max_error_meters",
+        "boundary_detail_meters",
+        "effective_boundary_detail_meters",
+        "gmsh_path",
+        "gmsh_version",
+        "generator_timeout",
+        "maximum_cell_count",
+        "large_run_allowed",
+        "criterion",
+        "levels",
+        "accepted",
+        "reasons"
+      ],
+      "type": "object"
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 2097152
+  },
+  {
+    "role": "expert_organizer_key_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:expert_organizer_key_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "cards": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "algorithm": {
+                    "type": "string"
+                  },
+                  "feature": {
+                    "type": "string"
+                  },
+                  "fragment_id": {
+                    "type": "string"
+                  },
+                  "level_id": {
+                    "type": "string"
+                  },
+                  "mesh_sha256": {
+                    "type": "string"
+                  },
+                  "presentation_id": {
+                    "type": "string"
+                  },
+                  "region_id": {
+                    "type": "string"
+                  },
+                  "split": {
+                    "type": "string"
+                  },
+                  "svg_path": {
+                    "type": "string"
+                  },
+                  "visible_cells": {
+                    "type": "integer"
+                  },
+                  "visible_contours": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "presentation_id",
+                  "fragment_id",
+                  "feature",
+                  "region_id",
+                  "split",
+                  "level_id",
+                  "algorithm",
+                  "mesh_sha256",
+                  "svg_path",
+                  "visible_cells",
+                  "visible_contours"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "comparison_report": {
+          "type": "string"
+        },
+        "comparison_report_sha256": {
+          "type": "string"
+        },
+        "excluded_runs": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "algorithm": {
+                    "type": "string"
+                  },
+                  "level_id": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "level_id",
+                  "algorithm",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fragments": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "feature": {
+                    "type": "string"
+                  },
+                  "height_m": {
+                    "type": "number"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "latitude_deg": {
+                    "type": "number"
+                  },
+                  "longitude_deg": {
+                    "type": "number"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "reference_isobaths_m": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 0,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "region_id": {
+                    "type": "string"
+                  },
+                  "split": {
+                    "type": "string"
+                  },
+                  "width_m": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "feature",
+                  "region_id",
+                  "split",
+                  "latitude_deg",
+                  "longitude_deg",
+                  "width_m",
+                  "height_m",
+                  "reference_isobaths_m"
+                ],
+                "type": "object"
+              },
+              "minItems": 0,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "limitation": {
+          "type": "string"
+        },
+        "participant_instruction": {
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "lito-expert-fragment-set/v1"
+        },
+        "seed": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "generated_at",
+        "comparison_report",
+        "comparison_report_sha256",
+        "seed",
+        "fragments",
+        "cards",
+        "excluded_runs",
+        "participant_instruction",
+        "limitation"
+      ],
+      "type": "object"
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 2097152
+  },
+  {
+    "role": "coastline_geojson",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$defs": {
+        "feature": {
+          "additionalProperties": false,
+          "properties": {
+            "geometry": {
+              "$ref": "#/$defs/geometry"
+            },
+            "id": {
+              "type": [
+                "string",
+                "number"
+              ]
+            },
+            "properties": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "Feature"
+            }
+          },
+          "required": [
+            "type",
+            "geometry",
+            "properties"
+          ],
+          "type": "object"
+        },
+        "geometry": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "coordinates": {
+                  "items": {
+                    "additionalItems": false,
+                    "items": [
+                      {
+                        "maximum": 42.5,
+                        "minimum": 27,
+                        "type": "number"
+                      },
+                      {
+                        "maximum": 47.5,
+                        "minimum": 40.5,
+                        "type": "number"
+                      }
+                    ],
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "minItems": 2,
+                  "type": "array"
+                },
+                "type": {
+                  "const": "LineString"
+                }
+              },
+              "required": [
+                "type",
+                "coordinates"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "coordinates": {
+                  "items": {
+                    "items": {
+                      "additionalItems": false,
+                      "items": [
+                        {
+                          "maximum": 42.5,
+                          "minimum": 27,
+                          "type": "number"
+                        },
+                        {
+                          "maximum": 47.5,
+                          "minimum": 40.5,
+                          "type": "number"
+                        }
+                      ],
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "type": "array"
+                    },
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "type": {
+                  "const": "MultiLineString"
+                }
+              },
+              "required": [
+                "type",
+                "coordinates"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "coordinates": {
+                  "items": {
+                    "items": {
+                      "additionalItems": false,
+                      "items": [
+                        {
+                          "maximum": 42.5,
+                          "minimum": 27,
+                          "type": "number"
+                        },
+                        {
+                          "maximum": 47.5,
+                          "minimum": 40.5,
+                          "type": "number"
+                        }
+                      ],
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "type": "array"
+                    },
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "type": {
+                  "const": "Polygon"
+                }
+              },
+              "required": [
+                "type",
+                "coordinates"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "coordinates": {
+                  "items": {
+                    "items": {
+                      "items": {
+                        "additionalItems": false,
+                        "items": [
+                          {
+                            "maximum": 42.5,
+                            "minimum": 27,
+                            "type": "number"
+                          },
+                          {
+                            "maximum": 47.5,
+                            "minimum": 40.5,
+                            "type": "number"
+                          }
+                        ],
+                        "maxItems": 2,
+                        "minItems": 2,
+                        "type": "array"
+                      },
+                      "minItems": 4,
+                      "type": "array"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "type": {
+                  "const": "MultiPolygon"
+                }
+              },
+              "required": [
+                "type",
+                "coordinates"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "$id": "urn:litora:input:coastline_geojson:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/geometry"
+        },
+        {
+          "$ref": "#/$defs/feature"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "crs": {
+              "additionalProperties": false,
+              "properties": {
+                "properties": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "enum": [
+                        "EPSG:4326",
+                        "urn:ogc:def:crs:EPSG::4326",
+                        "urn:ogc:def:crs:OGC:1.3:CRS84"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "const": "name"
+                }
+              },
+              "required": [
+                "type",
+                "properties"
+              ],
+              "type": "object"
+            },
+            "features": {
+              "items": {
+                "$ref": "#/$defs/feature"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "name": {
+              "type": "string"
+            },
+            "numberMatched": {
+              "type": "integer"
+            },
+            "numberReturned": {
+              "type": "integer"
+            },
+            "timeStamp": {
+              "type": "string"
+            },
+            "totalFeatures": {
+              "type": "integer"
+            },
+            "type": {
+              "const": "FeatureCollection"
+            }
+          },
+          "required": [
+            "type",
+            "features"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 16777216
+  },
+  {
+    "role": "bathymetry_grid_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:bathymetry_grid_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "depth": {
+            "type": "number"
+          },
+          "lat": {
+            "maximum": 47.5,
+            "minimum": 40.5,
+            "type": "number"
+          },
+          "lon": {
+            "maximum": 42.5,
+            "minimum": 27,
+            "type": "number"
+          }
+        },
+        "required": [
+          "lat",
+          "lon",
+          "depth"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 67108864
+  },
+  {
+    "role": "wave_climate",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:wave_climate:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "direction_from_deg": {
+                "type": "number"
+              },
+              "duration_hours": {
+                "type": "number"
+              },
+              "hs_m": {
+                "type": "number"
+              },
+              "time": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+                "type": "string"
+              },
+              "tp_s": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "duration_hours",
+              "hs_m",
+              "tp_s",
+              "direction_from_deg"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "source": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "conditions"
+      ],
+      "type": "object"
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 16777216
+  },
+  {
+    "role": "shoreline_observations_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:shoreline_observations_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "oneOf": [
+        {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "lat": {
+                "type": "number"
+              },
+              "lon": {
+                "type": "number"
+              },
+              "shoreline_change_rate_m_per_year": {
+                "type": "number"
+              },
+              "uncertainty_m_per_year": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "lat",
+              "lon",
+              "shoreline_change_rate_m_per_year"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "observations": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "lat": {
+                    "type": "number"
+                  },
+                  "lon": {
+                    "type": "number"
+                  },
+                  "shoreline_change_rate_m_per_year": {
+                    "type": "number"
+                  },
+                  "uncertainty_m_per_year": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "lat",
+                  "lon",
+                  "shoreline_change_rate_m_per_year"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "observations"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 16777216
+  },
+  {
+    "role": "longshore_sediment_sources_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:longshore_sediment_sources_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "data_source": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "point_index": {
+            "type": "integer"
+          },
+          "source_rate_m3_s": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "point_index",
+          "source_rate_m3_s",
+          "description",
+          "data_source"
+        ],
+        "type": "object"
+      },
+      "minItems": 0,
+      "type": "array"
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 1048576
+  },
+  {
+    "role": "longshore_structures_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:longshore_structures_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "data_source": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "left_point_index": {
+            "type": "integer"
+          },
+          "transmission_coefficient": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "left_point_index",
+          "transmission_coefficient",
+          "kind",
+          "description",
+          "data_source"
+        ],
+        "type": "object"
+      },
+      "minItems": 0,
+      "type": "array"
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 1048576
+  },
+  {
+    "role": "bathymetry_source_json",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$id": "urn:litora:input:bathymetry_source_json:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "attribution": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "dataset_sha256": {
+              "pattern": "^[a-fA-F0-9]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "attribution",
+            "dataset_sha256"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "attribution": {
+              "type": "string"
+            },
+            "bounds": {
+              "additionalProperties": false,
+              "properties": {
+                "max_lat": {
+                  "type": "number"
+                },
+                "max_lon": {
+                  "type": "number"
+                },
+                "min_lat": {
+                  "type": "number"
+                },
+                "min_lon": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "min_lat",
+                "max_lat",
+                "min_lon",
+                "max_lon"
+              ],
+              "type": "object"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "dataset_file": {
+              "type": "string"
+            },
+            "dataset_sha256": {
+              "type": "string"
+            },
+            "horizontal_reference": {
+              "type": "string"
+            },
+            "land_filter": {
+              "type": "string"
+            },
+            "license": {
+              "type": "string"
+            },
+            "license_url": {
+              "type": "string"
+            },
+            "limitations": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 0,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "point_count": {
+              "type": "integer"
+            },
+            "processing_script": {
+              "type": "string"
+            },
+            "processing_software": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "resampling_method": {
+              "type": "string"
+            },
+            "schema_version": {
+              "type": "string"
+            },
+            "source_downloaded_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source_grid_interval_arc_seconds": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source_netcdf": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source_netcdf_sha256": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source_product": {
+              "type": "string"
+            },
+            "source_product_doi": {
+              "type": "string"
+            },
+            "source_url": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "target_resolution_arc_seconds": {
+              "type": "number"
+            },
+            "target_resolution_degrees": {
+              "type": "number"
+            },
+            "title": {
+              "type": "string"
+            },
+            "vertical_reference": {
+              "type": "string"
+            },
+            "vertical_reference_caveat": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "title",
+            "status",
+            "dataset_file",
+            "dataset_sha256",
+            "created_at",
+            "point_count",
+            "bounds",
+            "target_resolution_degrees",
+            "target_resolution_arc_seconds",
+            "source_product",
+            "source_downloaded_at",
+            "source_netcdf",
+            "source_netcdf_sha256",
+            "source_grid_interval_arc_seconds",
+            "horizontal_reference",
+            "vertical_reference",
+            "resampling_method",
+            "processing_script",
+            "license"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 67108864
+  },
+  {
+    "role": "shoreline_timeseries_geojson",
+    "schemaVersion": 1,
+    "format": "json",
+    "schema": {
+      "$defs": {
+        "feature": {
+          "additionalProperties": false,
+          "properties": {
+            "geometry": {
+              "additionalProperties": false,
+              "properties": {
+                "coordinates": {
+                  "items": {
+                    "additionalItems": false,
+                    "items": [
+                      {
+                        "maximum": 42.5,
+                        "minimum": 27,
+                        "type": "number"
+                      },
+                      {
+                        "maximum": 47.5,
+                        "minimum": 40.5,
+                        "type": "number"
+                      }
+                    ],
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "minItems": 2,
+                  "type": "array"
+                },
+                "type": {
+                  "const": "LineString"
+                }
+              },
+              "required": [
+                "type",
+                "coordinates"
+              ],
+              "type": "object"
+            },
+            "id": {
+              "type": [
+                "string",
+                "number"
+              ]
+            },
+            "properties": {
+              "additionalProperties": false,
+              "properties": {
+                "cloud_cover": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "date": {
+                  "type": "string"
+                },
+                "geoaccuracy": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "satname": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "tide_corrected": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "uncertainty_m": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "water_level_correction": {
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "date"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "const": "Feature"
+            }
+          },
+          "required": [
+            "type",
+            "geometry",
+            "properties"
+          ],
+          "type": "object"
+        },
+        "geometry": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "coordinates": {
+                  "items": {
+                    "additionalItems": false,
+                    "items": [
+                      {
+                        "maximum": 42.5,
+                        "minimum": 27,
+                        "type": "number"
+                      },
+                      {
+                        "maximum": 47.5,
+                        "minimum": 40.5,
+                        "type": "number"
+                      }
+                    ],
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "minItems": 2,
+                  "type": "array"
+                },
+                "type": {
+                  "const": "LineString"
+                }
+              },
+              "required": [
+                "type",
+                "coordinates"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "coordinates": {
+                  "items": {
+                    "items": {
+                      "additionalItems": false,
+                      "items": [
+                        {
+                          "maximum": 42.5,
+                          "minimum": 27,
+                          "type": "number"
+                        },
+                        {
+                          "maximum": 47.5,
+                          "minimum": 40.5,
+                          "type": "number"
+                        }
+                      ],
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "type": "array"
+                    },
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "type": {
+                  "const": "MultiLineString"
+                }
+              },
+              "required": [
+                "type",
+                "coordinates"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "coordinates": {
+                  "items": {
+                    "items": {
+                      "additionalItems": false,
+                      "items": [
+                        {
+                          "maximum": 42.5,
+                          "minimum": 27,
+                          "type": "number"
+                        },
+                        {
+                          "maximum": 47.5,
+                          "minimum": 40.5,
+                          "type": "number"
+                        }
+                      ],
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "type": "array"
+                    },
+                    "minItems": 4,
+                    "type": "array"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "type": {
+                  "const": "Polygon"
+                }
+              },
+              "required": [
+                "type",
+                "coordinates"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "coordinates": {
+                  "items": {
+                    "items": {
+                      "items": {
+                        "additionalItems": false,
+                        "items": [
+                          {
+                            "maximum": 42.5,
+                            "minimum": 27,
+                            "type": "number"
+                          },
+                          {
+                            "maximum": 47.5,
+                            "minimum": 40.5,
+                            "type": "number"
+                          }
+                        ],
+                        "maxItems": 2,
+                        "minItems": 2,
+                        "type": "array"
+                      },
+                      "minItems": 4,
+                      "type": "array"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "type": {
+                  "const": "MultiPolygon"
+                }
+              },
+              "required": [
+                "type",
+                "coordinates"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "$id": "urn:litora:input:shoreline_timeseries_geojson:v1",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "features": {
+              "items": {
+                "$ref": "#/$defs/feature"
+              },
+              "minItems": 2,
+              "type": "array"
+            },
+            "type": {
+              "const": "FeatureCollection"
+            }
+          },
+          "required": [
+            "type",
+            "features"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "description": "Фиксированная структура Lito; научную совместимость проверяет Go.",
+    "maxBytes": 16777216
+  },
+  {
+    "role": "flat_mesh_msh",
+    "schemaVersion": 1,
+    "format": "msh2",
+    "schema": null,
+    "description": "MSH 2.2 ASCII: узлы и двумерные элементы; для построения дна нужна full-quad сетка.",
+    "maxBytes": 536870912
+  },
+  {
+    "role": "seabed_msh",
+    "schemaVersion": 1,
+    "format": "msh2",
+    "schema": null,
+    "description": "MSH 2.2 ASCII с маркерами lito_model_kind=seabed и lito_schema_version=lito-seabed/v1.",
+    "maxBytes": 536870912
+  },
+  {
+    "role": "adaptive_field_csv",
+    "schemaVersion": 1,
+    "format": "csv",
+    "schema": null,
+    "columns": [
+      "schema_version",
+      "node_id",
+      "x_m",
+      "y_m",
+      "longitude_deg",
+      "latitude_deg",
+      "water_depth_m",
+      "depth_available",
+      "distance_to_coast_m",
+      "coast_curvature_deg",
+      "depth_gradient_deg",
+      "effective_gradient_deg",
+      "gradient_available",
+      "base_size_m",
+      "distance_refinement_m",
+      "curvature_refinement_m",
+      "gradient_refinement_m",
+      "raw_target_size_m",
+      "target_size_m",
+      "growth_limited",
+      "zone"
+    ],
+    "description": "Таблица ADAPT-01 с фиксированными колонками.",
+    "maxBytes": 536870912
+  },
+  {
+    "role": "expert_ratings_tsv",
+    "schemaVersion": 1,
+    "format": "tsv",
+    "schema": null,
+    "columns": [
+      "presentation_id",
+      "expert_id",
+      "decision",
+      "geometry",
+      "bathymetry",
+      "suitability",
+      "confidence",
+      "comment"
+    ],
+    "description": "Лист AI-01, две строки заголовка и восемь TSV-полей оценки.",
+    "maxBytes": 2097152
+  }
+]

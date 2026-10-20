@@ -17,8 +17,8 @@ Worker теперь копирует поставляемый каталог `da
 
 | Kind | Файлы снимка |
 | --- | --- |
-| `dimension` | `data/black-sea.json` |
-| `map` | `data/black-sea.json`, `data/examples/sochi-local-segment.geojson` |
+| `dimension` | `data/coastline/black-sea.geojson`, `data/coastline/black-sea.metadata.json` |
+| `map` | Те же контур и паспорт, `data/examples/sochi-local-segment.geojson` |
 | `erosion` | Сегмент Сочи, волны, батиметрия, манифест кэша; инвентарь сооружений, если он присутствует и является JSON-массивом |
 | `dimension_dataset` | `input.geojson` после сверки размера и SHA-256 с паспортом dataset |
 

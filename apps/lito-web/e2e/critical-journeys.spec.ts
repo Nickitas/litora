@@ -125,6 +125,39 @@ const articleInputs: ScientificInputDto[] = articleInputRoles.map(
   })
 );
 
+const seabedKinds = [
+  { kind: "mesh", title: "Плоская сетка", description: "Gmsh" },
+  { kind: "seabed_build", title: "Построить модель дна", description: "GEBCO" },
+  { kind: "seabed_render", title: "Карты и 3D-рельеф дна", description: "SVG" },
+  { kind: "seabed_adapt", title: "Поле размера адаптивной сетки", description: "h(x,y)" },
+] satisfies CalculationKindDto[];
+const seabedBuildJob = { ...job, kind: "seabed_build", status: "succeeded" as const, input: {} } satisfies CalculationJobDto;
+const seabedOutputs: ReusableScientificArtifactDto[] = ([
+  ["seabed_msh", "seabed/black-sea-depth.msh"],
+  ["export_metadata_json", "seabed/export-metadata.json"],
+  ["bathymetry_source_json", "seabed/bathymetry-source.json"],
+] as const).map(([role, filename], index) => ({
+  id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+  role, filename, jobId: seabedBuildJob.id, jobKind: "seabed_build", sizeBytes: 1024,
+  sha256: "b".repeat(64), createdAt: job.createdAt,
+}));
+
+async function mockSeabedFigures(page: Page, submissions: unknown[], source: CalculationJobDto = seabedBuildJob, missing = false, outputs = seabedOutputs) {
+  return mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds") return { body: seabedKinds };
+    if (path === "/api/datasets") return { body: [] };
+    if (path === "/api/scientific-inputs/reusable-artifacts") return { body: outputs };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") {
+      submissions.push(body);
+      return { status: 201, body: { ...job, id: "99999999-9999-4999-8999-999999999999" } };
+    }
+    if (path === `/api/calculations/${source.id}`) return missing ? { status: 404, body: { message: "Расчёт не найден" } } : { body: source };
+    if (path === "/api/calculations/99999999-9999-4999-8999-999999999999") return { body: job };
+  });
+}
+
 type ApiReply = { status?: number; body: unknown };
 
 async function mockApi(
@@ -153,6 +186,8 @@ async function mockApi(
         body = undefined;
       }
       let result = reply(path, method, body, url.searchParams);
+      if (!result && path === "/api/scientific-inputs/formats" && method === "GET")
+        result = { body: JSON.parse(await readFile(new URL("../../lito-cli/data/schemas/scientific-inputs-v1.json", import.meta.url), "utf8")) };
       if (!result && path === "/api/calculations/page" && method === "GET") {
         const legacy = reply(
           "/api/calculations",
@@ -1668,7 +1703,7 @@ test("перед запуском объясняются входы, огран�
   for (const item of [
     {
       kind: "dimension",
-      source: "Поставляемая обзорная линия Чёрного моря",
+      source: "Полный закреплённый контур MarineRegions (9 635 точек)",
       limitation: "Оценка зависит от детализации линии",
       reference: "fractal-analysis-scope.md",
     },
@@ -1680,8 +1715,8 @@ test("перед запуском объясняются входы, огран�
     },
     {
       kind: "map",
-      source: "Поставляемая обзорная схема Чёрного моря",
-      limitation: "Карта нужна для ориентира",
+      source: "Полный закреплённый контур MarineRegions и локальный участок Сочи",
+      limitation: "Граница морского района нужна для обзора",
       reference: "black-sea-map.md",
     },
     {
@@ -1723,6 +1758,134 @@ test("перед запуском объясняются входы, огран�
   ).toBeVisible();
   await referenceTab.close();
   await expect(dialog).toBeVisible();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+for (const theme of ["light", "dark"] as const) {
+  test(`карты дна: рисунки 3 и 5 наследуют модель и паспорта, ${theme}`, async ({ page }) => {
+    const submissions: unknown[] = [];
+    const observed = await mockSeabedFigures(page, submissions);
+    await page.setViewportSize({ width: 360, height: 780 });
+    await page.goto(`/lab/calculations/${seabedBuildJob.id}`);
+    await chooseTheme(page, theme);
+    const next = page.getByRole("link", { name: "Рисунок 5 · Фактическая сетка", exact: true });
+    await next.focus();
+    await next.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+    await expect(dialog.getByRole("combobox", { name: "Что рассчитать" })).toHaveText("Карты и 3D-рельеф дна");
+    for (const field of ["modelInputId", "exportMetadataInputId", "sourceMetadataInputId"]) {
+      await expect(dialog.locator(`#scientific-${field}`)).not.toHaveText(/Выберите|Нет подходящих/);
+    }
+    await expect(dialog.getByText("Обзор глубин и фрагменты", { exact: false })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+    await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+    await expect.poll(() => submissions.length).toBe(1);
+    expect(submissions[0]).toMatchObject({ kind: "seabed_render", input: {
+      modelInputId: seabedOutputs[0].id, exportMetadataInputId: seabedOutputs[1].id,
+      sourceMetadataInputId: seabedOutputs[2].id, isobaths: "20,50,100,200,500,1000,1500,2000",
+    } });
+    expect(observed.unexpected).toEqual([]);
+    expect(observed.pageErrors).toEqual([]);
+  });
+}
+
+test("карты дна: рисунок 4 использует поле примера 200–1000 м и существующие файлы", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const observed = await mockSeabedFigures(page, submissions);
+  await page.goto(`/lab/calculations?new=1&workflow=size-field&source=${seabedBuildJob.id}`);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+  await expect(dialog.locator("#adapt-minSize")).toHaveValue("200");
+  await expect(dialog.locator("#adapt-coastSize")).toHaveValue("300");
+  await expect(dialog.locator("#adapt-shelfSize")).toHaveValue("500");
+  await expect(dialog.locator("#adapt-deepSize")).toHaveValue("1000");
+  await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  expect(submissions[0]).toMatchObject({ kind: "seabed_adapt", input: {
+    modelInputId: seabedOutputs[0].id, sourceMetadataInputId: seabedOutputs[2].id,
+    minSize: 200, coastSize: 300, shelfSize: 500, deepSize: 1000,
+  } });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("карты дна: недоступный источник не подменяется чужой или последней моделью", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const observed = await mockSeabedFigures(page, submissions, seabedBuildJob, true);
+  await page.goto(`/lab/calculations?new=1&workflow=bathymetry&source=${seabedBuildJob.id}`);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+  await expect(dialog.getByRole("alert")).toContainText("Не удалось открыть исходный расчёт");
+  await expect(dialog.locator("#scientific-modelInputId")).toHaveText("Выберите вход");
+  await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+  await expect(dialog.getByText("Выберите все научные входные файлы для этого сценария.")).toBeVisible();
+  expect(submissions).toEqual([]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("карты дна: паспорт для карт выбирается из сборки модели, а не из другого задания", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const adapted = { ...seabedBuildJob, id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", kind: "seabed_adapt",
+    input: { modelInputId: seabedOutputs[0].id, sourceMetadataInputId: seabedOutputs[2].id } };
+  const unrelated = { ...seabedOutputs[1], id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", jobId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" };
+  const observed = await mockSeabedFigures(page, submissions, adapted, false, [unrelated, ...seabedOutputs]);
+  await page.goto(`/lab/calculations?new=1&workflow=bathymetry&source=${adapted.id}`);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+  await expect(dialog.locator("#scientific-exportMetadataInputId")).not.toHaveText(/Выберите|Нет подходящих/);
+  await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  expect(submissions[0]).toMatchObject({ kind: "seabed_render", input: {
+    modelInputId: seabedOutputs[0].id, exportMetadataInputId: seabedOutputs[1].id, sourceMetadataInputId: seabedOutputs[2].id,
+  } });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("карты дна: несколько плоских сеток требуют явного выбора", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const meshed = { ...seabedBuildJob, kind: "mesh" };
+  const outputs = [0, 1].map((index) => ({ ...seabedOutputs[index], role: "flat_mesh_msh" as const, jobKind: "mesh", filename: `mesh-${index}.msh` }));
+  const observed = await mockSeabedFigures(page, submissions, meshed, false, outputs);
+  await page.goto(`/lab/calculations?new=1&workflow=build&source=${meshed.id}`);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+  await expect(dialog.locator("#scientific-flatMeshInputId")).toHaveText("Выберите вход");
+  await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+  expect(submissions).toEqual([]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("карты дна: отключённые heavy-сценарии остаются видимыми и не запускаются", async ({ page }) => {
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds") return { body: kinds };
+    if (path === "/api/datasets" || path === "/api/calculations") return { body: [] };
+  });
+  await openNewCalculation(page);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+  for (const name of ["Рисунок 3 · Обзор глубин", "Рисунок 4 · Поле размера ячеек", "Рисунок 5 · Фактическая сетка"]) {
+    await expect(dialog.getByRole("button", { name, exact: true })).toBeDisabled();
+  }
+  await expect(dialog.getByText("Расчёты дна отключены на сервере.").first()).toBeVisible();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("карты дна: галерея подписывает реальные рисунки 3–5 и даёт переход к полю", async ({ page }) => {
+  const filenames = ["seabed/svg/bathymetry-overview.svg", "seabed/svg/mesh-details.svg", "seabed/svg/size-field.svg"];
+  const rendered = { ...seabedBuildJob, kind: "seabed_render", artifacts: filenames.map((filename, index) => ({
+    id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(index + 1).padStart(12, "0")}`, category: "output" as const,
+    filename, contentType: "image/svg+xml", sizeBytes: 256, sha256: "c".repeat(64), downloadUrl: `/private/${index}.svg`,
+  })) } satisfies CalculationJobDto;
+  await page.route("**/private/*.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="160" height="100" fill="teal"/></svg>' }));
+  const observed = await mockSeabedFigures(page, [], rendered);
+  await page.goto(`/lab/calculations/${rendered.id}`);
+  for (const title of ["Рисунок 3 · Обзор глубин", "Рисунок 4 · Поле размера ячеек", "Рисунок 5 · Фактическая сетка"]) {
+    await expect(page.getByRole("img", { name: title, exact: true })).toBeVisible();
+  }
+  await expect(page.getByText("Новая сетка ещё не построена.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Рисунок 4 · Поле размера ячеек", exact: true }))
+    .toHaveAttribute("href", `/lab/calculations?new=1&workflow=size-field&source=${rendered.id}`);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -1944,7 +2107,7 @@ test("рисунок 5 собирается из AI-01 с выбранными �
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
   await dialog
     .getByRole("button", {
-      name: "Заполнить как рисунок 5: три фрагмента 125–250 м",
+      name: "Компоновка AI-01: три фрагмента 125–250 м",
     })
     .click();
   await expect(dialog.getByRole("status")).toContainText(

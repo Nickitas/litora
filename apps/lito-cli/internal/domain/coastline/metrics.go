@@ -8,7 +8,7 @@ import (
 )
 
 // MainCalculation выполняет основной расчёт и выводит информацию о береговой линии
-func MainCalculation(coast []geometry.LatLon, datasetName, source string) SanityCheckResult {
+func MainCalculation(coast []geometry.LatLon, datasetName, source string) {
 	segmentCount := 0
 	if len(coast) > 1 {
 		segmentCount = len(coast) - 1
@@ -20,22 +20,19 @@ func MainCalculation(coast []geometry.LatLon, datasetName, source string) Sanity
 
 	fmt.Printf("\nКоличество точек:                        %d\n", len(coast))
 	fmt.Printf("Количество сегментов:                    %d\n", segmentCount)
+	if datasetName != "" {
+		fmt.Printf("Набор данных:                            %s\n", datasetName)
+	}
 	if source != "" {
 		fmt.Printf("Источник данных:                         %s\n", source)
 	}
 
 	totalLength := geometry.PolylineLength(coast)
-	sanity := SanityCheck(datasetName, totalLength)
 	fmt.Printf("Общая длина береговой линии:              %.0f км\n", totalLength)
 	if segmentCount > 0 {
 		fmt.Printf("Средняя длина сегмента:                   %.1f км\n\n", totalLength/float64(segmentCount))
 	} else {
 		fmt.Printf("Средняя длина сегмента:                   0.0 км\n\n")
-	}
-
-	if sanity.Warning != "" {
-		fmt.Println(sanity.Warning)
-		fmt.Println()
 	}
 
 	fmt.Println("Ключевые точки береговой линии:")
@@ -57,7 +54,6 @@ func MainCalculation(coast []geometry.LatLon, datasetName, source string) Sanity
 
 	fmt.Println(strings.Repeat("═", 80))
 	fmt.Printf("Итого: %.0f км\n", totalLength)
-	return sanity
 }
 
 // consolePointEntry представляет запись точки для консольного вывода

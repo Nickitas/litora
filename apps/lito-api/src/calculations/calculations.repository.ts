@@ -407,7 +407,7 @@ export class CalculationsRepository {
             contentType: artifact.content_type,
             sizeBytes: Number(artifact.size_bytes),
             sha256: artifact.sha256,
-            downloadUrl: await this.storage.downloadUrl(artifact.object_key),
+            downloadUrl: await this.storage.downloadUrl(artifact.object_key, 900, artifact.content_type),
           }),
         ),
       ),

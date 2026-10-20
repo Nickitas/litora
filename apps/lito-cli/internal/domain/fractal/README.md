@@ -438,7 +438,7 @@ import (
 )
 
 func main() {
-    points, _, err := coastline.LoadFromJSON("data/black-sea.json")
+    points, _, err := coastline.LoadFromJSON("data/coastline/black-sea.geojson")
     if err != nil {
         panic(err)
     }
@@ -452,7 +452,7 @@ func main() {
 
 ```go
 func main() {
-    points, _, err := coastline.LoadFromJSON("data/black-sea.json")
+    points, _, err := coastline.LoadFromJSON("data/coastline/black-sea.geojson")
     if err != nil {
         panic(err)
     }
