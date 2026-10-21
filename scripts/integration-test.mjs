@@ -153,6 +153,23 @@ assert.equal(uploaded.sourceRevision, "test-snapshot-1");
 assert.match(uploaded.sha256, /^[a-f0-9]{64}$/);
 assert.equal((await first.request("/datasets"))[0].id, uploaded.id);
 assert.deepEqual(await second.request("/datasets"), []);
+const viewedDataset = await first.request(`/datasets/${uploaded.id}`);
+assert.deepEqual(viewedDataset, { ...uploaded, geometry: inputGeometry });
+for (const suffix of ["", "/content"]) {
+  await anonymous.request(`/datasets/${uploaded.id}${suffix}`, "GET", undefined, 401);
+  await second.request(`/datasets/${uploaded.id}${suffix}`, "GET", undefined, 404);
+  await first.request(`/datasets/${randomUUID()}${suffix}`, "GET", undefined, 404);
+  await first.request(`/datasets/not-a-uuid${suffix}`, "GET", undefined, 400);
+}
+const datasetFile = await fetch(`${base}/datasets/${uploaded.id}/content`, {
+  headers: { Authorization: `Bearer ${first.token}` },
+});
+assert.equal(datasetFile.status, 200);
+assert.equal(datasetFile.headers.get("cache-control"), "private, no-store");
+assert.match(datasetFile.headers.get("content-type"), /^application\/geo\+json/);
+const datasetBytes = Buffer.from(await datasetFile.arrayBuffer());
+assert.deepEqual(datasetBytes, Buffer.from(JSON.stringify(inputGeometry)));
+assert.equal(createHash("sha256").update(datasetBytes).digest("hex"), uploaded.sha256);
 const scientificBytes = await readFile(new URL("../apps/lito-cli/data/coastline/black-sea.geojson", import.meta.url));
 const emptyScientificQuota = {
   usedCount: 0, limitCount: 20, usedBytes: 0, limitBytes: 2 * 1024 ** 3,

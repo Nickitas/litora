@@ -12,6 +12,7 @@ import type {
   CreateDatasetDto,
   CreateScientificInputDto,
   DatasetDto,
+  DatasetDetailDto,
   HealthDto,
   LoginDto,
   RegisterDto,
@@ -157,6 +158,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
     method = "GET",
     body?: unknown,
     attempts = 0,
+    parseResponse: (response: Response) => Promise<T> = (response) => response.json() as Promise<T>,
   ): Promise<T> {
     await ensureFreshToken(path);
     const sentToken = accessToken;
@@ -180,13 +182,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
     ) {
       if (attempts < 3) {
         if (!accessToken || sentToken === accessToken) await refresh(sentToken);
-        return send<T>(path, method, body, attempts + 1);
+        return send<T>(path, method, body, attempts + 1, parseResponse);
       }
       throw new Error("Не удалось подтвердить доступ. Повторите попытку.");
     }
     if (!response.ok)
       throw await responseError(response, `Ошибка API: ${response.status}`);
-    return response.json() as Promise<T>;
+    return parseResponse(response);
   }
   async function session(path: string, body?: unknown) {
     const result = await send<AuthDto>(path, "POST", body);
@@ -293,6 +295,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
     scientificCoastline: (id: string) => send<CoastlinePreviewDto>(`/scientific-inputs/${encodeURIComponent(id)}/coastline-preview`),
     scientificInputFormats: () => send<ScientificInputFormatDto[]>("/scientific-inputs/formats"),
     datasets: () => send<DatasetDto[]>("/datasets"),
+    dataset: (id: string) => send<DatasetDetailDto>(`/datasets/${encodeURIComponent(id)}`),
+    datasetContent: (id: string) => send<Blob>(
+      `/datasets/${encodeURIComponent(id)}/content`, "GET", undefined, 0,
+      (response) => response.blob(),
+    ),
     createDataset: (body: CreateDatasetDto) =>
       send<DatasetDto>("/datasets", "POST", body),
     scientificInputs: () => send<ScientificInputDto[]>("/scientific-inputs"),

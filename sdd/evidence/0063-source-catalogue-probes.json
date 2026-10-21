@@ -1,0 +1,609 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-10-21",
+  "sourceCommit": "0f317d6bc1fb9db437c7b334ef838b61eda20d5f",
+  "catalogueUrl": "https://catalogue.dataspace.copernicus.eu/odata/v1/Products",
+  "catalogueDocumentationUrl": "https://documentation.dataspace.copernicus.eu/APIs/OData.html",
+  "purpose": "Проверка наличия каталожных сцен Sentinel-2 L1C в поисковой точке каждого района, не проверка научной пригодности.",
+  "query": {
+    "method": "GET",
+    "filterTemplate": "Collection/Name eq 'SENTINEL-2' and Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq 'S2MSI1C') and OData.CSC.Intersects(area=geography'SRID=4326;POINT({longitude} {latitude})') and ContentDate/Start ge {year}-01-01T00:00:00Z and ContentDate/Start lt {nextYear}-01-01T00:00:00Z",
+    "select": "Id,Name,ContentDate",
+    "top": 1,
+    "orderBy": {
+      "2016": "ContentDate/Start asc",
+      "2025": "ContentDate/Start desc"
+    },
+    "crs": "EPSG:4326",
+    "coordinateOrder": [
+      "longitude",
+      "latitude"
+    ],
+    "pointMeaning": "Выбранная для поиска точка района; не измеренная береговая точка и не окончательная ROI.",
+    "cloudFilterApplied": false
+  },
+  "limitations": [
+    "Наличие одной сцены не подтверждает полноту покрытия десятилетия, отсутствие облаков или наличие видимого берега.",
+    "Повтор одного productId у соседних районов ожидаем: одна сцена может пересекать несколько поисковых точек.",
+    "Пиксели, облака, качество геопривязки и точность линии не проверялись; снимки не скачивались.",
+    "Наблюдаемые линии, волновые ряды, батиметрические выборки и независимый контроль этим протоколом не подготовлены."
+  ],
+  "probes": [
+    {
+      "regionId": "sochi-01",
+      "queue": 1,
+      "searchPoint": [
+        39.69,
+        43.61
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "c177e8ed-8465-40e4-9069-03c4ca584bd9",
+          "name": "S2A_MSIL1C_20160104T081332_N0500_R078_T37TEJ_20231009T092744.SAFE",
+          "start": "2016-01-04T08:13:32.029000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "1f9ef3f8-7269-4bf7-a109-9c8ba5ab083a",
+          "name": "S2B_MSIL1C_20251230T082249_N0511_R121_T37TEJ_20251230T101339.SAFE",
+          "start": "2025-12-30T08:22:49.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "gelendzhik-01",
+      "queue": 1,
+      "searchPoint": [
+        38.07,
+        44.54
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "c372cdb8-7f6b-4e15-a664-e79bc5037407",
+          "name": "S2A_MSIL1C_20160107T082332_N0500_R121_T37TDK_20231023T144127.SAFE",
+          "start": "2016-01-07T08:23:32.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "18fa97f0-ea51-4fd4-8d17-f7522e7bcc7b",
+          "name": "S2A_MSIL1C_20251230T083531_N0511_R021_T37TDK_20251230T090622.SAFE",
+          "start": "2025-12-30T08:35:31.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "turkey-01",
+      "queue": 1,
+      "searchPoint": [
+        35.9,
+        41.75
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "53e46896-6d50-49ea-a0fd-31c2bd90b240",
+          "name": "S2A_MSIL1C_20160110T083322_N0500_R021_T37TBG_20231008T014850.SAFE",
+          "start": "2016-01-10T08:33:22.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "327d25f8-3431-4145-a6ee-a5863c532dcd",
+          "name": "S2A_MSIL1C_20251230T083531_N0511_R021_T36TYM_20251230T090622.SAFE",
+          "start": "2025-12-30T08:35:31.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "anapa-01",
+      "queue": 1,
+      "searchPoint": [
+        37.24,
+        44.99
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "f418a4c3-9189-41c4-8fda-0e13e9b29d79",
+          "name": "S2A_MSIL1C_20160110T083322_N0500_R021_T37TCK_20231008T014850.SAFE",
+          "start": "2016-01-10T08:33:22.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "942ab843-0c75-4b95-a941-4a058eaad7b7",
+          "name": "S2A_MSIL1C_20251230T083531_N0511_R021_T37TCK_20251230T090622.SAFE",
+          "start": "2025-12-30T08:35:31.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "batumi-01",
+      "queue": 1,
+      "searchPoint": [
+        41.63,
+        41.65
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "05412fe4-d25d-487a-a242-cf8d58349e66",
+          "name": "S2A_MSIL1C_20160101T080332_N0500_R035_T38TKM_20231023T170513.SAFE",
+          "start": "2016-01-01T08:03:32.029000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "0d25362d-23ae-4e4d-ab61-665bd9c5a1f9",
+          "name": "S2A_MSIL1C_20251231T080731_N0511_R035_T37TGG_20251231T084749.SAFE",
+          "start": "2025-12-31T08:07:31.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "burgas-01",
+      "queue": 1,
+      "searchPoint": [
+        27.49,
+        42.49
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "b6219b2b-7297-4234-8620-0f81759a58dd",
+          "name": "S2A_MSIL1C_20160102T091402_N0500_R050_T35TNH_20231009T083519.SAFE",
+          "start": "2016-01-02T09:14:02.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "1762ebdb-55e8-4445-8fce-fde23727c990",
+          "name": "S2C_MSIL1C_20251230T091411_N0511_R050_T35TNH_20251230T110950.SAFE",
+          "start": "2025-12-30T09:14:11.025000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "danube-01",
+      "queue": 1,
+      "searchPoint": [
+        29.67,
+        45.16
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "35d238d0-356d-4ed2-8c3c-1b8b52c906a8",
+          "name": "S2A_MSIL1C_20160109T090342_N0500_R007_T35TQL_20231008T080221.SAFE",
+          "start": "2016-01-09T09:03:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "d4860a72-8f5c-443e-86d3-a9094ded34a7",
+          "name": "S2A_MSIL1C_20251229T090421_N0511_R007_T35TQL_20251229T095815.SAFE",
+          "start": "2025-12-29T09:04:21.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "odesa-01",
+      "queue": 1,
+      "searchPoint": [
+        30.76,
+        46.45
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "d3de4d48-dcbc-4641-aef1-fa71dccd03f4",
+          "name": "S2A_MSIL1C_20160106T085342_N0500_R107_T35TQM_20231017T172759.SAFE",
+          "start": "2016-01-06T08:53:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "b7140c0f-ac9b-4737-bba2-f5a3ba3f6ca4",
+          "name": "S2A_MSIL1C_20251229T090421_N0511_R007_T35TQM_20251229T095815.SAFE",
+          "start": "2025-12-29T09:04:21.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "poti-rioni-01",
+      "queue": 2,
+      "searchPoint": [
+        41.65,
+        42.16
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "05412fe4-d25d-487a-a242-cf8d58349e66",
+          "name": "S2A_MSIL1C_20160101T080332_N0500_R035_T38TKM_20231023T170513.SAFE",
+          "start": "2016-01-01T08:03:32.029000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "0d25362d-23ae-4e4d-ab61-665bd9c5a1f9",
+          "name": "S2A_MSIL1C_20251231T080731_N0511_R035_T37TGG_20251231T084749.SAFE",
+          "start": "2025-12-31T08:07:31.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "kobuleti-01",
+      "queue": 2,
+      "searchPoint": [
+        41.77,
+        41.95
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "05412fe4-d25d-487a-a242-cf8d58349e66",
+          "name": "S2A_MSIL1C_20160101T080332_N0500_R035_T38TKM_20231023T170513.SAFE",
+          "start": "2016-01-01T08:03:32.029000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "0d25362d-23ae-4e4d-ab61-665bd9c5a1f9",
+          "name": "S2A_MSIL1C_20251231T080731_N0511_R035_T37TGG_20251231T084749.SAFE",
+          "start": "2025-12-31T08:07:31.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "trabzon-rize-01",
+      "queue": 2,
+      "searchPoint": [
+        40.25,
+        41.02
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "66f26f72-b327-4387-8f3c-ac5426545869",
+          "name": "S2A_MSIL1C_20160104T081332_N0500_R078_T37TEF_20231009T092744.SAFE",
+          "start": "2016-01-04T08:13:32.029000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "7e859fa6-274f-4a23-9976-2f8ae21968cc",
+          "name": "S2B_MSIL1C_20251227T081249_N0511_R078_T37TFF_20251227T094952.SAFE",
+          "start": "2025-12-27T08:12:49.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "giresun-01",
+      "queue": 2,
+      "searchPoint": [
+        38.43,
+        40.91
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "bd9014ea-f1db-45ba-b06b-cff7a98e5c18",
+          "name": "S2A_MSIL1C_20160107T082332_N0500_R121_T37TDF_20231023T144127.SAFE",
+          "start": "2016-01-07T08:23:32.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "44b15f83-6f49-4ce3-ba9e-22396e6b03b2",
+          "name": "S2B_MSIL1C_20251230T082249_N0511_R121_T37TDF_20251230T101339.SAFE",
+          "start": "2025-12-30T08:22:49.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "yesilirmak-01",
+      "queue": 2,
+      "searchPoint": [
+        36.61,
+        41.37
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "0398c8ec-d6a2-4a00-82cb-a0e85cb0b1f3",
+          "name": "S2A_MSIL1C_20160107T082332_N0500_R121_T36TYL_20231023T144127.SAFE",
+          "start": "2016-01-07T08:23:32.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "9d0dfd9b-e682-44fb-8304-9623c34073e2",
+          "name": "S2A_MSIL1C_20251230T083531_N0511_R021_T36TYL_20251230T090622.SAFE",
+          "start": "2025-12-30T08:35:31.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "sinop-01",
+      "queue": 2,
+      "searchPoint": [
+        35.16,
+        42.03
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "f14cccda-9303-4dc1-a0e8-84fbd38e838e",
+          "name": "S2A_MSIL1C_20160110T083322_N0500_R021_T36TXM_20231008T014850.SAFE",
+          "start": "2016-01-10T08:33:22.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "8be4caa4-e9db-4bdc-a872-7fd6832b621b",
+          "name": "S2A_MSIL1C_20251230T083531_N0511_R021_T36TXM_20251230T090622.SAFE",
+          "start": "2025-12-30T08:35:31.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "sakarya-01",
+      "queue": 2,
+      "searchPoint": [
+        30.57,
+        41.13
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "1467c438-07bb-4ef2-9e5a-35eee89b5006",
+          "name": "S2A_MSIL1C_20160106T085342_N0500_R107_T36TTL_20231017T172759.SAFE",
+          "start": "2016-01-06T08:53:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "457e3a82-d523-446a-965f-22ecaaa932b9",
+          "name": "S2B_MSIL1C_20251229T085259_N0511_R107_T36TTL_20251229T105124.SAFE",
+          "start": "2025-12-29T08:52:59.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "kilyos-01",
+      "queue": 2,
+      "searchPoint": [
+        29,
+        41.25
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "bf773182-0fe5-402f-b101-3f0720f66ac3",
+          "name": "S2A_MSIL1C_20160106T085342_N0500_R107_T35TPF_20231017T172759.SAFE",
+          "start": "2016-01-06T08:53:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "1bc3c7cf-41e6-4159-97f9-f47d5961174e",
+          "name": "S2A_MSIL1C_20251229T090421_N0511_R007_T35TPF_20251229T095815.SAFE",
+          "start": "2025-12-29T09:04:21.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "igneada-01",
+      "queue": 2,
+      "searchPoint": [
+        27.99,
+        41.88
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "562f5660-f82b-4f6b-8fe8-98095d4b67d4",
+          "name": "S2A_MSIL1C_20160109T090342_N0500_R007_T35TNG_20231023T132253.SAFE",
+          "start": "2016-01-09T09:03:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "63c73b49-41e7-4f47-aea7-69a8f4240907",
+          "name": "S2A_MSIL1C_20251229T090421_N0511_R007_T35TNG_20251229T095815.SAFE",
+          "start": "2025-12-29T09:04:21.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "varna-kamchia-01",
+      "queue": 2,
+      "searchPoint": [
+        27.91,
+        43.07
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "0e5559af-ddb4-4772-aba8-60adde3fec5b",
+          "name": "S2A_MSIL1C_20160109T090342_N0500_R007_T35TNH_20231008T080221.SAFE",
+          "start": "2016-01-09T09:03:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "ad70bced-3076-41dc-94f4-a3d500694cae",
+          "name": "S2A_MSIL1C_20251229T090421_N0511_R007_T35TNH_20251229T095815.SAFE",
+          "start": "2025-12-29T09:04:21.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "shabla-kaliakra-01",
+      "queue": 2,
+      "searchPoint": [
+        28.54,
+        43.43
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "78eca649-5398-435d-9175-ad0cc8aad822",
+          "name": "S2A_MSIL1C_20160109T090342_N0500_R007_T35TPJ_20231008T080221.SAFE",
+          "start": "2016-01-09T09:03:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "7baf1723-51b2-4a07-a70c-e97eb7cc3d4b",
+          "name": "S2A_MSIL1C_20251229T090421_N0511_R007_T35TPJ_20251229T095815.SAFE",
+          "start": "2025-12-29T09:04:21.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "mamaia-01",
+      "queue": 2,
+      "searchPoint": [
+        28.64,
+        44.25
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "991da127-3d8d-44c6-afb1-b93fe0cf0da2",
+          "name": "S2A_MSIL1C_20160109T090342_N0500_R007_T35TPK_20231008T080221.SAFE",
+          "start": "2016-01-09T09:03:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "5dc9a9db-ee27-4164-8a5c-4b424e7b3e9d",
+          "name": "S2A_MSIL1C_20251229T090421_N0511_R007_T35TPK_20251229T095815.SAFE",
+          "start": "2025-12-29T09:04:21.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "tendra-01",
+      "queue": 2,
+      "searchPoint": [
+        31.85,
+        46.2
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "5e5a8981-daac-4c36-a9e4-b17c8ed15733",
+          "name": "S2A_MSIL1C_20160106T085342_N0500_R107_T36TVS_20231017T172759.SAFE",
+          "start": "2016-01-06T08:53:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "bf100abc-50bb-4f37-8eaf-38acd3402f9c",
+          "name": "S2B_MSIL1C_20251229T085259_N0511_R107_T36TVS_20251229T105124.SAFE",
+          "start": "2025-12-29T08:52:59.024000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "kalamita-01",
+      "queue": 2,
+      "searchPoint": [
+        33.45,
+        45.08
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "5205ad34-2338-41bc-aa62-96730f6c3bf0",
+          "name": "S2A_MSIL1C_20160103T084342_N0500_R064_T36TWR_20231025T051513.SAFE",
+          "start": "2016-01-03T08:43:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "af2ea686-0fa3-442e-b6da-321ced618609",
+          "name": "S2C_MSIL1C_20251231T084401_N0511_R064_T36TWR_20251231T101843.SAFE",
+          "start": "2025-12-31T08:44:01.025000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "yalta-alushta-01",
+      "queue": 2,
+      "searchPoint": [
+        34.28,
+        44.55
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "96d27740-c5de-4c5c-9dc2-cbfff255199f",
+          "name": "S2A_MSIL1C_20160103T084342_N0500_R064_T36TXQ_20231025T051513.SAFE",
+          "start": "2016-01-03T08:43:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "0720b9cb-b86c-4448-97bc-46b1ec1f0e24",
+          "name": "S2C_MSIL1C_20251231T084401_N0511_R064_T36TXQ_20251231T101843.SAFE",
+          "start": "2025-12-31T08:44:01.025000Z"
+        }
+      ]
+    },
+    {
+      "regionId": "feodosia-koktebel-01",
+      "queue": 2,
+      "searchPoint": [
+        35.3,
+        44.97
+      ],
+      "samples": [
+        {
+          "year": 2016,
+          "httpStatus": 200,
+          "productId": "96d27740-c5de-4c5c-9dc2-cbfff255199f",
+          "name": "S2A_MSIL1C_20160103T084342_N0500_R064_T36TXQ_20231025T051513.SAFE",
+          "start": "2016-01-03T08:43:42.030000Z"
+        },
+        {
+          "year": 2025,
+          "httpStatus": 200,
+          "productId": "0720b9cb-b86c-4448-97bc-46b1ec1f0e24",
+          "name": "S2C_MSIL1C_20251231T084401_N0511_R064_T36TXQ_20251231T101843.SAFE",
+          "start": "2025-12-31T08:44:01.025000Z"
+        }
+      ]
+    }
+  ]
+}

@@ -90,6 +90,9 @@ const DatasetsPage = lazy(() =>
     default: m.DatasetsPage,
   }))
 );
+const DatasetDetailPage = lazy(() =>
+  import("@/pages/account/dataset-detail.page").then((m) => ({ default: m.DatasetDetailPage }))
+);
 const ShorelineVisualizationPage = lazy(() =>
   import("@/pages/account/shoreline-visualization.page").then((m) => ({
     default: m.ShorelineVisualizationPage,
@@ -119,6 +122,7 @@ export const routes: AppRoute[] = [
       { path: "calculations", Component: CalculationsPage },
       { path: "calculations/:jobId", Component: CalculationDetailPage },
       { path: "datasets", Component: DatasetsPage },
+      { path: "datasets/:datasetId", Component: DatasetDetailPage },
       { path: "shoreline", Component: ShorelineVisualizationPage },
     ],
   },

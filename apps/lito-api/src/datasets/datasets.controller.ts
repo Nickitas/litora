@@ -1,10 +1,15 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Get,
+  Header,
   Inject,
+  Param,
+  ParseUUIDPipe,
   Post,
   Req,
+  StreamableFile,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -15,7 +20,7 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { AuthGuard, type AuthRequest } from "../auth/auth.guard.js";
-import { DatasetResponse } from "../http-models.js";
+import { DatasetDetailResponse, DatasetResponse } from "../http-models.js";
 import { DatasetsRepository } from "./datasets.repository.js";
 import {
   maxDatasetBytes,
@@ -23,6 +28,11 @@ import {
   maxDatasetsPerUser,
   validateDataset,
 } from "./validation.js";
+
+const datasetIdPipe = new ParseUUIDPipe({
+  exceptionFactory: () =>
+    new BadRequestException("Некорректный UUID набора данных"),
+});
 
 @Controller("datasets")
 @ApiTags("Наборы данных")
@@ -38,6 +48,63 @@ export class DatasetsController {
   @ApiResponse({ status: 200, type: [DatasetResponse] })
   list(@Req() req: AuthRequest) {
     return this.datasets.list(req.user.id);
+  }
+
+  @Get(":id")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Паспорт и геометрия собственного набора" })
+  @ApiResponse({ status: 200, type: DatasetDetailResponse })
+  @ApiResponse({ status: 400, description: "Некорректный UUID" })
+  @ApiResponse({ status: 401, description: "Требуется авторизация" })
+  @ApiResponse({
+    status: 404,
+    description: "Набор отсутствует или принадлежит другому пользователю",
+  })
+  @ApiResponse({
+    status: 503,
+    description:
+      "Сохранённый объект недоступен или не прошёл проверку целостности",
+  })
+  async detail(
+    @Req() req: AuthRequest,
+    @Param("id", datasetIdPipe) id: string,
+  ) {
+    return (await this.datasets.readOwned(id, req.user.id)).detail;
+  }
+
+  @Get(":id/content")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({
+    summary: "Скачать сохранённые байты GeoJSON собственного набора",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "GeoJSON LineString; размер и SHA-256 соответствуют паспорту",
+    content: {
+      "application/geo+json": { schema: { type: "string", format: "binary" } },
+    },
+  })
+  @ApiResponse({ status: 400, description: "Некорректный UUID" })
+  @ApiResponse({ status: 401, description: "Требуется авторизация" })
+  @ApiResponse({
+    status: 404,
+    description: "Набор отсутствует или принадлежит другому пользователю",
+  })
+  @ApiResponse({
+    status: 503,
+    description:
+      "Сохранённый объект недоступен или не прошёл проверку целостности",
+  })
+  async content(
+    @Req() req: AuthRequest,
+    @Param("id", datasetIdPipe) id: string,
+  ) {
+    const { bytes } = await this.datasets.readOwned(id, req.user.id);
+    return new StreamableFile(bytes, {
+      type: "application/geo+json; charset=utf-8",
+      disposition: `attachment; filename="dataset-${id}.geojson"`,
+      length: bytes.length,
+    });
   }
 
   @Post()
@@ -66,7 +133,8 @@ export class DatasetsController {
         sourceRevision: {
           type: "string",
           maxLength: 120,
-          description: "Необязательная заявленная версия, дата снимка или ID выгрузки источника; API не подтверждает её независимо",
+          description:
+            "Необязательная заявленная версия, дата снимка или ID выгрузки источника; API не подтверждает её независимо",
         },
         license: {
           type: "string",

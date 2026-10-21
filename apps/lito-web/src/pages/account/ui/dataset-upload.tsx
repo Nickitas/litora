@@ -5,12 +5,15 @@ import { api } from "@/shared/api/client";
 import { Button } from "@/shared/shadcn/components/ui/button";
 import { Input } from "@/shared/shadcn/components/ui/input";
 import { Label } from "@/shared/shadcn/components/ui/label";
+import { suggestDatasetName } from "../model/dataset-name";
 
 export function DatasetUpload({
   onSaved,
+  existingNames,
   separated = true,
 }: {
   onSaved: (dataset: DatasetDto) => void;
+  existingNames: readonly string[];
   separated?: boolean;
 }) {
   const [file, setFile] = useState<File | null>(null);
@@ -28,6 +31,7 @@ export function DatasetUpload({
     setPending(true);
     setError("");
     try {
+      if (!name.trim()) throw new Error("Укажите название набора");
       if (!file) throw new Error("Выберите файл GeoJSON");
       if (file.size > 65_536)
         throw new Error("GeoJSON не должен превышать 64 КиБ");
@@ -42,7 +46,7 @@ export function DatasetUpload({
           "Выберите GeoJSON LineString с координатами [долгота, широта]"
         );
       const input = {
-        name,
+        name: name.trim(),
         source,
         ...(sourceRevision.trim()
           ? { sourceRevision: sourceRevision.trim() }
@@ -100,6 +104,7 @@ export function DatasetUpload({
             type="file"
             accept=".geojson,application/geo+json,application/json"
             required
+            disabled={pending}
             onChange={(event) => {
               const selected = event.target.files?.[0] ?? null;
               setFile(selected);
@@ -107,7 +112,12 @@ export function DatasetUpload({
               setSourceRevision("");
               setLicense("");
               if (selected)
-                setName(selected.name.replace(/\.geojson$/i, "").slice(0, 100));
+                setName(
+                  suggestDatasetName(
+                    selected.name.replace(/\.(geojson|json)$/i, ""),
+                    existingNames
+                  )
+                );
               else setName("");
             }}
           />
@@ -119,9 +129,14 @@ export function DatasetUpload({
             value={name}
             onChange={(event) => setName(event.target.value)}
             required
-            disabled={!file}
+            disabled={!file || pending}
             maxLength={100}
+            aria-describedby="dataset-name-hint"
           />
+          <p id="dataset-name-hint" className="text-xs text-muted-foreground">
+            Имя файла без расширения. При совпадении добавляем номер; название
+            можно полностью заменить.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="dataset-source">Источник данных</Label>
@@ -130,7 +145,7 @@ export function DatasetUpload({
             value={source}
             onChange={(event) => setSource(event.target.value)}
             required
-            disabled={!file}
+            disabled={!file || pending}
             maxLength={200}
           />
         </div>
@@ -142,18 +157,20 @@ export function DatasetUpload({
             id="dataset-source-revision"
             value={sourceRevision}
             onChange={(event) => setSourceRevision(event.target.value)}
-            disabled={!file}
+            disabled={!file || pending}
             maxLength={120}
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="dataset-license">Лицензия или условия использования</Label>
+          <Label htmlFor="dataset-license">
+            Лицензия или условия использования
+          </Label>
           <Input
             id="dataset-license"
             value={license}
             onChange={(event) => setLicense(event.target.value)}
             required
-            disabled={!file}
+            disabled={!file || pending}
             maxLength={100}
           />
         </div>

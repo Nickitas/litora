@@ -95,6 +95,16 @@ await storage.send(new PutObjectCommand({
 }));
 storage.destroy();
 
+for (const suffix of ["", "/content"]) {
+  const rejected = await fetch(`${base}/datasets/${dataset.id}${suffix}`, {
+    headers: { Authorization: `Bearer ${auth.accessToken}` },
+  });
+  assert.equal(rejected.status, 503, "Повреждённый набор нельзя просмотреть или скачать");
+  const failure = await rejected.json();
+  assert.equal(failure.message, "Не удалось прочитать сохранённый набор. Повторите попытку позже.");
+  assert.equal(JSON.stringify(failure).includes(key), false);
+}
+
 const job = await post(
   "/calculations",
   { kind: "dimension_dataset", input: { datasetId: dataset.id } },

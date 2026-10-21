@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
+import { createApiClient } from "@litora/api-client";
 import type {
   AuthDto,
   CalculationJobDto,
@@ -9,6 +10,7 @@ import type {
   CalculationDeletionRequestDto,
   CalculationMetadataExportV1,
   DatasetDto,
+  DatasetDetailDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
   ScientificInputQuotaDto,
@@ -25,7 +27,9 @@ import {
   coastlineExamples,
   defaultCoastlineDataset,
   defaultCoastlineExample,
+  findSavedExample,
 } from "@litora/generated-data";
+import { suggestDatasetName } from "../src/pages/account/model/dataset-name";
 
 const user = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -100,6 +104,149 @@ function savedExample(
     sha256: example.sha256,
   };
 }
+
+const datasetDetail: DatasetDetailDto = {
+  ...savedExample(defaultCoastlineExample, dataset.id),
+  name: "Берег для исследования",
+  geometry: defaultCoastlineDataset.geometry,
+};
+
+test("api-client сохраняет двоичный ответ после обновления access token", async () => {
+  let attempts = 0;
+  const headers: (string | null)[] = [];
+  const original = Buffer.from(JSON.stringify(datasetDetail.geometry));
+  const client = createApiClient({ baseUrl: "http://example.test/api", fetch: async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith("/auth/login") || path.endsWith("/auth/refresh"))
+      return Response.json({ ...session, accessToken: path.endsWith("/login") ? "initial-test-session" : "refreshed-test-session" });
+    expect(path).toBe(`/api/datasets/${dataset.id}/content`);
+    headers.push(new Headers(init?.headers).get("Authorization"));
+    attempts += 1;
+    return attempts === 1 ? Response.json({ message: "Сессия истекла" }, { status: 401 }) :
+      new Response(new Uint8Array(original), { headers: { "Content-Type": "application/geo+json" } });
+  } });
+  await client.login({ email: user.email, password: "isolated-test-password" });
+  const blob = await client.datasetContent(dataset.id);
+  expect(Buffer.from(await blob.arrayBuffer())).toEqual(original);
+  expect(headers).toEqual(["Bearer initial-test-session", "Bearer refreshed-test-session"]);
+});
+
+test("просмотр набора: карта, точный экспорт и явный переход к расчёту", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.route("https://tiles.openfreemap.org/**", (route) => route.abort());
+  let downloadFails = true;
+  const submissions: unknown[] = [];
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/datasets" && method === "GET") return { body: [datasetDetail] };
+    if (path === `/api/datasets/${dataset.id}`) return { body: datasetDetail };
+    if (path === `/api/datasets/${dataset.id}/content`) return downloadFails
+      ? { status: 503, body: { message: "Файл временно недоступен" } } : { body: datasetDetail.geometry };
+    if (path === "/api/calculations/kinds") return { body: kinds };
+    if (path === "/api/calculations" && method === "POST") {
+      submissions.push(body);
+      return { status: 201, body: job };
+    }
+    if (path === `/api/calculations/${job.id}`) return { body: job };
+  });
+  await page.goto("/lab/datasets");
+  const card = page.getByRole("link", { name: datasetDetail.name, exact: true });
+  await card.focus();
+  await card.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/lab/datasets/${dataset.id}$`));
+  await expect(page.getByRole("heading", { name: datasetDetail.name, level: 1 })).toBeVisible();
+  await expect(page.getByTestId("dataset-map-line")).not.toHaveAttribute("d", "");
+  await expect(page.getByTestId("dataset-map-bounds")).not.toHaveAttribute("d", "");
+  await expect(page.getByText(datasetDetail.sha256, { exact: true })).toBeVisible();
+  await expect(page.getByText("39.667927°", { exact: true })).toBeVisible();
+  await chooseTheme(page, "dark");
+  await page.getByRole("button", { name: "Увеличить карту" }).click();
+  await page.getByRole("button", { name: "Показать весь участок" }).click();
+  await expect(page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).resolves.toBe(true);
+  await chooseTheme(page, "light");
+  await page.getByRole("button", { name: "Скачать GeoJSON" }).click();
+  await expect(page.getByRole("alert")).toHaveText("Файл временно недоступен");
+  downloadFails = false;
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Скачать GeoJSON" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe(`dataset-${dataset.id}.geojson`);
+  const bytes = await readFile((await download.path())!);
+  expect(createHash("sha256").update(bytes).digest("hex")).toBe(datasetDetail.sha256);
+  expect(submissions).toEqual([]);
+  await page.getByRole("link", { name: "Рассчитать размерность" }).click();
+  await expect(page.getByRole("dialog", { name: "Новый расчёт" })).toBeVisible();
+  await expect(page.getByLabel("Что рассчитать")).toContainText("Своя береговая линия");
+  await expect(page.getByLabel("Набор данных")).toContainText(datasetDetail.name);
+  expect(submissions).toEqual([]);
+  await page.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page).toHaveURL(new RegExp(`/lab/calculations/${job.id}$`));
+  expect(submissions).toEqual([{ kind: "dimension_dataset", input: { datasetId: dataset.id } }]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("просмотр набора: ошибка с повтором, чужой и отсутствующий набор", async ({ page }) => {
+  await page.route("https://tiles.openfreemap.org/**", (route) => route.abort());
+  let available = false;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === `/api/datasets/${dataset.id}`) return available ? { body: datasetDetail }
+      : { status: 503, body: { message: "Хранилище временно недоступно" } };
+    if (path.startsWith("/api/datasets/")) return { status: 404, body: { message: "Набор данных не найден" } };
+    if (path === "/api/datasets") return { body: [datasetDetail] };
+  });
+  await page.goto(`/lab/datasets/${dataset.id}`);
+  await expect(page.getByRole("alert")).toContainText("Хранилище временно недоступно");
+  available = true;
+  await page.getByRole("button", { name: "Повторить загрузку" }).click();
+  await expect(page.getByRole("heading", { name: datasetDetail.name, level: 1 })).toBeVisible();
+  for (const id of ["99999999-9999-4999-8999-999999999999", "88888888-8888-4888-8888-888888888888"]) {
+    await page.goto(`/lab/datasets/${id}`);
+    await expect(page.getByRole("alert")).toContainText("Набор не найден или недоступен вашему аккаунту");
+    await expect(page.getByRole("button", { name: "Скачать GeoJSON" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Рассчитать размерность" })).toHaveCount(0);
+    await expect(page.getByTestId("dataset-map-line")).toHaveCount(0);
+  }
+  await page.getByRole("link", { name: "Все наборы" }).click();
+  await expect(page.getByRole("heading", { name: "Наборы данных", level: 1 })).toBeVisible();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("просмотр набора: отсутствующий UUID в форме не заменяется примером", async ({ page }) => {
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/datasets") return { body: [] };
+    if (path === "/api/calculations/kinds") return { body: kinds };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+  });
+  await page.goto(`/lab?new=1&dataset=${dataset.id}`);
+  await expect(page.getByRole("dialog", { name: "Новый расчёт" })).toBeVisible();
+  await expect(page.getByText("Исходный набор больше недоступен.", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Запустить расчёт" }).click();
+  await expect(page.getByRole("alert")).toContainText("Исходный набор данных недоступен");
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("просмотр набора: нулевой охват остаётся доступен без подложки", async ({ page }) => {
+  await page.route("https://tiles.openfreemap.org/**", (route) => route.abort());
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === `/api/datasets/${dataset.id}`) return { body: {
+      ...datasetDetail, pointCount: 2,
+      geometry: { type: "LineString", coordinates: [[39, 43], [39, 43]] },
+    } };
+  });
+  await page.goto(`/lab/datasets/${dataset.id}`);
+  await expect(page.getByTestId("dataset-map-line")).not.toHaveAttribute("d", /NaN|Infinity|^$/);
+  await expect(page.getByRole("heading", { name: "Паспорт набора" })).toBeVisible();
+  await page.getByRole("button", { name: "Увеличить карту" }).click();
+  await page.getByRole("button", { name: "Показать весь участок" }).click();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
 
 const articleInputRoles = [
   "seabed_msh",
@@ -412,6 +559,23 @@ test("каталог показывает паспорт набора, поис�
   await expect(page.getByRole("heading", { name: dataset.name })).toBeVisible();
   await expect(page.getByText(dataset.sha256)).toHaveCount(2);
   await expect(page.getByText("2 из 100 возможных")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Примеры для старта" })
+  ).toHaveAttribute("aria-expanded", "false");
+  const savedList = page.getByRole("region", { name: "Сохранённые наборы" });
+  const examples = page.getByRole("region", { name: "Примеры для старта" });
+  expect(
+    await savedList.evaluate(
+      (element, examplesId) =>
+        Boolean(
+          element.compareDocumentPosition(
+            document.getElementById(examplesId)!.closest("section")!
+          ) & Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+      "dataset-examples-heading"
+    )
+  ).toBe(true);
+  await expect(examples.getByRole("listitem")).toHaveCount(0);
   await page
     .getByRole("textbox", { name: "Поиск по названию и источнику" })
     .fill("экспедиция");
@@ -419,6 +583,13 @@ test("каталог показывает паспорт набора, поис�
   await expect(page.getByRole("heading", { name: dataset.name })).toHaveCount(
     0
   );
+  await expect(
+    page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).resolves.toBe(true);
+  await chooseTheme(page, "light");
+  await expect(page.getByRole("heading", { name: second.name })).toBeVisible();
   await expect(
     page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth
@@ -450,6 +621,29 @@ test("учебные контуры различаются геометрией 
   }
 });
 
+test("предложение названия различает совпадения и соблюдает лимит", () => {
+  expect(suggestDatasetName("Берег", [" БЕРЕГ ", "берег (2)"])).toBe("Берег (3)");
+  const longName = "Б".repeat(100);
+  expect(suggestDatasetName(`${longName}лишнее`, [
+    longName,
+    `${"Б".repeat(96)} (2)`,
+  ])).toBe(`${"Б".repeat(96)} (3)`);
+  expect(suggestDatasetName("   ", [])).toBe("Береговая линия");
+  for (const example of coastlineExamples) {
+    const renamed = {
+      ...savedExample(example, dataset.id),
+      name: "Название пользователя",
+    };
+    expect(findSavedExample([renamed], example)).toBe(renamed);
+    expect(findSavedExample([
+      { ...renamed, sourceRevision: "Другая версия" },
+    ], example)).toBeUndefined();
+    expect(findSavedExample([
+      { ...renamed, sha256: "0".repeat(64) },
+    ], example)).toBeUndefined();
+  }
+});
+
 test("каталог показывает сохранённые записи без предупреждения о повторах", async ({
   page,
 }) => {
@@ -476,31 +670,85 @@ test("каталог показывает сохранённые записи б
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("каталог сохраняет другой реальный пример только по выбору пользователя", async ({
+test("каталог сохраняет переименованный пример с паспортом и допускает повтор после ошибки", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
   const example = coastlineExamples.find((item) => item.key === "anapa")!;
-  const saved = savedExample(example, "77777777-7777-4777-8777-777777777773");
+  const saved = {
+    ...savedExample(example, "77777777-7777-4777-8777-777777777773"),
+    name: "Берег Анапы для сравнения",
+  };
+  const occupied = { ...dataset, name: example.suggestedName };
+  let savedSuccessfully = false;
   const submissions: unknown[] = [];
   const observed = await mockApi(page, (path, method, body) => {
     if (path === "/api/auth/refresh" && method === "POST")
       return { body: session };
-    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/datasets" && method === "GET")
+      return { body: savedSuccessfully ? [saved, occupied] : [occupied] };
     if (path === "/api/datasets" && method === "POST") {
       submissions.push(body);
+      if (submissions.length === 1)
+        return { status: 503, body: { message: "Сохранение временно недоступно" } };
+      savedSuccessfully = true;
       return { status: 201, body: saved };
     }
   });
 
   await page.goto("/lab/datasets");
+  const exampleToggle = page.getByRole("button", {
+    name: "Примеры для старта",
+  });
+  await expect(exampleToggle).toHaveAttribute("aria-expanded", "false");
+  expect(submissions).toEqual([]);
+  await exampleToggle.focus();
+  await exampleToggle.press("Enter");
+  await expect(exampleToggle).toHaveAttribute("aria-expanded", "true");
+  await exampleToggle.press("Space");
+  await expect(exampleToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(exampleToggle).toBeFocused();
+  await exampleToggle.press("Enter");
   const exampleCard = page
+    .getByRole("region", { name: "Примеры для старта" })
     .getByRole("listitem")
     .filter({ has: page.getByRole("heading", { name: example.dataset.name }) });
-  await exampleCard.getByRole("button", { name: "Сохранить набор" }).click();
+  const nameInput = exampleCard.getByLabel("Название", { exact: true });
+  await expect(nameInput).toHaveValue(`${example.suggestedName} (2)`);
+  await expect(nameInput).toHaveAttribute("maxlength", "100");
+  await nameInput.fill("   ");
+  await expect(exampleCard.getByRole("button", { name: "Сохранить набор" })).toBeDisabled();
+  expect(submissions).toEqual([]);
+  await chooseTheme(page, "dark");
+  await nameInput.fill(saved.name);
+  await nameInput.press("Enter");
+  await expect(page.getByRole("alert")).toHaveText("Сохранение временно недоступно");
+  await expect(nameInput).toHaveValue(saved.name);
+  await chooseTheme(page, "light");
+  await nameInput.press("Enter");
   await expect(
     exampleCard.getByRole("button", { name: "Уже в моих наборах" })
   ).toBeDisabled();
-  expect(submissions).toEqual([example.dataset]);
+  await expect(
+    page
+      .getByRole("region", { name: "Сохранённые наборы" })
+      .getByRole("heading", { name: saved.name })
+  ).toBeVisible();
+  const savedCard = page.getByRole("region", { name: "Сохранённые наборы" })
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("heading", { name: saved.name }) });
+  await expect(savedCard.getByText(saved.sha256)).toBeVisible();
+  await expect(savedCard.getByText(saved.source, { exact: true })).toBeVisible();
+  await expect(savedCard.getByText(saved.sourceRevision!, { exact: true })).toBeVisible();
+  expect(submissions).toEqual([
+    { ...example.dataset, name: saved.name },
+    { ...example.dataset, name: saved.name },
+  ]);
+  await page.reload();
+  await page.getByRole("button", { name: "Примеры для старта" }).click();
+  await expect(exampleCard.getByRole("button", { name: "Уже в моих наборах" })).toBeDisabled();
+  await expect(nameInput).toHaveValue(saved.name);
+  await expect(page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).resolves.toBe(true);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -520,6 +768,24 @@ test("каталог создаёт набор отдельно от запус�
 
   await page.goto("/lab/datasets");
   await expect(page.getByText("Пока нет сохранённых наборов")).toBeVisible();
+  await expect(
+    page.getByText("Добавьте свой GeoJSON кнопкой «Добавить набор».", {
+      exact: false,
+    })
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Где взять данные" }).click();
+  await expect(page).toHaveURL(
+    /\/docs\/reference\/black-sea-source-catalogue\.md$/
+  );
+  await expect(
+    page.getByRole("heading", {
+      name: "Каталог исходных данных Чёрного моря",
+      exact: true,
+      level: 1,
+    })
+  ).toBeVisible();
+  await page.goBack();
+  await expect(page.getByText("Пока нет сохранённых наборов")).toBeVisible();
   await page.getByRole("button", { name: "Добавить набор" }).click();
   await page.getByLabel("Файл GeoJSON").setInputFiles({
     name: "coast.geojson",
@@ -534,6 +800,7 @@ test("каталог создаёт набор отдельно от запус�
       })
     ),
   });
+  await expect(page.getByLabel("Название", { exact: true })).toHaveValue("coast");
   await page.getByLabel("Название", { exact: true }).fill(saved.name);
   await page.getByLabel("Источник данных").fill(saved.source);
   await page
@@ -560,6 +827,73 @@ test("каталог создаёт набор отдельно от запус�
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
+
+for (const entry of ["каталог", "форма расчёта"] as const) {
+  test(`${entry}: совпадающие имена файлов получают номер и допускают замену`, async ({ page }) => {
+    const occupied = [
+      { ...dataset, name: " COAST " },
+      { ...dataset, id: "44444444-4444-4444-8444-444444444444", name: "coast (2)" },
+    ];
+    const geometry = { type: "LineString", coordinates: [[37, 44], [37.1, 44.1]] };
+    const bytes = Buffer.from(JSON.stringify(geometry));
+    const saved = {
+      ...dataset,
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Мой берег",
+      sourceRevision: "Съёмка-2025",
+      pointCount: 2,
+      sizeBytes: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+    };
+    const submissions: unknown[] = [];
+    const observed = await mockApi(page, (path, method, body) => {
+      if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+      if (path === "/api/datasets" && method === "GET") return { body: occupied };
+      if (path === "/api/calculations/kinds" && method === "GET") return { body: kinds };
+      if (path === "/api/calculations" && method === "GET") return { body: [] };
+      if (path === "/api/datasets" && method === "POST") {
+        submissions.push(body);
+        return { status: 201, body: saved };
+      }
+    });
+
+    if (entry === "каталог") {
+      await page.goto("/lab/datasets");
+      await page.getByRole("button", { name: "Добавить набор" }).click();
+    } else {
+      await openNewCalculation(page);
+      await chooseOption(page, "Что рассчитать", "Своя береговая линия");
+      await page.getByRole("button", { name: "Загрузить GeoJSON" }).click();
+    }
+    await page.getByLabel("Файл GeoJSON").setInputFiles({
+      name: "coast.JSON", mimeType: "application/json", buffer: bytes,
+    });
+    const nameInput = page.getByLabel("Название", { exact: true });
+    await expect(nameInput).toHaveValue("coast (3)");
+    await expect(nameInput).toHaveAttribute("maxlength", "100");
+    await nameInput.fill("   ");
+    await page.getByLabel("Источник данных").fill(saved.source);
+    await page.getByLabel("Версия источника или дата снимка (необязательно)").fill(saved.sourceRevision);
+    await page.getByLabel("Лицензия или условия использования").fill(saved.license);
+    await page.getByRole("button", { name: "Сохранить набор" }).click();
+    await expect(page.getByRole("alert")).toHaveText("Укажите название набора");
+    expect(submissions).toEqual([]);
+    await nameInput.fill(`  ${saved.name}  `);
+    await page.getByRole("button", { name: "Сохранить набор" }).click();
+    if (entry === "каталог") {
+      await expect(page.getByRole("heading", { name: saved.name })).toBeVisible();
+      await expect(page.getByText(saved.sha256)).toBeVisible();
+    } else {
+      await expect(page.getByLabel("Набор данных")).toContainText(saved.name);
+    }
+    expect(submissions).toEqual([{
+      name: saved.name, source: saved.source, sourceRevision: saved.sourceRevision,
+      license: saved.license, crs: "EPSG:4326", coordinateUnit: "degrees", geometry,
+    }]);
+    expect(observed.unexpected).toEqual([]);
+    expect(observed.pageErrors).toEqual([]);
+  });
+}
 
 test("каталог различает ошибку API и пустой результат поиска", async ({
   page,
@@ -3289,13 +3623,13 @@ test("встроенный пример GeoJSON сохраняется при з
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("повторный расчёт использует сохранённый пример Сочи без новой записи", async ({
+test("повторный расчёт использует переименованный пример Сочи без новой записи", async ({
   page,
 }) => {
-  const example = savedExample(
-    defaultCoastlineExample,
-    "77777777-7777-4777-8777-777777777774"
-  );
+  const example = {
+    ...savedExample(defaultCoastlineExample, "77777777-7777-4777-8777-777777777774"),
+    name: "Мой участок Сочи",
+  };
   const copy = { ...example, id: "77777777-7777-4777-8777-777777777775" };
   const jobs: unknown[] = [];
   const customJob = {

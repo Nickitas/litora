@@ -1,10 +1,24 @@
 import { createHash, randomUUID } from "node:crypto";
-import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { CreateDatasetDto, DatasetDto } from "@litora/contracts";
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
+import type {
+  CreateDatasetDto,
+  DatasetDetailDto,
+  DatasetDto,
+} from "@litora/contracts";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
 import { datasetSchemaVersion } from "../schema-versions.js";
-import { maxDatasetsPerUser } from "./validation.js";
+import {
+  maxDatasetBytes,
+  maxDatasetsPerUser,
+  validateDataset,
+} from "./validation.js";
 
 export interface DatasetRow {
   id: string;
@@ -69,13 +83,16 @@ export class DatasetsRepository {
           "SELECT id FROM users WHERE id=$1 FOR UPDATE",
           [userId],
         );
-        if (!owner.rowCount) throw new NotFoundException("Пользователь не найден");
+        if (!owner.rowCount)
+          throw new NotFoundException("Пользователь не найден");
         const count = await client.query<{ count: string }>(
           "SELECT count(*)::text AS count FROM datasets WHERE owner_id=$1",
           [userId],
         );
         if (Number(count.rows[0].count) >= maxDatasetsPerUser)
-          throw new ConflictException("Достигнут лимит сохранённых наборов данных");
+          throw new ConflictException(
+            "Достигнут лимит сохранённых наборов данных",
+          );
         const result = await client.query<DatasetRow>(
           `INSERT INTO datasets(id,owner_id,name,source,source_revision,license,crs,coordinate_unit,point_count,size_bytes,sha256,object_key,schema_version)
            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
@@ -124,5 +141,51 @@ export class DatasetsRepository {
     );
     if (!result.rows[0]) throw new NotFoundException("Набор данных не найден");
     return result.rows[0];
+  }
+
+  async readOwned(
+    id: string,
+    userId: string,
+  ): Promise<{
+    detail: DatasetDetailDto;
+    bytes: Buffer;
+  }> {
+    const row = await this.getOwned(id, userId);
+    try {
+      if (row.schema_version !== datasetSchemaVersion)
+        throw new Error("Неподдерживаемая версия набора");
+      const bytes = await this.storage.readObjectBytes(
+        row.object_key,
+        maxDatasetBytes,
+      );
+      if (
+        bytes.length > maxDatasetBytes ||
+        bytes.length !== row.size_bytes ||
+        createHash("sha256").update(bytes).digest("hex") !== row.sha256
+      )
+        throw new Error("Нарушена целостность набора");
+      const geometry: unknown = JSON.parse(bytes.toString("utf8"));
+      const validated = validateDataset({
+        name: row.name,
+        source: row.source,
+        ...(row.source_revision === null
+          ? {}
+          : { sourceRevision: row.source_revision }),
+        license: row.license,
+        crs: row.crs,
+        coordinateUnit: row.coordinate_unit,
+        geometry,
+      });
+      if (validated.dataset.geometry.coordinates.length !== row.point_count)
+        throw new Error("Число точек не совпадает с паспортом");
+      return {
+        detail: { ...dto(row), geometry: validated.dataset.geometry },
+        bytes,
+      };
+    } catch {
+      throw new ServiceUnavailableException(
+        "Не удалось прочитать сохранённый набор. Повторите попытку позже.",
+      );
+    }
   }
 }

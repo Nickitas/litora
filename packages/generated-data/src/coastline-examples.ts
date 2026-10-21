@@ -2,6 +2,7 @@ import type { CreateDatasetDto, DatasetDto } from "@litora/contracts";
 
 export interface CoastlineExample {
   key: string;
+  suggestedName: string;
   description: string;
   sourceUrl: string;
   sha256: string;
@@ -233,6 +234,7 @@ const anapaDataset: CreateDatasetDto = {
 
 export const defaultCoastlineExample: CoastlineExample = {
   key: "sochi",
+  suggestedName: "Пример: Сочи · выгрузка 2026-08-17",
   description: "Короткий стартовый сегмент для знакомства с расчётом.",
   sourceUrl: "https://www.openstreetmap.org/way/59530506",
   sha256: "a09a982cea1b548825da784a0a6ed02d08dafdbcdad078fbc88920b6b8a9bae2",
@@ -243,6 +245,7 @@ export const coastlineExamples: CoastlineExample[] = [
   defaultCoastlineExample,
   {
     key: "gelendzhik",
+    suggestedName: "Пример: Геленджик · OSM v7, 2022-10-15",
     description: "Подробная линия для изучения влияния плотности точек.",
     sourceUrl: "https://www.openstreetmap.org/way/165783307/history/7",
     sha256: "283eafef076a18783d2c575d0c559c05cfc7fb7775130d6b92e4a51fb804d454",
@@ -250,6 +253,7 @@ export const coastlineExamples: CoastlineExample[] = [
   },
   {
     key: "anapa",
+    suggestedName: "Пример: Анапа · OSM v15, 2023-02-10",
     description:
       "Городской берег со сложным контуром для проверки чувствительности расчёта.",
     sourceUrl: "https://www.openstreetmap.org/way/104318270/history/15",
@@ -265,7 +269,6 @@ export function findSavedExample(
   return datasets.find(
     (dataset) =>
       dataset.sha256 === example.sha256 &&
-      dataset.name === example.dataset.name &&
       dataset.source === example.dataset.source &&
       (dataset.sourceRevision ?? "") ===
         (example.dataset.sourceRevision ?? "") &&

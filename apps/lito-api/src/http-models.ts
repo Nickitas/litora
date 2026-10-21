@@ -6,6 +6,8 @@ import type {
   CalculationPageDto,
   CoastlinePreviewDto,
   DatasetDto,
+  DatasetDetailDto,
+  GeoJsonLineStringDto,
   ObservedShorelineSeriesDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
@@ -141,6 +143,19 @@ export class DatasetResponse implements DatasetDto {
   @ApiProperty({ type: Number }) sizeBytes!: number;
   @ApiProperty({ type: String }) sha256!: string;
   @ApiProperty({ type: String, format: "date-time" }) createdAt!: string;
+}
+
+export class DatasetDetailResponse extends DatasetResponse implements DatasetDetailDto {
+  @ApiProperty({
+    type: "object", required: ["type", "coordinates"], additionalProperties: false,
+    properties: {
+      type: { type: "string", enum: ["LineString"] },
+      coordinates: { type: "array", minItems: 2, maxItems: 500,
+        items: { type: "array", minItems: 2, maxItems: 2, items: { type: "number" } } },
+    },
+    description: "Сохранённый LineString в EPSG:4326, [долгота, широта]; просмотр не заменяет научную проверку Go",
+  })
+  geometry!: GeoJsonLineStringDto;
 }
 
 export class ScientificInputResponse implements ScientificInputDto {

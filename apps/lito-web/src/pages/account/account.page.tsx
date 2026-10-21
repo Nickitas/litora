@@ -15,6 +15,7 @@ export function AccountPage() {
   const createRequested = searchParams.get("new") === "1";
   const workflow = parseSeabedWorkflow(searchParams.get("workflow"));
   const sourceJobId = searchParams.get("source") ?? undefined;
+  const initialDatasetId = searchParams.get("dataset") ?? undefined;
   const coastlineContinuation = useMemo(() => workflow ? undefined : parseCoastlineContinuation(searchParams), [searchParams, workflow]);
   const [newCalculationOpen, setNewCalculationOpen] = useState(false);
   const newCalculationTriggerRef = useRef<HTMLElement | null>(null);
@@ -35,6 +36,7 @@ export function AccountPage() {
           next.delete("source");
           next.delete("scenario");
           next.delete("coastline");
+          next.delete("dataset");
           return next;
         },
         { replace: true }
@@ -100,11 +102,12 @@ export function AccountPage() {
         </div>
         {(newCalculationOpen || repeatJobId || createRequested) && (
           <NewCalculationDialog
-            key={repeatJobId ?? `${workflow ?? "new"}:${sourceJobId ?? ""}:${coastlineContinuation?.kind ?? ""}:${coastlineContinuation?.artifactId ?? ""}`}
+            key={repeatJobId ?? `${workflow ?? "new"}:${sourceJobId ?? ""}:${coastlineContinuation?.kind ?? ""}:${coastlineContinuation?.artifactId ?? ""}:${initialDatasetId ?? ""}`}
             repeatJobId={repeatJobId ?? undefined}
             workflow={repeatJobId ? undefined : workflow}
             sourceJobId={sourceJobId}
             coastlineContinuation={repeatJobId ? undefined : coastlineContinuation}
+            initialDatasetId={repeatJobId || workflow || coastlineContinuation ? undefined : initialDatasetId}
             onOpenChange={changeNewCalculationOpen}
             onRestoreFocus={() => {
               const trigger = newCalculationTriggerRef.current;

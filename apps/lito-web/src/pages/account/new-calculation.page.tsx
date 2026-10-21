@@ -79,6 +79,7 @@ export function NewCalculationDialog({
   workflow,
   sourceJobId,
   coastlineContinuation,
+  initialDatasetId,
   onOpenChange,
   onRestoreFocus,
 }: {
@@ -86,6 +87,7 @@ export function NewCalculationDialog({
   workflow?: SeabedWorkflowId;
   sourceJobId?: string;
   coastlineContinuation?: CoastlineContinuation;
+  initialDatasetId?: string;
   onOpenChange: (open: boolean) => void;
   onRestoreFocus: () => void;
 }) {
@@ -160,6 +162,7 @@ export function NewCalculationDialog({
   const repeatApplied = useRef(false);
   const workflowApplied = useRef(false);
   const continuationApplied = useRef(false);
+  const datasetApplied = useRef(false);
   const [workflowSource, setWorkflowSource] = useState<CalculationJobDto | null>(null);
   const [workflowNote, setWorkflowNote] = useState("");
   const [workflowError, setWorkflowError] = useState("");
@@ -421,6 +424,13 @@ export function NewCalculationDialog({
             : (nextKinds[0]?.kind ?? current)
         );
         setLoadError("");
+        if (initialDatasetId && !datasetApplied.current && !repeatJobId) {
+          datasetApplied.current = true;
+          setKind("dimension_dataset");
+          const selected = nextDatasets.find((item) => item.id === initialDatasetId);
+          setDatasetId(selected?.id ?? "");
+          setMissingRepeatDataset(!selected);
+        }
         if (original.error) setRepeatError(`Не удалось открыть исходный расчёт: ${original.error}`);
         else setRepeatError("");
         if (coastlineContinuation && !continuationApplied.current && !repeatJobId) {
@@ -475,7 +485,7 @@ export function NewCalculationDialog({
     return () => {
       mounted = false;
     };
-  }, [revision, repeatJobId, applyStoredCalculation, workflow, sourceJobId, selectWorkflow, coastlineContinuation]);
+  }, [revision, repeatJobId, applyStoredCalculation, workflow, sourceJobId, selectWorkflow, coastlineContinuation, initialDatasetId]);
 
   function reload() {
     setLoading(true);
@@ -1667,6 +1677,7 @@ export function NewCalculationDialog({
 
         {isDatasetCalculation && datasetUploadOpen && (
           <DatasetUpload
+            existingNames={datasets.map((dataset) => dataset.name)}
             onSaved={(dataset) => {
               setDatasets((current) => [dataset, ...current]);
               setDatasetId(dataset.id);

@@ -475,6 +475,10 @@ export interface DatasetDto {
   createdAt: string;
 }
 
+export interface DatasetDetailDto extends DatasetDto {
+  geometry: GeoJsonLineStringDto;
+}
+
 export type ScientificInputRole =
   | "coastline_geojson"
   | "shoreline_timeseries_geojson"

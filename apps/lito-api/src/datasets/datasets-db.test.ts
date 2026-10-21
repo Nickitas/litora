@@ -39,6 +39,11 @@ test(
       async deleteObject(key: string) {
         objects.delete(key);
       },
+      async readObjectBytes(key: string, limit: number) {
+        const bytes = objects.get(key);
+        assert.ok(bytes && bytes.length <= limit);
+        return bytes;
+      },
       async downloadUrl() {
         throw new Error("Входной набор не выдаётся через signed URL");
       },
@@ -82,6 +87,10 @@ test(
         [saved.id],
       );
       assert.deepEqual(await datasets.list(users[1]), []);
+      const viewed = await datasets.readOwned(saved.id, users[0]);
+      assert.deepEqual(viewed.detail.geometry, dataset.geometry);
+      assert.deepEqual(viewed.bytes, bytes);
+      await assert.rejects(datasets.readOwned(saved.id, users[1]), { status: 404 });
       await assert.rejects(datasets.getOwned(saved.id, users[1]), {
         status: 404,
       });
