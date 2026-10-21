@@ -210,10 +210,10 @@ export function DatasetsPage() {
   const quotaReached = datasets.length >= 100 && !error;
   const visibleDatasets = normalizedSearch
     ? datasets.filter((dataset) =>
-        `${dataset.name} ${dataset.source} ${dataset.sourceRevision ?? ""}`
-          .toLocaleLowerCase("ru-RU")
-          .includes(normalizedSearch)
-      )
+      `${dataset.name} ${dataset.source} ${dataset.sourceRevision ?? ""}`
+        .toLocaleLowerCase("ru-RU")
+        .includes(normalizedSearch)
+    )
     : datasets;
 
   function onSaved(dataset: DatasetDto) {
@@ -255,8 +255,7 @@ export function DatasetsPage() {
             Наборы данных
           </h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            Свои небольшие береговые линии для расчёта размерности. Здесь
-            хранится паспорт источника, а не оценка его научной пригодности.
+            Здесь хранится береговые линии для расчетов.
           </p>
         </div>
         <Button

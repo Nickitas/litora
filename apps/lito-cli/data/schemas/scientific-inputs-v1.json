@@ -425,7 +425,7 @@
           "type": "string"
         },
         "schema_version": {
-          "type": "string"
+          "const": "lito-relief-reference/v1"
         },
         "source_product": {
           "type": "string"
@@ -2116,8 +2116,39 @@
         "feature": {
           "additionalProperties": false,
           "properties": {
+            "bbox": {
+              "additionalItems": false,
+              "items": [
+                {
+                  "maximum": 42.5,
+                  "minimum": 27,
+                  "type": "number"
+                },
+                {
+                  "maximum": 47.5,
+                  "minimum": 40.5,
+                  "type": "number"
+                },
+                {
+                  "maximum": 42.5,
+                  "minimum": 27,
+                  "type": "number"
+                },
+                {
+                  "maximum": 47.5,
+                  "minimum": 40.5,
+                  "type": "number"
+                }
+              ],
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
             "geometry": {
               "$ref": "#/$defs/geometry"
+            },
+            "geometry_name": {
+              "type": "string"
             },
             "id": {
               "type": [
@@ -2147,6 +2178,34 @@
             {
               "additionalProperties": false,
               "properties": {
+                "bbox": {
+                  "additionalItems": false,
+                  "items": [
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 4,
+                  "minItems": 4,
+                  "type": "array"
+                },
                 "coordinates": {
                   "items": {
                     "additionalItems": false,
@@ -2182,6 +2241,34 @@
             {
               "additionalProperties": false,
               "properties": {
+                "bbox": {
+                  "additionalItems": false,
+                  "items": [
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 4,
+                  "minItems": 4,
+                  "type": "array"
+                },
                 "coordinates": {
                   "items": {
                     "items": {
@@ -2221,6 +2308,34 @@
             {
               "additionalProperties": false,
               "properties": {
+                "bbox": {
+                  "additionalItems": false,
+                  "items": [
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 4,
+                  "minItems": 4,
+                  "type": "array"
+                },
                 "coordinates": {
                   "items": {
                     "items": {
@@ -2260,6 +2375,34 @@
             {
               "additionalProperties": false,
               "properties": {
+                "bbox": {
+                  "additionalItems": false,
+                  "items": [
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 4,
+                  "minItems": 4,
+                  "type": "array"
+                },
                 "coordinates": {
                   "items": {
                     "items": {
@@ -2315,6 +2458,34 @@
         {
           "additionalProperties": false,
           "properties": {
+            "bbox": {
+              "additionalItems": false,
+              "items": [
+                {
+                  "maximum": 42.5,
+                  "minimum": 27,
+                  "type": "number"
+                },
+                {
+                  "maximum": 47.5,
+                  "minimum": 40.5,
+                  "type": "number"
+                },
+                {
+                  "maximum": 42.5,
+                  "minimum": 27,
+                  "type": "number"
+                },
+                {
+                  "maximum": 47.5,
+                  "minimum": 40.5,
+                  "type": "number"
+                }
+              ],
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
             "crs": {
               "additionalProperties": false,
               "properties": {
@@ -2432,12 +2603,18 @@
             "additionalProperties": false,
             "properties": {
               "direction_from_deg": {
+                "exclusiveMaximum": 360,
+                "minimum": 0,
                 "type": "number"
               },
               "duration_hours": {
+                "exclusiveMinimum": 0,
+                "maximum": 744,
                 "type": "number"
               },
               "hs_m": {
+                "exclusiveMinimum": 0,
+                "maximum": 30,
                 "type": "number"
               },
               "time": {
@@ -2445,6 +2622,8 @@
                 "type": "string"
               },
               "tp_s": {
+                "maximum": 30,
+                "minimum": 1,
                 "type": "number"
               }
             },
@@ -2741,7 +2920,7 @@
               "type": "string"
             },
             "schema_version": {
-              "type": "string"
+              "const": "1.0"
             },
             "source_downloaded_at": {
               "anyOf": [
@@ -2849,6 +3028,34 @@
         "feature": {
           "additionalProperties": false,
           "properties": {
+            "bbox": {
+              "additionalItems": false,
+              "items": [
+                {
+                  "maximum": 42.5,
+                  "minimum": 27,
+                  "type": "number"
+                },
+                {
+                  "maximum": 47.5,
+                  "minimum": 40.5,
+                  "type": "number"
+                },
+                {
+                  "maximum": 42.5,
+                  "minimum": 27,
+                  "type": "number"
+                },
+                {
+                  "maximum": 47.5,
+                  "minimum": 40.5,
+                  "type": "number"
+                }
+              ],
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
             "geometry": {
               "additionalProperties": false,
               "properties": {
@@ -2884,6 +3091,9 @@
               ],
               "type": "object"
             },
+            "geometry_name": {
+              "type": "string"
+            },
             "id": {
               "type": [
                 "string",
@@ -2894,25 +3104,27 @@
               "additionalProperties": false,
               "properties": {
                 "cloud_cover": {
+                  "maximum": 1,
+                  "minimum": 0,
                   "type": [
                     "number",
                     "null"
                   ]
                 },
                 "date": {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z| \\d{2}:\\d{2}:\\d{2})$",
                   "type": "string"
                 },
                 "geoaccuracy": {
+                  "minimum": 0,
                   "type": [
                     "number",
                     "null"
                   ]
                 },
                 "satname": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
+                  "pattern": "^[A-Za-z0-9_-]{1,30}$",
+                  "type": "string"
                 },
                 "tide_corrected": {
                   "type": [
@@ -2921,20 +3133,49 @@
                   ]
                 },
                 "uncertainty_m": {
+                  "exclusiveMinimum": 0,
                   "type": [
                     "number",
                     "null"
                   ]
                 },
                 "water_level_correction": {
-                  "type": [
-                    "object",
-                    "null"
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "method": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "source": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "vertical_datum": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "source",
+                        "vertical_datum"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
                   ]
                 }
               },
               "required": [
-                "date"
+                "date",
+                "satname"
               ],
               "type": "object"
             },
@@ -2954,6 +3195,34 @@
             {
               "additionalProperties": false,
               "properties": {
+                "bbox": {
+                  "additionalItems": false,
+                  "items": [
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 4,
+                  "minItems": 4,
+                  "type": "array"
+                },
                 "coordinates": {
                   "items": {
                     "additionalItems": false,
@@ -2989,6 +3258,34 @@
             {
               "additionalProperties": false,
               "properties": {
+                "bbox": {
+                  "additionalItems": false,
+                  "items": [
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 4,
+                  "minItems": 4,
+                  "type": "array"
+                },
                 "coordinates": {
                   "items": {
                     "items": {
@@ -3028,6 +3325,34 @@
             {
               "additionalProperties": false,
               "properties": {
+                "bbox": {
+                  "additionalItems": false,
+                  "items": [
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 4,
+                  "minItems": 4,
+                  "type": "array"
+                },
                 "coordinates": {
                   "items": {
                     "items": {
@@ -3067,6 +3392,34 @@
             {
               "additionalProperties": false,
               "properties": {
+                "bbox": {
+                  "additionalItems": false,
+                  "items": [
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 42.5,
+                      "minimum": 27,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 47.5,
+                      "minimum": 40.5,
+                      "type": "number"
+                    }
+                  ],
+                  "maxItems": 4,
+                  "minItems": 4,
+                  "type": "array"
+                },
                 "coordinates": {
                   "items": {
                     "items": {
@@ -3116,12 +3469,84 @@
         {
           "additionalProperties": false,
           "properties": {
+            "bbox": {
+              "additionalItems": false,
+              "items": [
+                {
+                  "maximum": 42.5,
+                  "minimum": 27,
+                  "type": "number"
+                },
+                {
+                  "maximum": 47.5,
+                  "minimum": 40.5,
+                  "type": "number"
+                },
+                {
+                  "maximum": 42.5,
+                  "minimum": 27,
+                  "type": "number"
+                },
+                {
+                  "maximum": 47.5,
+                  "minimum": 40.5,
+                  "type": "number"
+                }
+              ],
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            "crs": {
+              "additionalProperties": false,
+              "properties": {
+                "properties": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "enum": [
+                        "EPSG:4326",
+                        "urn:ogc:def:crs:EPSG::4326"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "const": "name"
+                }
+              },
+              "required": [
+                "type",
+                "properties"
+              ],
+              "type": "object"
+            },
             "features": {
               "items": {
                 "$ref": "#/$defs/feature"
               },
+              "maxItems": 2500,
               "minItems": 2,
               "type": "array"
+            },
+            "name": {
+              "type": "string"
+            },
+            "numberMatched": {
+              "type": "integer"
+            },
+            "numberReturned": {
+              "type": "integer"
+            },
+            "timeStamp": {
+              "type": "string"
+            },
+            "totalFeatures": {
+              "type": "integer"
             },
             "type": {
               "const": "FeatureCollection"
@@ -3191,14 +3616,14 @@
     "format": "tsv",
     "schema": null,
     "columns": [
-      "presentation_id",
-      "expert_id",
-      "decision",
-      "geometry",
-      "bathymetry",
-      "suitability",
-      "confidence",
-      "comment"
+      "Идентификатор карточки",
+      "Особенность",
+      "Эксперт",
+      "Берег 1–5",
+      "Изобаты 1–5",
+      "Сетка 1–5",
+      "Артефакты 1–5",
+      "Комментарий"
     ],
     "description": "Лист AI-01, две строки заголовка и восемь TSV-полей оценки.",
     "maxBytes": 2097152

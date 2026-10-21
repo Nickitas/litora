@@ -396,15 +396,15 @@ export function NewCalculationDialog({
     let mounted = true;
     const repeat = repeatJobId
       ? api.calculation(repeatJobId)
-          .then((job) => ({ job, error: "" }))
-          .catch((error: unknown) => ({ job: null, error: errorMessage(error) }))
+        .then((job) => ({ job, error: "" }))
+        .catch((error: unknown) => ({ job: null, error: errorMessage(error) }))
       : Promise.resolve({ job: null, error: "" });
     void Promise.all([
       api.calculationKinds(), api.datasets(), api.scientificInputs(),
       api.scientificInputQuota().catch(() => null), api.reusableScientificArtifacts(), repeat,
       workflow && sourceJobId
         ? api.calculation(sourceJobId).then((job) => ({ job, error: "" }))
-            .catch((error: unknown) => ({ job: null, error: errorMessage(error) }))
+          .catch((error: unknown) => ({ job: null, error: errorMessage(error) }))
         : Promise.resolve({ job: null, error: "" }),
     ])
       .then(([nextKinds, nextDatasets, nextScientific, nextQuota, nextArtifacts, original, source]) => {
@@ -452,7 +452,7 @@ export function NewCalculationDialog({
           if (!nextKinds.some((item) => item.kind === original.job.kind)) {
             setRepeatError("Сценарий исходного расчёта больше недоступен. Выберите другой сценарий.");
           } else if (!original.job.input || typeof original.job.input !== "object" ||
-                     Array.isArray(original.job.input)) {
+            Array.isArray(original.job.input)) {
             setRepeatError("У исходного расчёта нет пригодных параметров запуска.");
           } else {
             repeatApplied.current = true;
@@ -693,7 +693,7 @@ export function NewCalculationDialog({
               <DialogDescription className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">
                 {repeatJobId
                   ? "Проверьте сохранённые параметры и входы. Новый запуск использует текущую версию ядра и может дать другой результат."
-                  : "Выберите сценарий и входные данные. Задание попадёт в очередь только после запуска."}
+                  : "Выберите сценарий и входные данные."}
               </DialogDescription>
             </div>
           </div>
@@ -1007,8 +1007,10 @@ export function NewCalculationDialog({
                               disabled={hasAllFileIndexedProfile}
                               onChange={(event) => {
                                 const modelMaxPoints = Number(event.target.value);
-                                updateAllOptions((current) => ({ ...current, modelMaxPoints,
-                                  noModelSimplify: modelMaxPoints > 0 ? false : current.noModelSimplify }));
+                                updateAllOptions((current) => ({
+                                  ...current, modelMaxPoints,
+                                  noModelSimplify: modelMaxPoints > 0 ? false : current.noModelSimplify
+                                }));
                               }} />
                           </div>
                           <label className="flex min-h-11 items-center gap-3 text-sm">

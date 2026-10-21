@@ -64,8 +64,7 @@ export function AccountOverviewPage() {
             Обзор исследований
           </h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            Продолжайте активные расчёты или начните новый сценарий с понятными
-            ограничениями и входными данными.
+            Создавайте новые или просматривайте выполненные расчеты.
           </p>
         </div>
         <DialogTrigger asChild>
@@ -134,8 +133,7 @@ export function AccountOverviewPage() {
         </div>
         <p className="mb-3 text-sm text-muted-foreground">
           Одновременно можно иметь до 5 расчётов в очереди или в работе. Если
-          лимит достигнут, дождитесь завершения или отмените один из них. Это не
-          число мест и не позиция в очереди.
+          лимит достигнут, дождитесь завершения или отмените один из них.
         </p>
         {active.loading && !active.loaded ? (
           <p role="status" className="text-muted-foreground">

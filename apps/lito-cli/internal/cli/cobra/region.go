@@ -10,10 +10,15 @@ import (
 	"path/filepath"
 )
 
-func init() {
-	var input, output string
-	var west, south, east, north float64
-	command := &cobra.Command{Use: "region", Short: "Выделить все участки берега внутри области Чёрного моря", RunE: func(cmd *cobra.Command, _ []string) error {
+var regionOptions struct {
+	input, output            string
+	west, south, east, north float64
+}
+
+var regionCmd = &cobra.Command{
+	Use: "region", Short: "Выделить все участки берега внутри области Чёрного моря", RunE: func(cmd *cobra.Command, _ []string) error {
+		input, output := regionOptions.input, regionOptions.output
+		west, south, east, north := regionOptions.west, regionOptions.south, regionOptions.east, regionOptions.north
 		selection, err := coastline.SelectRegion(cmd.Context(), input, coastline.GeoBounds{MinLat: south, MaxLat: north, MinLon: west, MaxLon: east})
 		if err != nil {
 			return err
@@ -50,14 +55,17 @@ func init() {
 			fmt.Fprintf(cmd.OutOrStdout(), "Выделено самостоятельных линий: %d; паспорт: %s\n", len(selection.Segments), filepath.Join(output, "region/selection.json"))
 		}
 		return nil
-	}}
-	command.Flags().StringVar(&input, "input", coastline.DefaultBlackSeaCoastlinePath, "GeoJSON полного или своего контура")
-	command.Flags().StringVar(&output, "output", "output/coastline-region", "корневой каталог результатов")
-	command.Flags().Float64Var(&west, "west", 27, "западная долгота области")
-	command.Flags().Float64Var(&east, "east", 42.5, "восточная долгота области")
-	command.Flags().Float64Var(&south, "south", 40.5, "южная широта области")
-	command.Flags().Float64Var(&north, "north", 47.5, "северная широта области")
-	rootCmd.AddCommand(command)
+	},
+}
+
+func init() {
+	regionCmd.Flags().StringVar(&regionOptions.input, "input", coastline.DefaultBlackSeaCoastlinePath, "GeoJSON полного или своего контура")
+	regionCmd.Flags().StringVar(&regionOptions.output, "output", "output/coastline-region", "корневой каталог результатов")
+	regionCmd.Flags().Float64Var(&regionOptions.west, "west", 27, "западная долгота области")
+	regionCmd.Flags().Float64Var(&regionOptions.east, "east", 42.5, "восточная долгота области")
+	regionCmd.Flags().Float64Var(&regionOptions.south, "south", 40.5, "южная широта области")
+	regionCmd.Flags().Float64Var(&regionOptions.north, "north", 47.5, "северная широта области")
+	rootCmd.AddCommand(regionCmd)
 }
 
 func writeRegionJSON(path string, value any) error {

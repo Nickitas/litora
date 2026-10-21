@@ -31,6 +31,7 @@ import { AuthGuard, type AuthRequest } from "../auth/auth.guard.js";
 import {
   CalculationPageResponse,
   CalculationResponse,
+  CoastlinePreviewResponse,
 } from "../http-models.js";
 import { parseHistoryPageQuery } from "./history-page.js";
 import { bundledCoastlinePreview } from "./coastline-preview.js";
@@ -70,7 +71,7 @@ export class CalculationsController {
 
   @Get("coastline-preview")
   @ApiOperation({ summary: "Полный закреплённый GeoJSON Чёрного моря для выбора области", description: "WGS84 [долгота, широта], источник, лицензия и SHA-256. Вычисление участка выполняет отдельное задание Go." })
-  @ApiResponse({ status: 200, description: "CoastlinePreviewDto: source, sourceRevision, license, sha256, crs, geojson" })
+  @ApiResponse({ status: 200, type: CoastlinePreviewResponse })
   coastlinePreview() { return bundledCoastlinePreview(); }
 
   @Post()

@@ -187,6 +187,24 @@ assert.equal((await first.request("/scientific-inputs"))[0].id, scientificRecord
 assert.deepEqual(await first.request("/scientific-inputs/quota"), {
   ...emptyScientificQuota, usedCount: 1, usedBytes: scientificBytes.length,
 });
+const inputFormats = await first.request("/scientific-inputs/formats");
+assert.equal(inputFormats.length, 19);
+assert.equal(inputFormats.find((format) => format.role === "coastline_geojson").schema.$id,
+  "urn:litora:input:coastline_geojson:v1");
+const builtinPreview = await first.request("/calculations/coastline-preview");
+assert.equal(builtinPreview.sha256, readyScientific.sha256);
+const ownPreview = await first.request(`/scientific-inputs/${scientificRecord.id}/coastline-preview`);
+assert.deepEqual(ownPreview.geojson, builtinPreview.geojson);
+await second.request(`/scientific-inputs/${scientificRecord.id}/coastline-preview`, "GET", undefined, 404);
+const malformedBytes = Buffer.from(JSON.stringify({ type: "LineString", coordinates: [[39, 43], [40, 44]], unexpected: true }));
+const malformedInput = await first.request("/scientific-inputs", "POST", {
+  name: "Неверный формат", role: "coastline_geojson", filename: "malformed.geojson",
+  sizeBytes: malformedBytes.length, source: "Отрицательный тест", license: "Тест",
+  crs: "EPSG:4326", coordinateUnit: "degrees",
+}, 201);
+await first.upload(`/scientific-inputs/${malformedInput.id}/content`, malformedBytes, 400);
+assert.equal((await first.request("/scientific-inputs")).find((input) => input.id === malformedInput.id).status, "pending");
+await first.request(`/scientific-inputs/${malformedInput.id}`, "DELETE");
 await first.request("/datasets", "POST", {
   name: "Неверный CRS", source: "Тест", license: "Тест", crs: "EPSG:3857",
   coordinateUnit: "meters", geometry: inputGeometry,
@@ -377,7 +395,58 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion", "all_dem
   assert.equal(createHash("sha256").update(bytes).digest("hex"), artifact.sha256);
   console.log("shoreline_data_audit: готово, проверены даты, пробел ряда и SHA-256 отчёта");
 }
+let selectedCoastline;
+for (const ownSource of [false, true]) {
+  const bounds = { west: 29, east: 31.5, south: 44.5, north: 46.5 };
+  const selection = await first.request("/calculations", "POST", {
+    kind: "coastline_region", input: { ...bounds, ...(ownSource ? { coastlineInputId: scientificRecord.id } : {}) },
+  }, 201);
+  let result;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    result = await first.request(`/calculations/${selection.id}`);
+    if (!["queued", "running"].includes(result.status)) break;
+    await delay(1000);
+  }
+  assert.equal(result.status, "succeeded", JSON.stringify(result));
+  assert.equal(result.methodId, "coastline-region");
+  const reportFile = result.artifacts.find((file) => file.filename === "region/selection.json");
+  const report = await (await fetch(reportFile.downloadUrl)).json();
+  assert.equal(report.source_sha256, readyScientific.sha256);
+  assert.deepEqual(report.bounds, { min_lon: bounds.west, max_lon: bounds.east, min_lat: bounds.south, max_lat: bounds.north });
+  assert.ok(report.segments.length > 0);
+  const reusable = await first.request("/scientific-inputs/reusable-artifacts");
+  const longest = [...report.segments].sort((a, b) => b.point_count - a.point_count)[0];
+  selectedCoastline = reusable.find((item) => item.jobId === selection.id && item.filename === longest.file);
+  assert.equal(selectedCoastline.role, "coastline_geojson");
+  const preview = await first.request(`/scientific-inputs/${selectedCoastline.id}/coastline-preview`);
+  assert.equal(preview.geojson.type, "LineString");
+  assert.equal(preview.geojson.coordinates.length, longest.point_count);
+  for (const [lon, lat] of preview.geojson.coordinates) {
+    assert.ok(lon >= bounds.west - 1e-10 && lon <= bounds.east + 1e-10);
+    assert.ok(lat >= bounds.south - 1e-10 && lat <= bounds.north + 1e-10);
+  }
+  for (const file of result.artifacts) {
+    const response = await fetch(file.downloadUrl);
+    assert.equal(response.status, 200);
+    assert.equal(createHash("sha256").update(Buffer.from(await response.arrayBuffer())).digest("hex"), file.sha256);
+  }
+  await second.request(`/scientific-inputs/${selectedCoastline.id}/coastline-preview`, "GET", undefined, 404);
+  await second.request("/calculations", "POST", { kind: "coastline_region", input: { ...bounds, coastlineInputId: selectedCoastline.id } }, 404);
+  console.log(`coastline_region (${ownSource ? "свой" : "встроенный"} источник): ${report.segments.length} отдельных линий, SHA-256 и доступ проверены`);
+}
 if (process.env.TEST_HEAVY_ENABLED === "true") {
+  const next = await first.request("/calculations", "POST", {
+    kind: "dimension_file", input: { coastlineInputId: selectedCoastline.id },
+  }, 201);
+  let state;
+  for (let attempt = 0; attempt < 150; attempt++) {
+    state = await first.request(`/calculations/${next.id}`);
+    if (!["queued", "running"].includes(state.status)) break;
+    await delay(1000);
+  }
+  assert.equal(state.status, "succeeded", JSON.stringify(state));
+  assert.equal(state.resultSummary.provenance.files[0].sha256, selectedCoastline.sha256);
+  console.log("coastline_region → dimension_file: расчёт по выделенной линии, SHA-256 источника совпал");
   await second.request("/calculations", "POST", {
     kind: "source_file", input: { coastlineInputId: scientificRecord.id },
   }, 404);
@@ -747,6 +816,11 @@ assert.ok(swagger.paths["/api/calculations"].post);
 assert.ok(swagger.paths["/api/datasets"].post);
 assert.ok(swagger.paths["/api/scientific-inputs/reusable-artifacts"].get);
 assert.ok(swagger.paths["/api/scientific-inputs/quota"].get);
+assert.ok(swagger.paths["/api/calculations/coastline-preview"].get);
+assert.ok(swagger.paths["/api/scientific-inputs/{id}/coastline-preview"].get);
+assert.ok(swagger.paths["/api/scientific-inputs/formats"].get);
+assert.ok(swagger.components.schemas.CalculationResponse.properties.kind.enum.includes("coastline_region"));
+assert.equal(swagger.components.schemas.ScientificInputFormatResponse.properties.schema.nullable, true);
 assert.ok(swagger.components.securitySchemes.bearer);
 assert.ok(swagger.paths["/api/auth/register"].post.requestBody.content["application/json"].schema.required.includes("invitationCode"));
 assert.ok(deletableMap);

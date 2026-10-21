@@ -31,13 +31,14 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { AuthGuard, type AuthRequest } from "../auth/auth.guard.js";
-import { ObservedShorelineSeriesResponse, ReusableScientificArtifactResponse, ScientificInputQuotaResponse, ScientificInputResponse } from "../http-models.js";
+import { CoastlinePreviewResponse, ObservedShorelineSeriesResponse, ReusableScientificArtifactResponse, ScientificInputFormatResponse, ScientificInputQuotaResponse, ScientificInputResponse } from "../http-models.js";
 import { ObjectStorageService } from "../infrastructure/object-storage.service.js";
 import { ScientificInputsRepository } from "./scientific-inputs.repository.js";
 import { validateScientificInput } from "./validation.js";
 import { parseObservedShorelines } from "./observed-shorelines.js";
 import { scientificInputFormats } from "./format-catalog.js";
 import { previewGeoJSON } from "../calculations/coastline-preview.js";
+import { validateScientificFile } from "./file-validation.js";
 
 const maxObservedSeriesBytes = 16 * 1024 * 1024;
 
@@ -62,10 +63,13 @@ export class ScientificInputsController {
 
   @Get("formats")
   @ApiOperation({ summary: "Фиксированные схемы, форматы и пределы научных файлов", description: "Каталог v1 генерируется из Go-типов. JSON Schema можно скачать до загрузки." })
+  @ApiResponse({ status: 200, type: [ScientificInputFormatResponse] })
   formats() { return scientificInputFormats(); }
 
   @Get(":id/coastline-preview")
   @ApiOperation({ summary: "GeoJSON своего контура или собственного научного артефакта для выбора области" })
+  @ApiResponse({ status: 200, type: CoastlinePreviewResponse })
+  @Header("Cache-Control", "no-store")
   async coastlinePreview(@Req() req: AuthRequest, @Param("id", new ParseUUIDPipe()) id: string) {
     const source = await this.inputs.resolveOwnedSource(id, req.user.id, "coastline_geojson", this.storage.bucket);
     const bytes = await this.storage.readObjectBytes(source.object_key, 16 * 1024 * 1024);
@@ -134,7 +138,8 @@ export class ScientificInputsController {
   @ApiOperation({ summary: "Загрузить содержимое файла одним потоком; SHA-256 рассчитывает сервер" })
   @ApiConsumes("application/octet-stream")
   @ApiBody({ schema: { type: "string", format: "binary" } })
-  @ApiResponse({ status: 200, type: ScientificInputResponse, description: "Файл готов для расчётов" })
+  @ApiResponse({ status: 200, type: ScientificInputResponse, description: "Структура проверена, файл готов; научная совместимость проверяется при расчёте" })
+  @ApiResponse({ status: 400, description: "Неверная структура, версия, кодировка, размер или формат файла; запись остаётся pending" })
   @Header("Cache-Control", "no-store")
   async upload(
     @Req() req: AuthRequest & IncomingMessage,
@@ -167,6 +172,7 @@ export class ScientificInputsController {
       await pipeline(req, countAndHash, createWriteStream(path, { flags: "wx", mode: 0o600 }));
       if (count !== expected)
         throw new BadRequestException("Файл передан не полностью");
+      await validateScientificFile(path, record.role, record.filename);
       const handle = await open(path, "r");
       const probe = Buffer.alloc(256);
       const { bytesRead } = await handle.read(probe, 0, probe.length, 0);

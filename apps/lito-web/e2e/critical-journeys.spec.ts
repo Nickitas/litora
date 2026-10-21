@@ -5,6 +5,7 @@ import type {
   AuthDto,
   CalculationJobDto,
   CalculationKindDto,
+  CoastlinePreviewDto,
   CalculationDeletionRequestDto,
   CalculationMetadataExportV1,
   DatasetDto,
@@ -156,6 +157,38 @@ async function mockSeabedFigures(page: Page, submissions: unknown[], source: Cal
     if (path === `/api/calculations/${source.id}`) return missing ? { status: 404, body: { message: "Расчёт не найден" } } : { body: source };
     if (path === "/api/calculations/99999999-9999-4999-8999-999999999999") return { body: job };
   });
+}
+
+const regionKinds = [
+  { kind: "coastline_region", title: "Выбрать участок побережья", description: "Участок из полного или своего контура" },
+  { kind: "dimension_file", title: "Размерность полного контура", description: "Box-counting" },
+  { kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC" },
+] satisfies CalculationKindDto[];
+async function mockRegions(page: Page, submissions: unknown[], options: {
+  source?: ScientificInputDto; previewFailure?: boolean; result?: CalculationJobDto; reusable?: ReusableScientificArtifactDto[];
+} = {}) {
+  const bytes = await readFile(new URL("../../lito-cli/data/coastline/black-sea.geojson", import.meta.url));
+  const coastlinePreview = {
+    source: "Закреплённый контур MarineRegions", sourceRevision: "Снимок из набора Litora", license: "CC-BY",
+    sha256: createHash("sha256").update(bytes).digest("hex"), crs: "EPSG:4326",
+    geojson: JSON.parse(bytes.toString("utf8")) as Record<string, unknown>,
+  } satisfies CoastlinePreviewDto;
+  const calls: string[] = [];
+  const observed = await mockApi(page, (path, method, body) => {
+    calls.push(`${method} ${path}`);
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === "/api/calculations/kinds") return { body: regionKinds };
+    if (path === "/api/datasets") return { body: [] };
+    if (path === "/api/scientific-inputs") return { body: options.source ? [options.source] : [] };
+    if (path === "/api/scientific-inputs/reusable-artifacts") return { body: options.reusable ?? [] };
+    if (path === "/api/calculations/coastline-preview") return { body: coastlinePreview };
+    if (options.source && path === `/api/scientific-inputs/${options.source.id}/coastline-preview`)
+      return options.previewFailure ? { status: 400, body: { message: "Свой контур сейчас недоступен" } } : { body: { ...coastlinePreview, source: "Собственный контур" } };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") { submissions.push(body); return { status: 201, body: { ...job, kind: "coastline_region" } }; }
+    if (path === `/api/calculations/${job.id}`) return { body: options.result ?? { ...job, kind: "coastline_region" } };
+  });
+  return { ...observed, calls };
 }
 
 type ApiReply = { status?: number; body: unknown };
@@ -1760,6 +1793,88 @@ test("перед запуском объясняются входы, огран�
   await expect(dialog).toBeVisible();
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
+});
+
+for (const theme of ["light", "dark"] as const) {
+  test(`участки побережья: выбор двух углов и ввод любой области, ${theme}`, async ({ page }, testInfo) => {
+    const submissions: unknown[] = [];
+    const observed = await mockRegions(page, submissions);
+    await page.setViewportSize({ width: theme === "dark" ? 360 : 1280, height: 780 });
+    await openNewCalculation(page, theme);
+    const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+    const map = dialog.getByRole("img", { name: /^Карта для выбора области/ });
+    await expect(map).toBeVisible();
+    await map.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath("region-picker-full.png") });
+    const box = await map.boundingBox(); if (!box) throw new Error("Карта не имеет размера");
+    await map.click({ position: { x: box.width * 0.3, y: box.height * 0.4 } });
+    await expect(dialog.getByText("Первый угол отмечен. Выберите второй угол.")).toBeVisible();
+    await map.click({ position: { x: box.width * 0.7, y: box.height * 0.6 } });
+    expect(Number(await dialog.locator("#region-west").inputValue())).toBeGreaterThan(27);
+    expect(Number(await dialog.locator("#region-east").inputValue())).toBeLessThan(42.5);
+    // Точный ввод остаётся доступным без взаимодействия с картой.
+    await dialog.getByRole("spinbutton", { name: "Западная долгота, °", exact: true }).focus();
+    for (const [field, value] of Object.entries({ west: "29", east: "31.5", south: "44.5", north: "46.5" })) {
+      await expect(dialog.locator(`#region-${field}`)).toBeFocused();
+      await page.keyboard.press("ControlOrMeta+A");
+      await page.keyboard.type(value);
+      await page.keyboard.press("Tab");
+    }
+    await dialog.getByRole("button", { name: "Приблизить к области", exact: true }).click();
+    await map.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath("region-picker.png") });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(theme === "dark" ? 360 : 1280);
+    await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+    await expect.poll(() => submissions.length).toBe(1);
+    expect(submissions[0]).toEqual({ kind: "coastline_region", input: { west: 29, east: 31.5, south: 44.5, north: 46.5 } });
+    expect(observed.unexpected).toEqual([]); expect(observed.pageErrors).toEqual([]);
+  });
+}
+
+test("участки побережья: свой источник не подменяется встроенным при ошибке карты", async ({ page }) => {
+  const source = { ...articleInputs[5], name: "Мой контур" };
+  const observed = await mockRegions(page, [], { source, previewFailure: true });
+  await openNewCalculation(page);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+  await expect(dialog.getByRole("img", { name: /^Карта для выбора области/ })).toBeVisible();
+  const builtInRequests = observed.calls.filter((path) => path === "GET /api/calculations/coastline-preview").length;
+  await dialog.locator("#scientific-coastlineInputId").click();
+  await page.getByRole("option", { name: /Мой контур/ }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Свой контур сейчас недоступен");
+  await expect(dialog.locator("#scientific-coastlineInputId")).toContainText("Мой контур");
+  expect(observed.calls.filter((path) => path === "GET /api/calculations/coastline-preview")).toHaveLength(builtInRequests);
+  await dialog.getByRole("button", { name: "Использовать встроенный контур", exact: true }).click();
+  await expect(dialog.getByRole("img", { name: /^Карта для выбора области/ })).toBeVisible();
+  expect(observed.unexpected).toEqual([]); expect(observed.pageErrors).toEqual([]);
+});
+
+test("участки побережья: выделенная линия подставляется в следующий расчёт по UUID", async ({ page }) => {
+  const artifact = { id: "88888888-8888-4888-8888-888888888888", jobId: job.id, jobKind: "coastline_region", role: "coastline_geojson", filename: "region/segments/segment-001.geojson", sizeBytes: 1024, sha256: "d".repeat(64), createdAt: job.createdAt } satisfies ReusableScientificArtifactDto;
+  const result = { ...job, kind: "coastline_region", status: "succeeded" as const, artifacts: [{ id: artifact.id, category: "output" as const, filename: artifact.filename, sizeBytes: artifact.sizeBytes, sha256: artifact.sha256, contentType: "application/geo+json", downloadUrl: "/private/coast.geojson" }] } satisfies CalculationJobDto;
+  const submissions: unknown[] = [];
+  const observed = await mockRegions(page, submissions, { result, reusable: [artifact] });
+  await page.goto(`/lab/calculations/${job.id}`);
+  await page.getByRole("link", { name: "Размерность этой линии", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+  await expect(dialog.locator("#scientific-coastlineInputId")).toContainText(artifact.filename);
+  await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  expect(submissions[0]).toEqual({ kind: "dimension_file", input: { coastlineInputId: artifact.id } });
+  expect(observed.unexpected).toEqual([]); expect(observed.pageErrors).toEqual([]);
+});
+
+test("участки побережья: схема скачивается из каталога и показаны источники данных", async ({ page }) => {
+  const observed = await mockRegions(page, []);
+  await openNewCalculation(page);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+  await dialog.getByRole("button", { name: "Загрузить файл", exact: true }).click();
+  const downloading = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Скачать схему этого формата", exact: true }).click();
+  const download = await downloading; const path = await download.path(); if (!path) throw new Error("Схема не скачалась");
+  const schema = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+  expect(schema.$id).toBe("urn:litora:input:coastline_geojson:v1");
+  await expect(dialog.getByRole("link", { name: /MarineRegions · контуры морей/ })).toHaveAttribute("href", "https://www.marineregions.org/downloads.php");
+  expect(observed.unexpected).toEqual([]); expect(observed.pageErrors).toEqual([]);
 });
 
 for (const theme of ["light", "dark"] as const) {

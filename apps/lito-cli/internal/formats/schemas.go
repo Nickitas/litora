@@ -10,6 +10,7 @@ import (
 	"coastal-geometry/internal/domain/adaptive"
 	"coastal-geometry/internal/domain/geometry"
 	"coastal-geometry/internal/domain/seabed"
+	"coastal-geometry/internal/domain/shorelinehistory"
 )
 
 // Specification задаёт версию структуры, размер и формат одного входного файла.
@@ -96,16 +97,19 @@ func CoastlineSchema() map[string]any {
 	line := array(position, 2)
 	ring := array(position, 4)
 	polygon := array(ring, 1)
+	bbox := map[string]any{"type": "array", "items": []any{number(27, 42.5), number(40.5, 47.5), number(27, 42.5), number(40.5, 47.5)}, "minItems": 4, "maxItems": 4, "additionalItems": false}
 	geometries := []any{}
 	for _, entry := range []struct {
 		name        string
 		coordinates any
 	}{{"LineString", line}, {"MultiLineString", array(line, 1)}, {"Polygon", polygon}, {"MultiPolygon", array(polygon, 1)}} {
-		geometries = append(geometries, object(map[string]any{"type": map[string]any{"const": entry.name}, "coordinates": entry.coordinates}, "type", "coordinates"))
+		geometries = append(geometries, object(map[string]any{"type": map[string]any{"const": entry.name}, "coordinates": entry.coordinates, "bbox": bbox}, "type", "coordinates"))
 	}
-	feature := object(map[string]any{"type": map[string]any{"const": "Feature"}, "geometry": map[string]any{"$ref": "#/$defs/geometry"}, "properties": map[string]any{"type": []string{"object", "null"}}, "id": map[string]any{"type": []string{"string", "number"}}}, "type", "geometry", "properties")
+	feature := object(map[string]any{"type": map[string]any{"const": "Feature"}, "geometry": map[string]any{"$ref": "#/$defs/geometry"}, "geometry_name": map[string]any{"type": "string"}, "properties": map[string]any{"type": []string{"object", "null"}}, "id": map[string]any{"type": []string{"string", "number"}}}, "type", "geometry", "properties")
 	crs := object(map[string]any{"type": map[string]any{"const": "name"}, "properties": object(map[string]any{"name": map[string]any{"enum": []string{"EPSG:4326", "urn:ogc:def:crs:EPSG::4326", "urn:ogc:def:crs:OGC:1.3:CRS84"}}}, "name")}, "type", "properties")
 	collection := object(map[string]any{"type": map[string]any{"const": "FeatureCollection"}, "features": array(map[string]any{"$ref": "#/$defs/feature"}, 1), "name": map[string]any{"type": "string"}, "crs": crs, "totalFeatures": map[string]any{"type": "integer"}, "numberMatched": map[string]any{"type": "integer"}, "numberReturned": map[string]any{"type": "integer"}, "timeStamp": map[string]any{"type": "string"}}, "type", "features")
+	feature["properties"].(map[string]any)["bbox"] = bbox
+	collection["properties"].(map[string]any)["bbox"] = bbox
 	return map[string]any{"oneOf": []any{map[string]any{"$ref": "#/$defs/geometry"}, map[string]any{"$ref": "#/$defs/feature"}, collection}, "$defs": map[string]any{"geometry": map[string]any{"oneOf": geometries}, "feature": feature}}
 }
 
@@ -140,18 +144,44 @@ func Catalog(meshReport any) []Specification {
 	}
 	add("coastline_geojson", CoastlineSchema())
 	add("bathymetry_grid_json", array(object(map[string]any{"lat": number(40.5, 47.5), "lon": number(27, 42.5), "depth": map[string]any{"type": "number"}}, "lat", "lon", "depth"), 1))
-	add("wave_climate", object(map[string]any{"source": map[string]any{"type": "string", "minLength": 1}, "conditions": array(JSONSchema(geometry.WaveCondition{}), 1)}, "source", "conditions"))
+	wave := JSONSchema(geometry.WaveCondition{})
+	waveProperties := wave["properties"].(map[string]any)
+	waveProperties["duration_hours"] = map[string]any{"type": "number", "exclusiveMinimum": 0, "maximum": 744}
+	waveProperties["hs_m"] = map[string]any{"type": "number", "exclusiveMinimum": 0, "maximum": 30}
+	waveProperties["tp_s"] = number(1, 30)
+	waveProperties["direction_from_deg"] = map[string]any{"type": "number", "minimum": 0, "exclusiveMaximum": 360}
+	add("wave_climate", object(map[string]any{"source": map[string]any{"type": "string", "minLength": 1}, "conditions": array(wave, 1)}, "source", "conditions"))
 	observations := array(JSONSchema(geometry.ShorelineRateObservation{}), 1)
 	add("shoreline_observations_json", map[string]any{"oneOf": []any{observations, object(map[string]any{"observations": observations}, "observations")}})
 	add("longshore_sediment_sources_json", array(JSONSchema(geometry.LongshoreSedimentSource{}), 0))
 	add("longshore_structures_json", array(JSONSchema(geometry.LongshoreStructure{}), 0))
-	add("bathymetry_source_json", map[string]any{"anyOf": []any{object(map[string]any{"attribution": map[string]any{"type": "string", "minLength": 1}, "dataset_sha256": map[string]any{"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}}, "attribution", "dataset_sha256"), JSONSchema(geometry.BathymetryPassport{})}})
+	fullPassport := JSONSchema(geometry.BathymetryPassport{})
+	fullPassport["properties"].(map[string]any)["schema_version"] = map[string]any{"const": "1.0"}
+	add("bathymetry_source_json", map[string]any{"anyOf": []any{object(map[string]any{"attribution": map[string]any{"type": "string", "minLength": 1}, "dataset_sha256": map[string]any{"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}}, "attribution", "dataset_sha256"), fullPassport}})
 	// CoastSat/наблюдения: свойства измерения фиксированы отдельно от обычного GeoJSON.
 	series := CoastlineSchema()
 	feature := series["$defs"].(map[string]any)["feature"].(map[string]any)
 	feature["properties"].(map[string]any)["geometry"] = object(map[string]any{"type": map[string]any{"const": "LineString"}, "coordinates": array(map[string]any{"type": "array", "items": []any{number(27, 42.5), number(40.5, 47.5)}, "minItems": 2, "maxItems": 2, "additionalItems": false}, 2)}, "type", "coordinates")
-	feature["properties"].(map[string]any)["properties"] = object(map[string]any{"date": map[string]any{"type": "string"}, "satname": map[string]any{"type": []string{"string", "null"}}, "geoaccuracy": map[string]any{"type": []string{"number", "null"}}, "cloud_cover": map[string]any{"type": []string{"number", "null"}}, "uncertainty_m": map[string]any{"type": []string{"number", "null"}}, "tide_corrected": map[string]any{"type": []string{"boolean", "null"}}, "water_level_correction": map[string]any{"type": []string{"object", "null"}}}, "date")
-	series["oneOf"] = []any{object(map[string]any{"type": map[string]any{"const": "FeatureCollection"}, "features": array(map[string]any{"$ref": "#/$defs/feature"}, 2)}, "type", "features")}
+	correction := JSONSchema(shorelinehistory.WaterLevelCorrection{})
+	for _, field := range []string{"method", "source", "vertical_datum"} {
+		correction["properties"].(map[string]any)[field] = map[string]any{"type": "string", "minLength": 1, "maxLength": 160}
+	}
+	feature["properties"].(map[string]any)["properties"] = object(map[string]any{
+		"date":                   map[string]any{"type": "string", "pattern": `^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?Z| \d{2}:\d{2}:\d{2})$`},
+		"satname":                map[string]any{"type": "string", "pattern": `^[A-Za-z0-9_-]{1,30}$`},
+		"geoaccuracy":            map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"cloud_cover":            map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 1},
+		"uncertainty_m":          map[string]any{"type": []string{"number", "null"}, "exclusiveMinimum": 0},
+		"tide_corrected":         map[string]any{"type": []string{"boolean", "null"}},
+		"water_level_correction": map[string]any{"anyOf": []any{correction, map[string]any{"type": "null"}}},
+	}, "date", "satname")
+	seriesCollection := series["oneOf"].([]any)[2].(map[string]any)
+	seriesFeatures := array(map[string]any{"$ref": "#/$defs/feature"}, 2)
+	seriesFeatures["maxItems"] = 2500
+	seriesCollection["properties"].(map[string]any)["features"] = seriesFeatures
+	seriesCRS := seriesCollection["properties"].(map[string]any)["crs"].(map[string]any)
+	seriesCRS["properties"].(map[string]any)["properties"].(map[string]any)["properties"].(map[string]any)["name"] = map[string]any{"enum": []string{"EPSG:4326", "urn:ogc:def:crs:EPSG::4326"}}
+	series["oneOf"] = []any{seriesCollection}
 	add("shoreline_timeseries_geojson", series)
 	for _, entry := range []struct {
 		role, format, description string
@@ -160,7 +190,7 @@ func Catalog(meshReport any) []Specification {
 		{"flat_mesh_msh", "msh2", "MSH 2.2 ASCII: узлы и двумерные элементы; для построения дна нужна full-quad сетка.", nil},
 		{"seabed_msh", "msh2", "MSH 2.2 ASCII с маркерами lito_model_kind=seabed и lito_schema_version=lito-seabed/v1.", nil},
 		{"adaptive_field_csv", "csv", "Таблица ADAPT-01 с фиксированными колонками.", []string{"schema_version", "node_id", "x_m", "y_m", "longitude_deg", "latitude_deg", "water_depth_m", "depth_available", "distance_to_coast_m", "coast_curvature_deg", "depth_gradient_deg", "effective_gradient_deg", "gradient_available", "base_size_m", "distance_refinement_m", "curvature_refinement_m", "gradient_refinement_m", "raw_target_size_m", "target_size_m", "growth_limited", "zone"}},
-		{"expert_ratings_tsv", "tsv", "Лист AI-01, две строки заголовка и восемь TSV-полей оценки.", []string{"presentation_id", "expert_id", "decision", "geometry", "bathymetry", "suitability", "confidence", "comment"}},
+		{"expert_ratings_tsv", "tsv", "Лист AI-01, две строки заголовка и восемь TSV-полей оценки.", []string{"Идентификатор карточки", "Особенность", "Эксперт", "Берег 1–5", "Изобаты 1–5", "Сетка 1–5", "Артефакты 1–5", "Комментарий"}},
 	} {
 		result = append(result, Specification{Role: entry.role, SchemaVersion: 1, Format: entry.format, Description: entry.description, Columns: entry.columns, MaxBytes: 512 * 1024 * 1024})
 	}

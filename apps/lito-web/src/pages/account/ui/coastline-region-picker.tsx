@@ -81,7 +81,7 @@ export function CoastlineRegionPicker({ value, onChange, sourceId }: {
   return (
     <section aria-labelledby="coastline-region-heading" className="space-y-4 border-t pt-6">
       <h3 id="coastline-region-heading" className="text-lg font-semibold">3. Область побережья</h3>
-      <p className="text-sm text-muted-foreground">Отметьте два противоположных угла на карте или введите границы ниже. Go сохранит все попавшие в область участки без упрощения и соединения разрывов.</p>
+      <p className="text-sm text-muted-foreground">Отметьте два противоположных угла на карте или введите границы ниже. Все попавшие в область участки сохранятся без упрощения и соединения разрывов.</p>
       {loading ? <p role="status">Загружаем полный контур…</p> : error ? <div role="alert" className="rounded-xl border p-4 text-sm text-destructive">
         Не удалось показать выбранный источник: {error}
         <Button type="button" variant="outline" className="mt-2" onClick={() => { setLoadedSource(null); setRevision((v) => v + 1); }}>Повторить загрузку карты</Button>

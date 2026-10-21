@@ -32,7 +32,7 @@ export function ScientificDataHelp({ role }: { role: ScientificInputRole }) {
       <Button type="button" variant="outline" onClick={downloadSchema}>{format.schema ? "Скачать схему этого формата" : "Скачать описание этого формата"}</Button>
     </> : error ? <p role="alert" className="text-destructive">Схема недоступна: {error} <Button type="button" variant="link" onClick={() => setRevision((v) => v + 1)}>Повторить</Button></p>
       : <p role="status" className="text-muted-foreground">Загружаем схему формата…</p>}
-    <p className="text-muted-foreground">Не меняйте порядок осей, единицы и названия полей. Проверка структуры не заменяет проверку покрытия, совместимости файлов и научных критериев в Go.</p>
+    <p className="text-muted-foreground">Не меняйте порядок осей, единицы и названия полей. Проверка покрытия, совместимости файлов и научных критериев выполняется дополнительно при расчёте.</p>
     {resources.length > 0 && <div className="space-y-2"><p className="font-medium">Где взять исходные данные</p><ul className="space-y-3">{resources.map((entry) => <li key={entry.href}>
       <a href={entry.href} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-2">{entry.title}<span className="sr-only"> (в новой вкладке)</span></a>
       <p className="text-muted-foreground">{entry.note}</p>

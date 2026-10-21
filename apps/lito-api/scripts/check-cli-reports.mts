@@ -34,7 +34,7 @@ try {
   await mkdir(reportRoot);
   execFileSync("go", ["build", "-o", binary, "./cmd/lito"], { cwd: cliRoot, timeout: 60_000 });
   await cp(join(cliRoot, "data"), join(scratch, "data"), { recursive: true });
-  for (const kind of ["dimension", "map"])
+  for (const kind of ["dimension", "map", "coastline_region"])
     await bundledInputProvenance(kind, join(scratch, "data"));
 
   const coastline = join(scratch, "data/coastline/black-sea.geojson");
@@ -49,6 +49,7 @@ try {
   const id = "33333333-3333-4333-8333-333333333333";
   const cases = [
     { kind: "dimension" }, { kind: "map" },
+    { kind: "coastline_region", input: { west: 29, east: 31.5, south: 44.5, north: 46.5 } },
     { kind: "dimension_dataset", input: { datasetId: id } },
     { kind: "dimension_file", input: { coastlineInputId: id } },
     { kind: "map_file", input: { coastlineInputId: id } },

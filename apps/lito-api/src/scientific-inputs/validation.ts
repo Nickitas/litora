@@ -80,6 +80,10 @@ export function validateScientificInput(body: unknown): CreateScientificInputDto
     filename.includes("/") || filename.includes("\\")
   )
     throw new BadRequestException("Имя файла не должно содержать путь");
+  const extension = format.format === "msh2" ? /\.msh$/i : format.format === "csv" ? /\.csv$/i
+    : format.format === "tsv" ? /\.tsv$/i : data.role === "coastline_geojson" || data.role === "shoreline_timeseries_geojson" ? /\.(geojson|json)$/i
+      : data.role === "wave_climate" ? /\.(json|csv)$/i : /\.json$/i;
+  if (!extension.test(filename)) throw new BadRequestException("Расширение файла не соответствует выбранной роли и схеме");
   if (data.role === "wave_climate" && !/\.(json|csv)$/i.test(filename))
     throw new BadRequestException("Волновой ряд должен быть JSON или CSV");
   if (data.role === "wave_climate" && Number(data.sizeBytes) > 16 * 1024 * 1024)
@@ -109,6 +113,10 @@ export function validateScientificInput(body: unknown): CreateScientificInputDto
     throw new BadRequestException("Допустимы EPSG:4326, LAEA или not-applicable");
   if (!["degrees", "meters", "not-applicable"].includes(coordinateUnit))
     throw new BadRequestException("Недопустимые единицы координат");
+  if ((data.role === "coastline_geojson" || data.role === "bathymetry_grid_json") && (crs !== "EPSG:4326" || coordinateUnit !== "degrees"))
+    throw new BadRequestException("Для географического контура и батиметрии требуются EPSG:4326 и градусы");
+  if ((data.role === "flat_mesh_msh" || data.role === "seabed_msh") && (crs !== "LAEA" || coordinateUnit !== "meters"))
+    throw new BadRequestException("Для MSH требуются координаты LAEA в метрах");
   if (data.role === "wave_climate" && (crs !== "not-applicable" || coordinateUnit !== "not-applicable"))
     throw new BadRequestException("Для волнового ряда CRS и единицы координат неприменимы");
   if (data.role === "shoreline_observations_json" && (crs !== "EPSG:4326" || coordinateUnit !== "degrees"))

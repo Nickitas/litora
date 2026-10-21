@@ -4,12 +4,14 @@ import type {
   CalculationArtifactDto,
   CalculationJobDto,
   CalculationPageDto,
+  CoastlinePreviewDto,
   DatasetDto,
   ObservedShorelineSeriesDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
   ScientificInputQuotaDto,
   ScientificInputRole,
+  ScientificInputFormatDto,
   UserDto,
 } from "@litora/contracts";
 
@@ -37,11 +39,28 @@ export class ArtifactResponse implements CalculationArtifactDto {
   @ApiProperty({ type: String, description: "Подписанная ссылка на 15 минут" })
   downloadUrl!: string;
 }
+export class CoastlinePreviewResponse implements CoastlinePreviewDto {
+  @ApiProperty({ type: String }) source!: string;
+  @ApiProperty({ type: String, nullable: true }) sourceRevision!: string | null;
+  @ApiProperty({ type: String, nullable: true }) license!: string | null;
+  @ApiProperty({ type: String }) sha256!: string;
+  @ApiProperty({ type: String, enum: ["EPSG:4326"] }) crs!: "EPSG:4326";
+  @ApiProperty({ type: "object", additionalProperties: true, description: "GeoJSON WGS84: [долгота, широта]" }) geojson!: Record<string, unknown>;
+}
+export class ScientificInputFormatResponse implements ScientificInputFormatDto {
+  @ApiProperty({ type: String }) role!: ScientificInputRole;
+  @ApiProperty({ type: Number, enum: [1] }) schemaVersion!: 1;
+  @ApiProperty({ type: String, enum: ["json", "csv", "tsv", "msh2"] }) format!: ScientificInputFormatDto["format"];
+  @ApiProperty({ type: "object", additionalProperties: true, nullable: true }) schema!: Record<string, unknown> | null;
+  @ApiProperty({ type: [String], required: false }) columns?: string[];
+  @ApiProperty({ type: String }) description!: string;
+  @ApiProperty({ type: Number }) maxBytes!: number;
+}
 export class CalculationResponse implements CalculationJobDto {
   @ApiProperty({ type: String, format: "uuid" }) id!: string;
   @ApiProperty({
     type: String,
-    enum: ["source_file", "dimension", "dimension_dataset", "dimension_file", "map", "map_file", "erosion", "erosion_file", "all_demo", "all_file", "calibrate_cerc", "shoreline_data_audit", "mesh", "seabed_build", "seabed_render", "seabed_adapt", "seabed_generate_adaptive", "seabed_validate", "seabed_compare_adaptive", "seabed_assess_ml", "seabed_check_full"],
+    enum: ["coastline_region", "source_file", "dimension", "dimension_dataset", "dimension_file", "map", "map_file", "erosion", "erosion_file", "all_demo", "all_file", "calibrate_cerc", "shoreline_data_audit", "mesh", "seabed_build", "seabed_render", "seabed_adapt", "seabed_generate_adaptive", "seabed_validate", "seabed_compare_adaptive", "seabed_assess_ml", "seabed_check_full"],
   })
   kind!: string;
   @ApiProperty({

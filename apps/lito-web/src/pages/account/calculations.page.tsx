@@ -197,7 +197,7 @@ export function CalculationsPage() {
               Расчёты
             </h1>
             <p className="mt-2 max-w-2xl text-muted-foreground">
-              Полные отчеты, ключевые сведения и сопоставления между совместимыми результатами.
+              Полные отчеты, ключевые сведения и сопоставления между результатами.
             </p>
           </div>
           <div className="flex w-full gap-2 justify-between">
