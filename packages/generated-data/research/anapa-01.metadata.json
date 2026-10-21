@@ -1,0 +1,97 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "e819d607c37a76cabcfcb4c54e3b9210be209efdb3bd93b2c65b877b25151345",
+    "path": "anapa-01.geojson",
+    "pointCount": 181,
+    "sha256": "9175ee9975d80954e66b7c80c245789c3be3566350469ce8c80493ab37fe01f2",
+    "sizeBytes": 4354
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Анапа — Витязево — Благовещенская",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 4528022,
+      "sourceWayVersion": 32,
+      "sourceWayEditedAt": "2022-06-06T08:35:09Z",
+      "sourcePath": 1,
+      "regionSegment": "segment-001",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 181,
+      "subdivisionLevel": 0,
+      "pointCount": 181,
+      "lengthKm": 16.067264066593307,
+      "dimension": 0.948567087629874,
+      "regressionRSquared": 0.9999552300770369,
+      "stableAcrossScales": true,
+      "rejectedCandidates": []
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 1,
+  "regionId": "anapa-01",
+  "roi": {
+    "east": 37.32,
+    "north": 45.050000000000004,
+    "south": 44.93,
+    "west": 37.160000000000004
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:41:21Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "44700f5535bccde04b8371c2d766c71ed21d30a9445298ac051aa2475f1db07d",
+    "retrievedAt": "2026-10-21T10:42:59Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/anapa-01.json",
+    "snapshotSha256": "f1275d61ddf5068b944b92bf40d946376a19e76688e0acccb9a44552277a94a3",
+    "sourceUrl": "https://www.openstreetmap.org/way/4528022"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "9175ee9975d80954e66b7c80c245789c3be3566350469ce8c80493ab37fe01f2",
+    "sourceBytes": 4354,
+    "pathCount": 1,
+    "pointCount": 181,
+    "truncated": false,
+    "issues": []
+  }
+}

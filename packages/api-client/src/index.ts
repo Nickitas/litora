@@ -13,6 +13,7 @@ import type {
   CreateScientificInputDto,
   DatasetDto,
   DatasetDetailDto,
+  CoastlineValidationDto,
   HealthDto,
   LoginDto,
   RegisterDto,
@@ -295,6 +296,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
     scientificCoastline: (id: string) => send<CoastlinePreviewDto>(`/scientific-inputs/${encodeURIComponent(id)}/coastline-preview`),
     scientificInputFormats: () => send<ScientificInputFormatDto[]>("/scientific-inputs/formats"),
     datasets: () => send<DatasetDto[]>("/datasets"),
+    datasetValidation: (id: string) => send<CoastlineValidationDto>(`/datasets/${encodeURIComponent(id)}/validation`),
+    validateDataset: (id: string) => send<CoastlineValidationDto>(`/datasets/${encodeURIComponent(id)}/validation`, "POST"),
+    scientificCoastlineValidation: (id: string) => send<CoastlineValidationDto>(`/scientific-inputs/${encodeURIComponent(id)}/validation`),
+    validateScientificCoastline: (id: string) => send<CoastlineValidationDto>(`/scientific-inputs/${encodeURIComponent(id)}/validation`, "POST"),
     dataset: (id: string) => send<DatasetDetailDto>(`/datasets/${encodeURIComponent(id)}`),
     datasetContent: (id: string) => send<Blob>(
       `/datasets/${encodeURIComponent(id)}/content`, "GET", undefined, 0,

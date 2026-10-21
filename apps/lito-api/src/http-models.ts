@@ -3,10 +3,13 @@ import type {
   AuthDto,
   CalculationArtifactDto,
   CalculationJobDto,
+  CalculationKindDto,
   CalculationPageDto,
   CoastlinePreviewDto,
   DatasetDto,
   DatasetDetailDto,
+  CoastlineValidationDto,
+  CoastlineValidationIssueDto,
   GeoJsonLineStringDto,
   ObservedShorelineSeriesDto,
   ReusableScientificArtifactDto,
@@ -62,7 +65,7 @@ export class CalculationResponse implements CalculationJobDto {
   @ApiProperty({ type: String, format: "uuid" }) id!: string;
   @ApiProperty({
     type: String,
-    enum: ["coastline_region", "source_file", "dimension", "dimension_dataset", "dimension_file", "map", "map_file", "erosion", "erosion_file", "all_demo", "all_file", "calibrate_cerc", "shoreline_data_audit", "mesh", "seabed_build", "seabed_render", "seabed_adapt", "seabed_generate_adaptive", "seabed_validate", "seabed_compare_adaptive", "seabed_assess_ml", "seabed_check_full"],
+    enum: ["coastline_region", "source_file", "dataset_validation", "coastline_validation", "dimension", "dimension_dataset", "dimension_file", "map", "map_file", "erosion", "erosion_file", "all_demo", "all_file", "calibrate_cerc", "shoreline_data_audit", "mesh", "seabed_build", "seabed_render", "seabed_adapt", "seabed_generate_adaptive", "seabed_validate", "seabed_compare_adaptive", "seabed_assess_ml", "seabed_check_full"],
   })
   kind!: string;
   @ApiProperty({
@@ -125,7 +128,37 @@ export class CalculationPageResponse implements CalculationPageDto {
   @ApiProperty({ type: Number }) totalCount!: number;
 }
 
+export class CoastlineValidationIssueResponse implements CoastlineValidationIssueDto {
+  @ApiProperty({ type: String, enum: ["error", "warning"] }) severity!: "error" | "warning";
+  @ApiProperty({ type: String }) code!: string;
+  @ApiProperty({ type: String }) message!: string;
+  @ApiProperty({ type: Number, required: false }) path?: number;
+  @ApiProperty({ type: Number, required: false }) point?: number;
+  @ApiProperty({ type: Number, required: false }) segment?: number;
+  @ApiProperty({ type: Number, required: false }) otherSegment?: number;
+}
+
+export class CalculationKindResponse implements CalculationKindDto {
+  @ApiProperty({ type: String }) kind!: CalculationKindDto["kind"];
+  @ApiProperty({ type: String }) title!: string;
+  @ApiProperty({ type: String }) description!: string;
+  @ApiProperty({ type: Boolean, required: false, description: "false скрывает служебный вид из обычного выбора нового расчёта" }) selectable?: boolean;
+}
+
+export class CoastlineValidationResponse implements CoastlineValidationDto {
+  @ApiProperty({ type: String, nullable: true }) jobId!: string | null;
+  @ApiProperty({ type: String, enum: ["not_requested", "queued", "running", "succeeded", "failed", "cancelled"] }) status!: CoastlineValidationDto["status"];
+  @ApiProperty({ type: Boolean, nullable: true }) accepted!: boolean | null;
+  @ApiProperty({ type: [CoastlineValidationIssueResponse] }) issues!: CoastlineValidationIssueDto[];
+  @ApiProperty({ type: Boolean }) truncated!: boolean;
+  @ApiProperty({ type: String, nullable: true }) message!: string | null;
+  @ApiProperty({ type: String, nullable: true }) methodId!: string | null;
+  @ApiProperty({ type: String, nullable: true }) methodRevision!: string | null;
+  @ApiProperty({ type: String, nullable: true }) updatedAt!: string | null;
+}
+
 export class DatasetResponse implements DatasetDto {
+  @ApiProperty({ type: CoastlineValidationResponse, required: false }) validation?: CoastlineValidationDto;
   @ApiProperty({ type: String, format: "uuid" }) id!: string;
   @ApiProperty({ type: Number, example: 1 }) schemaVersion!: number;
   @ApiProperty({ type: String }) name!: string;
@@ -159,6 +192,7 @@ export class DatasetDetailResponse extends DatasetResponse implements DatasetDet
 }
 
 export class ScientificInputResponse implements ScientificInputDto {
+  @ApiProperty({ type: CoastlineValidationResponse, required: false }) validation?: CoastlineValidationDto;
   @ApiProperty({ type: String, format: "uuid" }) id!: string;
   @ApiProperty({ type: String }) name!: string;
   @ApiProperty({ type: String, enum: ["coastline_geojson", "shoreline_timeseries_geojson", "wave_climate", "shoreline_observations_json", "longshore_sediment_sources_json", "longshore_structures_json", "flat_mesh_msh", "seabed_msh", "bathymetry_grid_json", "bathymetry_grid_metadata_json", "relief_reference_passport_json", "export_metadata_json", "bathymetry_source_json", "adaptive_field_csv", "adaptive_field_report_json", "mesh_comparison_report_json", "adaptive_comparison_report_json", "expert_organizer_key_json", "expert_ratings_tsv"] })

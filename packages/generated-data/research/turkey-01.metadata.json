@@ -1,0 +1,97 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "ffcd9702be3f58431d69e3502508bfef98275411a3a4bb0fad42ef3f50bd423d",
+    "path": "turkey-01.geojson",
+    "pointCount": 57,
+    "sha256": "4178928b9296d75621c6f90ce1d04330c55830414214d8c2e3f104e8080c6528",
+    "sizeBytes": 1395
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Кызылырмакская коса и дельта",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 305952470,
+      "sourceWayVersion": 3,
+      "sourceWayEditedAt": "2023-05-12T14:25:50Z",
+      "sourcePath": 4,
+      "regionSegment": "segment-006",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 57,
+      "subdivisionLevel": 0,
+      "pointCount": 57,
+      "lengthKm": 8.104143842313787,
+      "dimension": 0.9865565789816773,
+      "regressionRSquared": 0.9999208118419445,
+      "stableAcrossScales": true,
+      "rejectedCandidates": []
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 1,
+  "regionId": "turkey-01",
+  "roi": {
+    "east": 35.98,
+    "north": 41.81,
+    "south": 41.69,
+    "west": 35.82
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:41:21Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "05fdadd77eb40223677e22986649570d5fd6da57688043700515722397cfbe40",
+    "retrievedAt": "2026-10-21T10:42:30Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/turkey-01.json",
+    "snapshotSha256": "99856dfee399ed32af49c998ff9d87294c895f44115e16323cb22846c43fa931",
+    "sourceUrl": "https://www.openstreetmap.org/way/305952470"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "4178928b9296d75621c6f90ce1d04330c55830414214d8c2e3f104e8080c6528",
+    "sourceBytes": 1395,
+    "pathCount": 1,
+    "pointCount": 57,
+    "truncated": false,
+    "issues": []
+  }
+}

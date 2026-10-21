@@ -335,6 +335,21 @@ test("пользовательский расчёт принимает толь�
     );
 });
 
+test("служебная проверка набора использует только UUID и фиксированную Go-команду", () => {
+  const datasetId = "33333333-3333-4333-8333-333333333333";
+  const job = validateCalculation({ kind: "dataset_validation", input: { datasetId } });
+  assert.equal(resourceProfileForKind(job.kind), "standard");
+  assert.deepEqual(commandArguments(job, "/job/output", "/job/source.geojson"),
+    ["coastline-check", "--input", "/job/source.geojson", "--output", "/job/output"]);
+  assert.throws(() => commandArguments(job, "/job/output"));
+  for (const input of [{ datasetId: "/etc/passwd" }, { datasetId, output: "/tmp" }, {}])
+    assert.throws(() => validateCalculation({ kind: "dataset_validation", input }));
+  const scientific = validateCalculation({ kind: "coastline_validation", input: { coastlineInputId: datasetId } });
+  assert.equal(resourceProfileForKind(scientific.kind), "heavy");
+  assert.deepEqual(commandArguments(scientific, "/job/output", undefined, { coastlineInputId: "/job/source.geojson" }),
+    ["coastline-check", "--input", "/job/source.geojson", "--output", "/job/output"]);
+});
+
 test("проверка источника и карта своего контура не принимают URL или путь пользователя", () => {
   const id = "33333333-3333-4333-8333-333333333333";
   for (const kind of ["source_file", "map_file"] as const) {

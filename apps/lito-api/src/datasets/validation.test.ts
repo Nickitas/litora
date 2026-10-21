@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { validateDataset } from "./validation.js";
+import { parseCreateDataset } from "@litora/contracts";
 
 const valid = {
   name: "  Участок Сочи  ",
@@ -28,6 +29,20 @@ test("набор фиксирует метаданные и ограниченн
       .dataset.sourceRevision,
     "снимок-2026-08-17",
   );
+});
+
+test("web и API используют одинаковые структурные пределы 2–500 точек", () => {
+  for (const count of [2, 500]) {
+    const body = { ...valid, geometry: { type: "LineString", coordinates: Array.from({ length: count }, () => [39.67, 43.64]) } };
+    assert.deepEqual(parseCreateDataset(body), validateDataset(body).dataset);
+  }
+  for (const count of [0, 1, 501]) {
+    const body = { ...valid, geometry: { type: "LineString", coordinates: Array.from({ length: count }, () => [39.67, 43.64]) } };
+    assert.throws(() => parseCreateDataset(body));
+    assert.throws(() => validateDataset(body));
+  }
+  // Повторы и область моря проверяет Go: структурный валидатор не подменяет его.
+  assert.equal(parseCreateDataset({ ...valid, geometry: { type: "LineString", coordinates: [[0, 0], [0, 0]] } }).geometry.coordinates.length, 2);
 });
 
 test("набор не принимает иной CRS, единицы, формат, URL/путь или неверные точки", () => {

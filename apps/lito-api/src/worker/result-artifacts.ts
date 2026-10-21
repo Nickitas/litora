@@ -42,6 +42,7 @@ export async function assertResultArtifacts(
     throw new Error("CLI создал файлы, не заявленные в манифесте Go");
 
   const required: string[] = [];
+  if (kind === "dataset_validation" || kind === "coastline_validation") required.push("coastline-validation.json");
   if (kind === "coastline_region") required.push("region/selection.json", "region/coastline.geojson", "svg/coastline-region.svg");
   if (["dimension", "dimension_dataset", "dimension_file", "all_demo", "all_file"].includes(kind))
     required.push("metrics/dimension.metrics.json", "svg/dimension_0.svg", "svg/dimension_loglog_0.svg");

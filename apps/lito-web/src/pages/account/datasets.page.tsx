@@ -20,6 +20,8 @@ import { Input } from "@/shared/shadcn/components/ui/input";
 import { Label } from "@/shared/shadcn/components/ui/label";
 import { DatasetUpload } from "./ui/dataset-upload";
 import { DatasetPassport } from "./ui/dataset-passport";
+import { CoastlineValidationSummary } from "./ui/coastline-validation-panel";
+import { validationPending } from "./model/use-coastline-validation";
 import { suggestDatasetName } from "./model/dataset-name";
 
 function formatDate(value: string) {
@@ -57,6 +59,7 @@ function DatasetCard({ dataset }: { dataset: DatasetDto }) {
           </p>
 
           <DatasetPassport dataset={dataset} />
+          <CoastlineValidationSummary value={dataset.validation} />
           <p className="mt-4 text-sm font-medium text-primary">
             Открыть набор →
           </p>
@@ -173,6 +176,7 @@ export function DatasetsPage() {
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
+  const [validationPollError, setValidationPollError] = useState("");
   const [exampleError, setExampleError] = useState("");
   const [savingExampleKey, setSavingExampleKey] = useState<string | null>(null);
   const reload = useCallback(() => {
@@ -206,6 +210,25 @@ export function DatasetsPage() {
     };
   }, [revision]);
 
+  const hasPendingValidation = datasets.some((dataset) => validationPending(dataset.validation));
+  useEffect(() => {
+    if (!hasPendingValidation) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const next = await api.datasets();
+        if (!active) return;
+        setDatasets(next); setValidationPollError("");
+        if (next.some((dataset) => validationPending(dataset.validation))) timer = setTimeout(() => void poll(), 2000);
+      } catch {
+        if (active) setValidationPollError("Не удалось обновить результаты проверки. Сохранённые наборы остаются в списке.");
+      }
+    };
+    timer = setTimeout(() => void poll(), 2000);
+    return () => { active = false; clearTimeout(timer); };
+  }, [hasPendingValidation, revision]);
+
   const normalizedSearch = search.trim().toLocaleLowerCase("ru-RU");
   const quotaReached = datasets.length >= 100 && !error;
   const visibleDatasets = normalizedSearch
@@ -224,7 +247,7 @@ export function DatasetsPage() {
     setSearch("");
     setCreating(false);
     setSavedMessage(
-      `Набор «${dataset.name}» сохранён. Он доступен в форме нового расчёта.`
+      `Набор «${dataset.name}» сохранён. Состояние проверки геометрии показано в карточке.`
     );
   }
 
@@ -298,6 +321,9 @@ export function DatasetsPage() {
         </p>
       )}
 
+      {validationPollError && <div role="alert" className="rounded-lg border p-3 text-sm">
+        <p>{validationPollError}</p><Button type="button" variant="link" onClick={reload}>Обновить состояния</Button>
+      </div>}
       {savedMessage && (
         <p
           role="status"

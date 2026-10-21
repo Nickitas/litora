@@ -13,7 +13,9 @@ import type {
 
 export const calculationKinds: CalculationKindDto[] = [
   { kind: "coastline_region", title: "Выбрать участок побережья", description: "Любая область Чёрного моря из полного контура или своего GeoJSON: карта и отдельные линии для следующих расчётов." },
-  { kind: "source_file", title: "Проверить источник береговой линии", description: "Проверка загруженного контура и сохранение его снимка с манифестом." },
+  { kind: "source_file", title: "Проверить источник береговой линии", description: "Инспекция и снимок источника Go для совместимости прежних запросов.", selectable: false },
+  { kind: "coastline_validation", title: "Проверка геометрии научного контура", description: "Служебная проверка загруженного GeoJSON в Go.", selectable: false },
+  { kind: "dataset_validation", title: "Проверка геометрии малого набора", description: "Служебная проверка загруженной береговой линии в Go.", selectable: false },
   { kind: "dimension", title: "Фрактальная размерность", description: "Box-counting полного закреплённого контура MarineRegions: карта, регрессия и метрики." },
   { kind: "dimension_dataset", title: "Размерность своей береговой линии", description: "Box-counting небольшого GeoJSON LineString." },
   { kind: "dimension_file", title: "Размерность полного контура", description: "Box-counting загруженного GeoJSON, включая полный контур Чёрного моря." },
@@ -39,7 +41,7 @@ export const calculationKinds: CalculationKindDto[] = [
 export const scientificInputFields = scientificInputRequirements;
 
 export function resourceProfileForKind(kind: CalculationKind) {
-  return kind === "source_file" || kind === "dimension_file" || kind === "map_file" ||
+  return kind === "source_file" || kind === "coastline_validation" || kind === "dimension_file" || kind === "map_file" ||
     kind === "mesh" || kind === "erosion_file" || kind === "all_file" || kind === "calibrate_cerc" || kind.startsWith("seabed_")
     ? "heavy" : "standard";
 }
@@ -341,12 +343,14 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
       rejectUnknown(p, []);
       return { kind: data.kind, input: {} };
     case "dimension_dataset":
+    case "dataset_validation":
       rejectUnknown(p, ["datasetId"]);
-      return { kind: "dimension_dataset", input: references(p, { datasetId: "coastline_geojson" }) };
+      return { kind: data.kind, input: references(p, { datasetId: "coastline_geojson" }) };
     case "dimension_file":
       rejectUnknown(p, ["coastlineInputId"]);
       return { kind: "dimension_file", input: references(p, scientificInputFields.dimension_file) };
     case "source_file":
+    case "coastline_validation":
     case "map_file":
       rejectUnknown(p, ["coastlineInputId"]);
       return { kind: data.kind, input: references(p, scientificInputFields[data.kind]) };
@@ -580,10 +584,15 @@ export function commandArguments(
     case "dimension_dataset":
       if (!datasetPath) throw new Error("Для пользовательского расчёта нужен серверный путь набора");
       return ["dimension", "--input", datasetPath, "--output", output];
+    case "dataset_validation":
+      if (!datasetPath) throw new Error("Для проверки нужен серверный путь набора");
+      return ["coastline-check", "--input", datasetPath, "--output", output];
     case "dimension_file":
       return ["dimension", "--input", required("coastlineInputId"), "--output", output];
     case "source_file":
       return ["source", "--input", required("coastlineInputId"), "--output", output];
+    case "coastline_validation":
+      return ["coastline-check", "--input", required("coastlineInputId"), "--output", output];
     case "map":
       return ["map", "black-sea", "--input", bundledBlackSeaPath, "--output", output];
     case "map_file":

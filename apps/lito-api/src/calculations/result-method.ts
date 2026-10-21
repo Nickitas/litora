@@ -8,6 +8,8 @@ export interface ResultMethod {
 const expected = {
   coastline_region: { command: "lito region", id: "coastline-region" },
   source_file: { command: "lito source", id: null },
+  coastline_validation: { command: "lito coastline-check", id: "coastline-validation" },
+  dataset_validation: { command: "lito coastline-check", id: "coastline-validation" },
   dimension: { command: "lito dimension", id: "box-counting" },
   dimension_dataset: { command: "lito dimension", id: "box-counting" },
   dimension_file: { command: "lito dimension", id: "box-counting" },

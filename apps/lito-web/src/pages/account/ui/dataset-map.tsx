@@ -171,7 +171,9 @@ export function DatasetMap({ geometry }: { geometry: GeoJsonLineStringDto }) {
   return (
     <div className="space-y-3">
       <div className="relative overflow-hidden rounded-xl border bg-background">
-        <div ref={container} className="absolute inset-0 z-0" aria-hidden={!basemap} inert={!basemap} />
+        <div className="absolute inset-0 z-0" aria-hidden={!basemap} inert={!basemap}>
+          <div ref={container} className="h-full w-full" />
+        </div>
         <svg
           role="img"
           aria-label="Береговая линия и её географический охват"

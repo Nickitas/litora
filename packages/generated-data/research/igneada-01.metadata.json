@@ -1,0 +1,97 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "2a76f0b1a97fab70f18f71d90b7fe92c1f853afc12b7f7be326452392e1d2ef8",
+    "path": "igneada-01.geojson",
+    "pointCount": 32,
+    "sha256": "c67f2a813d1fb9e232033e2fc8b0ec4cbd5b7dab7c8321c59b80ade9d869ae32",
+    "sizeBytes": 780
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Игнеада и район Резовской",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 997433482,
+      "sourceWayVersion": 2,
+      "sourceWayEditedAt": "2026-05-05T03:35:01Z",
+      "sourcePath": 11,
+      "regionSegment": "segment-011",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 32,
+      "subdivisionLevel": 0,
+      "pointCount": 32,
+      "lengthKm": 5.416567757858909,
+      "dimension": 0.9740007705755778,
+      "regressionRSquared": 0.9999376446692725,
+      "stableAcrossScales": true,
+      "rejectedCandidates": []
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 2,
+  "regionId": "igneada-01",
+  "roi": {
+    "east": 28.069999999999997,
+    "north": 41.940000000000005,
+    "south": 41.82,
+    "west": 27.91
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:51:30Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "042d6772a8a67e26bf29862541e3b91b38b0dae50f7878f634991de6e8d14295",
+    "retrievedAt": "2026-10-21T10:53:10Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/igneada-01.json",
+    "snapshotSha256": "10dad1eb9d2dbe5e5dbef575401bfe9722ff5a3f7552e84dec5032391f6e751c",
+    "sourceUrl": "https://www.openstreetmap.org/way/997433482"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "c67f2a813d1fb9e232033e2fc8b0ec4cbd5b7dab7c8321c59b80ade9d869ae32",
+    "sourceBytes": 780,
+    "pathCount": 1,
+    "pointCount": 32,
+    "truncated": false,
+    "issues": []
+  }
+}

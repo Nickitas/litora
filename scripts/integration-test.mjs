@@ -154,13 +154,42 @@ assert.match(uploaded.sha256, /^[a-f0-9]{64}$/);
 assert.equal((await first.request("/datasets"))[0].id, uploaded.id);
 assert.deepEqual(await second.request("/datasets"), []);
 const viewedDataset = await first.request(`/datasets/${uploaded.id}`);
-assert.deepEqual(viewedDataset, { ...uploaded, geometry: inputGeometry });
-for (const suffix of ["", "/content"]) {
+assert.deepEqual({ ...viewedDataset, validation: undefined }, { ...uploaded, validation: undefined, geometry: inputGeometry });
+for (const suffix of ["", "/content", "/validation"]) {
   await anonymous.request(`/datasets/${uploaded.id}${suffix}`, "GET", undefined, 401);
   await second.request(`/datasets/${uploaded.id}${suffix}`, "GET", undefined, 404);
   await first.request(`/datasets/${randomUUID()}${suffix}`, "GET", undefined, 404);
   await first.request(`/datasets/not-a-uuid${suffix}`, "GET", undefined, 400);
 }
+await anonymous.request(`/datasets/${uploaded.id}/validation`, "POST", undefined, 401);
+await second.request(`/datasets/${uploaded.id}/validation`, "POST", undefined, 404);
+async function awaitCoastlineValidation(path) {
+  let state;
+  for (let attempt = 0; attempt < 150; attempt++) {
+    state = await first.request(`${path}/validation`);
+    if (!["queued", "running"].includes(state.status)) break;
+    await delay(200);
+  }
+  assert.ok(["succeeded", "failed"].includes(state.status), JSON.stringify(state));
+  assert.equal(state.methodId, "coastline-validation");
+  assert.equal(state.methodRevision, "geometry-1");
+  return state;
+}
+assert.ok(uploaded.validation.jobId, "Сохранение автоматически ставит проверку в очередь");
+const acceptedGeometry = await awaitCoastlineValidation(`/datasets/${uploaded.id}`);
+assert.equal(acceptedGeometry.status, "succeeded");
+assert.equal(acceptedGeometry.accepted, true);
+const invalidGeometryDataset = await first.request("/datasets", "POST", {
+  name: "Ошибочная область", source: "Отрицательный тест", license: "Тест",
+  crs: "EPSG:4326", coordinateUnit: "degrees", geometry: { type: "LineString", coordinates: [[0,0], [1,1]] },
+}, 201);
+const rejectedGeometry = await awaitCoastlineValidation(`/datasets/${invalidGeometryDataset.id}`);
+assert.equal(rejectedGeometry.status, "failed");
+assert.equal(rejectedGeometry.accepted, false);
+assert.ok(rejectedGeometry.issues.some((issue) => issue.code === "outside_black_sea"));
+assert.equal((await first.request(`/datasets/${invalidGeometryDataset.id}`)).name, invalidGeometryDataset.name);
+assert.equal((await first.request(`/calculations/${rejectedGeometry.jobId}`)).artifacts.some((artifact) => artifact.filename === "coastline-validation.json"), true);
+console.log("Загрузка → Go worker: принятый и ошибочный контур, отчёт и паспорт сохранены");
 const datasetFile = await fetch(`${base}/datasets/${uploaded.id}/content`, {
   headers: { Authorization: `Bearer ${first.token}` },
 });
@@ -201,6 +230,13 @@ assert.equal(readyScientific.status, "ready");
 assert.equal(readyScientific.sha256,
   createHash("sha256").update(scientificBytes).digest("hex"));
 assert.equal((await first.request("/scientific-inputs"))[0].id, scientificRecord.id);
+if (process.env.TEST_COASTLINE_VALIDATION_ENABLED === "true") {
+  const state = await awaitCoastlineValidation(`/scientific-inputs/${scientificRecord.id}`);
+  assert.equal(typeof state.accepted, "boolean");
+  await second.request(`/scientific-inputs/${scientificRecord.id}/validation`, "GET", undefined, 404);
+  await second.request(`/scientific-inputs/${scientificRecord.id}/validation`, "POST", undefined, 404);
+  console.log(`Научный контур → отдельная проверка Go: ${state.status}, замечаний ${state.issues.length}`);
+}
 assert.deepEqual(await first.request("/scientific-inputs/quota"), {
   ...emptyScientificQuota, usedCount: 1, usedBytes: scientificBytes.length,
 });

@@ -154,7 +154,7 @@ async function run(job: JobRow) {
     const validated = validateCalculation({ kind: job.kind, input: job.input });
     let datasetPath: string | undefined;
     let provenance: Record<string, unknown> | undefined;
-    if (job.kind === "dimension_dataset") {
+    if (job.kind === "dimension_dataset" || job.kind === "dataset_validation") {
       if (!job.dataset_id || !job.user_id)
         throw new Error("У расчёта нет набора данных или владельца");
       const dataset = await datasets.getOwned(job.dataset_id, job.user_id);
@@ -313,12 +313,13 @@ async function run(job: JobRow) {
         (environment.workerProfile === "heavy" ? maxHeavyOutputBytes : maxOutputBytes)
     )
       throw new Error("Превышен лимит размера результата");
-    const method = scientificRejection ? null : resultMethodFromManifest(
+    const unverifiedRejection = scientificRejection && job.kind !== "dataset_validation" && job.kind !== "coastline_validation";
+    const method = unverifiedRejection ? null : resultMethodFromManifest(
       await readFile(join(output, "manifest.json")), validated.kind,
     );
-    const verifiedArtifacts = scientificRejection ? undefined
+    const verifiedArtifacts = unverifiedRejection ? undefined
       : await assertResultArtifacts(output, validated.kind, outputs);
-    if (job.kind !== "dimension_dataset" && scientificFiles.length === 0)
+    if (job.kind !== "dimension_dataset" && job.kind !== "dataset_validation" && scientificFiles.length === 0)
       provenance = {
         ...(await bundledInputProvenance(job.kind, join(directory, "data"))),
       };
@@ -360,7 +361,7 @@ async function run(job: JobRow) {
       scenario:
         job.kind === "erosion" || job.kind === "all_demo"
           ? "demo"
-          : job.kind === "dimension_dataset" || scientificFiles.length > 0
+          : job.kind === "dimension_dataset" || job.kind === "dataset_validation" || scientificFiles.length > 0
             ? "user-data"
             : "bundled-data",
       ...(provenance ? { provenance } : {}),
@@ -371,12 +372,12 @@ async function run(job: JobRow) {
     const completed = scientificRejection
       ? await db.query(
         `WITH finished AS (UPDATE calculation_jobs SET status='failed',result_summary=$3,result_schema_version=$4,
-         error_message=$5,finished_at=now(),updated_at=now()
+         error_message=$5,method_id=$6,method_revision=$7,finished_at=now(),updated_at=now()
          WHERE id=$1 AND worker_id=$2 AND status='running' RETURNING id)
          INSERT INTO calculation_events(job_id,event_type,payload)
          SELECT id,'failed',jsonb_build_object('message',$5::text) FROM finished`,
         [job.id, workerId, summary, calculationResultSchemaVersion,
-          `Научные критерии не пройдены. ${log.slice(-2000)}`.slice(0, 4000)],
+          `Научные критерии не пройдены. ${log.slice(-2000)}`.slice(0, 4000), method?.id ?? null, method?.revision ?? null],
       )
       : await db.query(
         `WITH finished AS (UPDATE calculation_jobs SET status='succeeded',result_summary=$3,result_schema_version=$4,method_id=$5,method_revision=$6,finished_at=now(),updated_at=now()

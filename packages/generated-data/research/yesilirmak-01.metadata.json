@@ -1,0 +1,97 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "6e702560d94f0c7304b0637db21b8177d154564434ea312a1cce20f744ecf7c2",
+    "path": "yesilirmak-01.geojson",
+    "pointCount": 47,
+    "sha256": "6d146b9cd83d77117199796c64614ecf6aff254fdd954c3199f48561f130c875",
+    "sizeBytes": 1171
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Дельта Ешильырмака",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 290720464,
+      "sourceWayVersion": 8,
+      "sourceWayEditedAt": "2023-05-17T08:42:56Z",
+      "sourcePath": 1,
+      "regionSegment": "segment-001",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 47,
+      "subdivisionLevel": 0,
+      "pointCount": 47,
+      "lengthKm": 11.002328365495176,
+      "dimension": 0.9648317024076777,
+      "regressionRSquared": 0.9997940832777417,
+      "stableAcrossScales": true,
+      "rejectedCandidates": []
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 2,
+  "regionId": "yesilirmak-01",
+  "roi": {
+    "east": 36.69,
+    "north": 41.43,
+    "south": 41.309999999999995,
+    "west": 36.53
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:48:28Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "ee3afae634d7cfda9789a09ae262419bbe20e89828b36643c131bc9e329c00ea",
+    "retrievedAt": "2026-10-21T10:49:43Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/yesilirmak-01.json",
+    "snapshotSha256": "d4e309285315d9fc1b62f6ddf8a91a34519e2c831d84571e0c1b29ac9bae7da0",
+    "sourceUrl": "https://www.openstreetmap.org/way/290720464"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "6d146b9cd83d77117199796c64614ecf6aff254fdd954c3199f48561f130c875",
+    "sourceBytes": 1171,
+    "pathCount": 1,
+    "pointCount": 47,
+    "truncated": false,
+    "issues": []
+  }
+}

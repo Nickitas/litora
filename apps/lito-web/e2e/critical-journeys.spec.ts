@@ -7,6 +7,7 @@ import type {
   CalculationJobDto,
   CalculationKindDto,
   CoastlinePreviewDto,
+  CoastlineValidationDto,
   CalculationDeletionRequestDto,
   CalculationMetadataExportV1,
   DatasetDto,
@@ -110,6 +111,121 @@ const datasetDetail: DatasetDetailDto = {
   name: "Берег для исследования",
   geometry: defaultCoastlineDataset.geometry,
 };
+
+const checkedCoastline: CoastlineValidationDto = {
+  jobId: "66666666-6666-4666-8666-666666666666", status: "succeeded", accepted: true,
+  issues: [], truncated: false, message: null, methodId: "coastline-validation",
+  methodRevision: "geometry-1", updatedAt: "2026-10-21T09:00:00.000Z",
+};
+
+test("проверка загрузки: очередь, замечания, повтор и доступ к расчёту", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.route("https://tiles.openfreemap.org/**", (route) => route.abort());
+  let state: CoastlineValidationDto = { ...checkedCoastline, status: "queued", accepted: null };
+  let starts = 0;
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh") return { body: session };
+    if (path === `/api/datasets/${dataset.id}`) return { body: { ...datasetDetail, validation: state } };
+    if (path === `/api/datasets/${dataset.id}/validation`) {
+      if (method === "POST") { starts++; state = checkedCoastline; }
+      return { body: state };
+    }
+  });
+  await page.goto(`/lab/datasets/${dataset.id}`);
+  await expect(page.getByRole("region", { name: "Проверка геометрии береговой линии" }).getByRole("status")).toHaveText("Проверка геометрии в очереди");
+  await expect(page.getByRole("button", { name: "Рассчитать размерность" })).toBeDisabled();
+  state = { ...state, status: "running" };
+  await expect(page.getByRole("region", { name: "Проверка геометрии береговой линии" }).getByRole("status")).toHaveText("Go проверяет геометрию");
+  state = { ...state, status: "failed", accepted: false, issues: [
+    { severity: "error", code: "self_intersection", message: "Линия 1: пересекаются сегменты 1 и 3", segment: 1, otherSegment: 3 },
+  ] };
+  await expect(page.getByRole("list", { name: "Замечания проверки" })).toContainText("пересекаются сегменты 1 и 3");
+  await expect(page.getByRole("button", { name: "Рассчитать размерность" })).toBeDisabled();
+  await chooseTheme(page, "dark");
+  await page.getByRole("button", { name: "Запустить проверку", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Проверка геометрии береговой линии" }).getByRole("status")).toHaveText("Проверка геометрии пройдена");
+  await expect(page.getByRole("link", { name: "Рассчитать размерность" })).toBeVisible();
+  expect(starts).toBe(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("проверка загрузки: ошибка чтения, восстановление и остановка polling при уходе", async ({ page }) => {
+  let unavailable = true, requests = 0;
+  const observed = await mockApi(page, (path) => {
+    if (path === "/api/auth/refresh") return { body: session };
+    if (path === `/api/datasets/${dataset.id}`) return { body: datasetDetail };
+    if (path === "/api/datasets") return { body: [] };
+    if (path === `/api/datasets/${dataset.id}/validation`) {
+      requests++;
+      return unavailable ? { status: 503, body: { message: "Проверка временно недоступна" } } :
+        { body: { ...checkedCoastline, status: "running", accepted: null } };
+    }
+  });
+  await page.goto(`/lab/datasets/${dataset.id}`);
+  await expect(page.getByRole("alert")).toHaveText("Проверка временно недоступна");
+  unavailable = false;
+  await page.getByRole("button", { name: "Обновить состояние" }).click();
+  await expect(page.getByRole("region", { name: "Проверка геометрии береговой линии" }).getByRole("status")).toHaveText("Go проверяет геометрию");
+  await page.getByRole("link", { name: "Все наборы" }).click();
+  await expect(page).toHaveURL(/\/lab\/datasets$/);
+  const stopped = requests;
+  await page.waitForTimeout(2300);
+  expect(requests).toBe(stopped);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("проверка загрузки: структурная ошибка сохраняет паспорт и не отправляет запрос", async ({ page }) => {
+  const posts: unknown[] = [];
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh") return { body: session };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/datasets" && method === "POST") { posts.push(body); return { status: 201, body: dataset }; }
+  });
+  await page.goto("/lab/datasets");
+  await page.getByRole("button", { name: "Добавить набор" }).click();
+  for (const buffer of [Buffer.from('{"type":"LineString","coordinates":[[37,43]]}'), Buffer.alloc(65_537, " ")]) {
+    await page.getByLabel("Файл GeoJSON").setInputFiles({ name: "survey.geojson", mimeType: "application/geo+json", buffer });
+    await page.getByLabel("Название", { exact: true }).fill("Моя съёмка");
+    await page.getByLabel("Источник данных").fill("Личный архив");
+    await page.getByLabel("Лицензия или условия использования").fill("Согласовано автором");
+    await page.locator("#dataset-creation").getByRole("button", { name: "Сохранить набор" }).click();
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByLabel("Название", { exact: true })).toHaveValue("Моя съёмка");
+    await expect(page.getByLabel("Источник данных")).toHaveValue("Личный архив");
+    await expect(page.getByLabel("Лицензия или условия использования")).toHaveValue("Согласовано автором");
+  }
+  expect(posts).toEqual([]);
+  expect(observed.unexpected).toEqual([]);
+});
+
+test("проверка загрузки: служебные виды скрыты, непринятый набор блокирует запуск", async ({ page }) => {
+  const observed = await mockApi(page, (path) => {
+    if (path === "/api/auth/refresh") return { body: session };
+    if (path === "/api/calculations") return { body: [] };
+    if (path === "/api/calculations/kinds") return { body: [...kinds,
+      { kind: "source_file", title: "Проверить источник береговой линии", description: "Снимок", selectable: false },
+      { kind: "dataset_validation", title: "Проверка малого набора", description: "Проверка", selectable: false },
+      { kind: "coastline_validation", title: "Проверка научного контура", description: "Проверка", selectable: false },
+    ] };
+    if (path === "/api/datasets") return { body: [dataset] };
+    if (path === `/api/datasets/${dataset.id}/validation`) return { body: { ...checkedCoastline, status: "failed", accepted: false,
+      issues: [{ severity: "error", code: "duplicate_point", message: "Точки 1 и 2 совпадают" }] } };
+  });
+  await openNewCalculation(page);
+  await page.getByLabel("Что рассчитать").click();
+  await expect(page.getByRole("option", { name: "Проверить источник береговой линии", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "Проверка малого набора", exact: true })).toHaveCount(0);
+  await page.getByRole("option", { name: "Своя береговая линия", exact: true }).click();
+  await page.getByLabel("Набор данных").click();
+  await page.getByRole("option", { name: new RegExp(dataset.name) }).click();
+  await expect(page.getByRole("list", { name: "Замечания проверки" })).toContainText("Точки 1 и 2 совпадают");
+  await expect(page.getByRole("button", { name: "Запустить расчёт", exact: true })).toBeDisabled();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
 
 test("api-client сохраняет двоичный ответ после обновления access token", async () => {
   let attempts = 0;
@@ -226,6 +342,33 @@ test("просмотр набора: отсутствующий UUID в форм
   await expect(page.getByText("Исходный набор больше недоступен.", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page.getByRole("alert")).toContainText("Исходный набор данных недоступен");
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("просмотр набора: карта сохраняет размер и центрирование при смене ширины", async ({ page }) => {
+  await page.route("https://tiles.openfreemap.org/styles/liberty", (route) => route.fulfill({
+    json: { version: 8, sources: {}, layers: [{ id: "background", type: "background", paint: { "background-color": "#ffffff" } }] },
+  }));
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST") return { body: session };
+    if (path === `/api/datasets/${dataset.id}`) return { body: datasetDetail };
+  });
+  await page.goto(`/lab/datasets/${dataset.id}`);
+  const supportsWebGL = await page.evaluate(() => Boolean(document.createElement("canvas").getContext("webgl2")));
+  test.skip(!supportsWebGL, "WebGL недоступен в этом окружении; координатный резерв проверяется отдельно");
+  await expect(page.getByRole("status").filter({ hasText: "Современная подложка" })).toBeVisible();
+  for (const width of [1440, 360, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.locator(".maplibregl-canvas").evaluate((canvas) => {
+      const container = canvas.closest(".maplibregl-map")!;
+      return container.clientHeight > 0 && canvas.clientHeight === container.clientHeight && canvas.clientWidth === container.clientWidth;
+    })).toBe(true);
+    await expect.poll(() => page.getByTestId("dataset-map-bounds").evaluate((path) => {
+      const box = (path as SVGPathElement).getBBox();
+      return Math.abs(box.x + box.width / 2 - 400) < 3 && Math.abs(box.y + box.height / 2 - 210) < 3;
+    })).toBe(true);
+  }
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -351,6 +494,7 @@ async function mockApi(
 ) {
   const unexpected: string[] = [];
   const pageErrors: string[] = [];
+  const ownedValidationSources = new Map<string, Record<string, unknown>>();
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.route(
     (url) => url.pathname.startsWith("/api/"),
@@ -366,6 +510,14 @@ async function mockApi(
         body = undefined;
       }
       let result = reply(path, method, body, url.searchParams);
+      const validationRequest = /^\/api\/(datasets|scientific-inputs)\/([^/]+)\/validation$/.exec(path);
+      if (!result && validationRequest && method === "GET") {
+        const known = ownedValidationSources.get(`${validationRequest[1]}:${validationRequest[2]}`);
+        if (known) result = { body: known.validation ?? {
+          jobId: "66666666-6666-4666-8666-666666666666", status: "succeeded", accepted: true,
+          issues: [], truncated: false, message: null, methodId: "coastline-validation", methodRevision: "geometry-1", updatedAt: "2026-10-21T09:00:00.000Z",
+        } };
+      }
       if (!result && path === "/api/scientific-inputs/formats" && method === "GET")
         result = { body: JSON.parse(await readFile(new URL("../../lito-cli/data/schemas/scientific-inputs-v1.json", import.meta.url), "utf8")) };
       if (!result && path === "/api/calculations/page" && method === "GET") {
@@ -403,6 +555,14 @@ async function mockApi(
         unexpected.push(`${method} ${path}`);
         await route.abort("blockedbyclient");
         return;
+      }
+      if (path.startsWith("/api/datasets") || path.startsWith("/api/scientific-inputs")) {
+        const family = path.startsWith("/api/datasets") ? "datasets" : "scientific-inputs";
+        const records: unknown[] = Array.isArray(result.body) ? result.body : [result.body];
+        for (const item of records) if (item && typeof item === "object" && !Array.isArray(item)) {
+          const record = item as Record<string, unknown>;
+          if (typeof record.id === "string") ownedValidationSources.set(`${family}:${record.id}`, record);
+        }
       }
       await route.fulfill({
         status: result.status ?? 200,

@@ -1,0 +1,97 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "e2d87f34f4f0eb486d7a4f5e50f164bd637ee34a8b80208b36d94476f170e6d9",
+    "path": "odesa-01.geojson",
+    "pointCount": 370,
+    "sha256": "b438d443d6626e8ac3f72f897ba72405d6ecc26dcd464a9d0d17287ac7ad9d95",
+    "sizeBytes": 8829
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Одесский залив",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 4529551,
+      "sourceWayVersion": 42,
+      "sourceWayEditedAt": "2024-08-07T17:41:03Z",
+      "sourcePath": 1,
+      "regionSegment": "segment-001",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 370,
+      "subdivisionLevel": 0,
+      "pointCount": 370,
+      "lengthKm": 6.460208269989406,
+      "dimension": 0.9989018602256244,
+      "regressionRSquared": 0.999619154143783,
+      "stableAcrossScales": true,
+      "rejectedCandidates": []
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 1,
+  "regionId": "odesa-01",
+  "roi": {
+    "east": 30.84,
+    "north": 46.510000000000005,
+    "south": 46.39,
+    "west": 30.680000000000003
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:44:21Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "1b5f34315d687d3f07ff48db6777dd63439c41a15fd100bacfe6f906fb599fbf",
+    "retrievedAt": "2026-10-21T10:45:31Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/odesa-01.json",
+    "snapshotSha256": "698bd6ac1f02e21f3aa7622b055af0274fab34ea1ec68c9badb241551e067f98",
+    "sourceUrl": "https://www.openstreetmap.org/way/4529551"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "b438d443d6626e8ac3f72f897ba72405d6ecc26dcd464a9d0d17287ac7ad9d95",
+    "sourceBytes": 8829,
+    "pathCount": 1,
+    "pointCount": 370,
+    "truncated": false,
+    "issues": []
+  }
+}

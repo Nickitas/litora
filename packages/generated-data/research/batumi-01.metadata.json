@@ -1,0 +1,99 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "94ace2bf75e69d695263e366f4400dc5eba64d39147085516dc9e822c799cb79",
+    "path": "batumi-01.geojson",
+    "pointCount": 69,
+    "sha256": "572d2774e542e4477ec3250927f33b4f98bf915993bb258d2da05ef8ee908dba",
+    "sizeBytes": 1687
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Батумский залив",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 4523983,
+      "sourceWayVersion": 33,
+      "sourceWayEditedAt": "2024-08-17T09:18:10Z",
+      "sourcePath": 1,
+      "regionSegment": "segment-001",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 69,
+      "subdivisionLevel": 0,
+      "pointCount": 69,
+      "lengthKm": 3.775602440775285,
+      "dimension": 0.9680250488708114,
+      "regressionRSquared": 0.9999068233477895,
+      "stableAcrossScales": true,
+      "rejectedCandidates": [
+        "segment-010 / часть 1 / точки 1–115: dimension потребовал бы нормализацию исходной геометрии"
+      ]
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 1,
+  "regionId": "batumi-01",
+  "roi": {
+    "east": 41.71,
+    "north": 41.71,
+    "south": 41.589999999999996,
+    "west": 41.550000000000004
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:42:21Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "04f5a8e32890b96477b1872c74d0b5e9d5b83598fc660d31d43c03ae317ba42d",
+    "retrievedAt": "2026-10-21T10:43:26Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/batumi-01.json",
+    "snapshotSha256": "d5ae160d0f601b6fddca8e59ec71cea0d7620f32e665ce3126bbacce86aaa596",
+    "sourceUrl": "https://www.openstreetmap.org/way/4523983"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "572d2774e542e4477ec3250927f33b4f98bf915993bb258d2da05ef8ee908dba",
+    "sourceBytes": 1687,
+    "pathCount": 1,
+    "pointCount": 69,
+    "truncated": false,
+    "issues": []
+  }
+}

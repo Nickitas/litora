@@ -30,6 +30,7 @@ import { environment } from "../config/environment.js";
 import { AuthGuard, type AuthRequest } from "../auth/auth.guard.js";
 import {
   CalculationPageResponse,
+  CalculationKindResponse,
   CalculationResponse,
   CoastlinePreviewResponse,
 } from "../http-models.js";
@@ -64,6 +65,7 @@ export class CalculationsController {
 
   @Get("kinds")
   @ApiOperation({ summary: "Доступные вычислительные сценарии" })
+  @ApiResponse({ status: 200, type: [CalculationKindResponse] })
   kinds() {
     return calculationKinds.filter((item) =>
       environment.heavyEnabled || resourceProfileForKind(item.kind) === "standard");

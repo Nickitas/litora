@@ -39,8 +39,11 @@ import { parseObservedShorelines } from "./observed-shorelines.js";
 import { scientificInputFormats } from "./format-catalog.js";
 import { previewGeoJSON } from "../calculations/coastline-preview.js";
 import { validateScientificFile } from "./file-validation.js";
+import { CoastlineValidationService } from "../coastline-validation/coastline-validation.service.js";
+import { CoastlineValidationResponse } from "../http-models.js";
 
 const maxObservedSeriesBytes = 16 * 1024 * 1024;
+const coastlineIdPipe = new ParseUUIDPipe({ exceptionFactory: () => new BadRequestException("Некорректный UUID береговой линии") });
 
 @Controller("scientific-inputs")
 @ApiTags("Научные входные файлы")
@@ -52,13 +55,32 @@ export class ScientificInputsController {
     private readonly inputs: ScientificInputsRepository,
     @Inject(ObjectStorageService)
     private readonly storage: ObjectStorageService,
+    @Inject(CoastlineValidationService) private readonly validation: CoastlineValidationService,
   ) {}
 
   @Get()
   @ApiOperation({ summary: "Список своих научных файлов" })
   @ApiResponse({ status: 200, type: [ScientificInputResponse] })
-  list(@Req() req: AuthRequest) {
-    return this.inputs.list(req.user.id);
+  async list(@Req() req: AuthRequest) {
+    return this.validation.decorateInputs(req.user.id, await this.inputs.list(req.user.id));
+  }
+
+  @Get(":id/validation")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Проверка геометрии своего научного контура" })
+  @ApiResponse({ status: 200, type: CoastlineValidationResponse })
+  @ApiResponse({ status: 404, description: "Свой загруженный контур не найден" })
+  validationState(@Req() req: AuthRequest, @Param("id", coastlineIdPipe) id: string) {
+    return this.validation.state("scientific", id, req.user.id);
+  }
+
+  @Post(":id/validation")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Поставить проверку научного контура в очередь Go worker" })
+  @ApiResponse({ status: 201, type: CoastlineValidationResponse })
+  @ApiResponse({ status: 409, description: "Файл не готов, очередь заполнена или heavy worker не включён" })
+  validate(@Req() req: AuthRequest, @Param("id", coastlineIdPipe) id: string) {
+    return this.validation.enqueue("scientific", id, req.user.id);
   }
 
   @Get("formats")
@@ -200,7 +222,9 @@ export class ScientificInputsController {
           : "application/json";
       await this.storage.uploadFile(record.object_key, path, contentType);
       uploaded = true;
-      return await this.inputs.finishUpload(id, req.user.id, record.object_key, hash.digest("hex"));
+      const ready = await this.inputs.finishUpload(id, req.user.id, record.object_key, hash.digest("hex"));
+      return ready.role === "coastline_geojson" ?
+        { ...ready, validation: await this.validation.afterSave("scientific", id, req.user.id) } : ready;
     } catch (error) {
       if (uploaded) {
         const ready = await this.inputs.isReadyObject(id, req.user.id, record.object_key)

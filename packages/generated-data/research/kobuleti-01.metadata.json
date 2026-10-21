@@ -1,0 +1,97 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "269d54aa9f359bc7778398d1b34ebd3e4ce32fdad585ae3efd9ae01d2fa426d4",
+    "path": "kobuleti-01.geojson",
+    "pointCount": 109,
+    "sha256": "f692a74623cb633dc3a0eb142d5af042753c56d2f7382d12a3b970e2f078490a",
+    "sizeBytes": 2624
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Кобулети — Уреки",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 1459286973,
+      "sourceWayVersion": 1,
+      "sourceWayEditedAt": "2025-12-17T12:21:23Z",
+      "sourcePath": 13,
+      "regionSegment": "segment-013",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 109,
+      "subdivisionLevel": 0,
+      "pointCount": 109,
+      "lengthKm": 3.408957707740003,
+      "dimension": 0.9341064680058483,
+      "regressionRSquared": 0.9996352041293014,
+      "stableAcrossScales": true,
+      "rejectedCandidates": []
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 2,
+  "regionId": "kobuleti-01",
+  "roi": {
+    "east": 41.85,
+    "north": 42.010000000000005,
+    "south": 41.89,
+    "west": 41.690000000000005
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:46:22Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "d9318a04ac5ea823ac37f08699b8a7af07577e080be0f3e59fa03591ad43e3da",
+    "retrievedAt": "2026-10-21T10:47:57Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/kobuleti-01.json",
+    "snapshotSha256": "f17d64df620841865684ed0d00d9f2b4638a6f3cd9d9e672a50fb02ae0f71b57",
+    "sourceUrl": "https://www.openstreetmap.org/way/1459286973"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "f692a74623cb633dc3a0eb142d5af042753c56d2f7382d12a3b970e2f078490a",
+    "sourceBytes": 2624,
+    "pathCount": 1,
+    "pointCount": 109,
+    "truncated": false,
+    "issues": []
+  }
+}

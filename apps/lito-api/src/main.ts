@@ -28,6 +28,7 @@ import { AuthGuard } from "./auth/auth.guard.js";
 import { DatasetsController } from "./datasets/datasets.controller.js";
 import { DatasetsRepository } from "./datasets/datasets.repository.js";
 import { environment } from "./config/environment.js";
+import { CoastlineValidationService } from "./coastline-validation/coastline-validation.service.js";
 import { ScientificInputsController } from "./scientific-inputs/scientific-inputs.controller.js";
 import { ScientificInputsRepository } from "./scientific-inputs/scientific-inputs.repository.js";
 
@@ -87,6 +88,7 @@ class AppController {
     CalculationsRepository,
     CalculationDeletionService,
     DatasetsRepository,
+    CoastlineValidationService,
     ScientificInputsRepository,
     AuthService,
     AuthGuard,

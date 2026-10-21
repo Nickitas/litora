@@ -2,6 +2,8 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 const rejectionReports: Record<string, { path: string; field: string }> = {
+  dataset_validation: { path: "coastline-validation.json", field: "accepted" },
+  coastline_validation: { path: "coastline-validation.json", field: "accepted" },
   seabed_build: { path: "seabed/build-report.json", field: "accepted" },
   seabed_generate_adaptive: { path: "seabed/adaptive/gmsh/generation-report.json", field: "accepted" },
   seabed_validate: { path: "seabed/quality/relief-quality.json", field: "metrics_accepted" },

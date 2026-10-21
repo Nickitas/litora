@@ -1,0 +1,97 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "55528fa4b76d13f85e23fc37071b44b733da0361bc73f383287716969f1cf6c4",
+    "path": "kilyos-01.geojson",
+    "pointCount": 266,
+    "sha256": "b2928ff095b6ba4a2f8511d9e8f01538fc0f87155100def392f8d22dd72808a9",
+    "sizeBytes": 6346
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Кильос и открытый берег севернее Стамбула",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 4509642,
+      "sourceWayVersion": 10,
+      "sourceWayEditedAt": "2022-02-27T12:45:53Z",
+      "sourcePath": 1,
+      "regionSegment": "segment-001",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 266,
+      "subdivisionLevel": 0,
+      "pointCount": 266,
+      "lengthKm": 5.260613592644402,
+      "dimension": 1.0237145943446462,
+      "regressionRSquared": 0.999782645648862,
+      "stableAcrossScales": true,
+      "rejectedCandidates": []
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 2,
+  "regionId": "kilyos-01",
+  "roi": {
+    "east": 29.08,
+    "north": 41.31,
+    "south": 41.19,
+    "west": 28.92
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:51:30Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "9f8f36d99247d0f8811e32c4c97e7994ef8f890f55981076c7384a0acc085374",
+    "retrievedAt": "2026-10-21T10:52:32Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/kilyos-01.json",
+    "snapshotSha256": "4fad2295ba5240ed0639272904cea9776cf2dd1e78ef53425b34d2fb9cfe9918",
+    "sourceUrl": "https://www.openstreetmap.org/way/4509642"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "b2928ff095b6ba4a2f8511d9e8f01538fc0f87155100def392f8d22dd72808a9",
+    "sourceBytes": 6346,
+    "pathCount": 1,
+    "pointCount": 266,
+    "truncated": false,
+    "issues": []
+  }
+}

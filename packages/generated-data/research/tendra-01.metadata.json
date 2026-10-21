@@ -1,0 +1,101 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "b10b528150887aabc646513d821cca0d5807f221dac2e79465a39901c8840de0",
+    "path": "tendra-01.geojson",
+    "pointCount": 32,
+    "sha256": "233b5b43ea11c6a2e8d4d3eec008f2279ffdb9694f37a86b618afab83c53c5b0",
+    "sizeBytes": 792
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Тендровская коса",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 685423874,
+      "sourceWayVersion": 14,
+      "sourceWayEditedAt": "2021-02-17T10:19:06Z",
+      "sourcePath": 2,
+      "regionSegment": "segment-002",
+      "chunk": 1,
+      "startPoint": 32,
+      "endPoint": 63,
+      "subdivisionLevel": 1,
+      "pointCount": 32,
+      "lengthKm": 6.546053603225606,
+      "dimension": 0.9535211941935098,
+      "regressionRSquared": 0.9997393879729434,
+      "stableAcrossScales": true,
+      "rejectedCandidates": [
+        "segment-001 / часть 1 / точки 1–222: dimension потребовал бы нормализацию исходной геометрии",
+        "segment-002 / часть 1 / точки 1–64: dimension потребовал бы нормализацию исходной геометрии",
+        "segment-001 / часть 1 / точки 111–221: dimension потребовал бы нормализацию исходной геометрии"
+      ]
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 2,
+  "regionId": "tendra-01",
+  "roi": {
+    "east": 31.93,
+    "north": 46.260000000000005,
+    "south": 46.14,
+    "west": 31.770000000000003
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:55:33Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "a7515331bc225aaa55354b864f3e11b300978b0f34ccc87c8f35382263638ac9",
+    "retrievedAt": "2026-10-21T10:56:40Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/tendra-01.json",
+    "snapshotSha256": "5628ca96b73ad3888fcca824b0488651cdf1b7bcd0ab4921278ff93956413703",
+    "sourceUrl": "https://www.openstreetmap.org/way/685423874"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "233b5b43ea11c6a2e8d4d3eec008f2279ffdb9694f37a86b618afab83c53c5b0",
+    "sourceBytes": 792,
+    "pathCount": 1,
+    "pointCount": 32,
+    "truncated": false,
+    "issues": []
+  }
+}

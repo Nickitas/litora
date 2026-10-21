@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import type { DatasetDto, GeoJsonLineStringDto } from "@litora/contracts";
+import { parseCreateDataset, smallDatasetLimits, type DatasetDto } from "@litora/contracts";
 import { FileUp } from "lucide-react";
 import { api } from "@/shared/api/client";
 import { Button } from "@/shared/shadcn/components/ui/button";
@@ -33,19 +33,12 @@ export function DatasetUpload({
     try {
       if (!name.trim()) throw new Error("Укажите название набора");
       if (!file) throw new Error("Выберите файл GeoJSON");
-      if (file.size > 65_536)
+      if (file.size > smallDatasetLimits.maxBytes)
         throw new Error("GeoJSON не должен превышать 64 КиБ");
-      const parsed: unknown = JSON.parse(await file.text());
-      if (
-        !parsed ||
-        typeof parsed !== "object" ||
-        Array.isArray(parsed) ||
-        (parsed as { type?: unknown }).type !== "LineString"
-      )
-        throw new Error(
-          "Выберите GeoJSON LineString с координатами [долгота, широта]"
-        );
-      const input = {
+      let parsed: unknown;
+      try { parsed = JSON.parse(await file.text()); }
+      catch { throw new Error("Файл должен содержать корректный JSON"); }
+      const input = parseCreateDataset({
         name: name.trim(),
         source,
         ...(sourceRevision.trim()
@@ -54,8 +47,8 @@ export function DatasetUpload({
         license,
         crs: "EPSG:4326" as const,
         coordinateUnit: "degrees" as const,
-        geometry: parsed as GeoJsonLineStringDto,
-      };
+        geometry: parsed,
+      });
       const dataset = await api.createDataset(input);
       onSaved(dataset);
       setFile(null);
@@ -87,8 +80,8 @@ export function DatasetUpload({
             Загрузить свой GeoJSON
           </Heading>
           <p className="mt-1 text-sm text-muted-foreground">
-            Нужен LineString в WGS84 / EPSG:4326: 2–500 точек, до 64 КиБ. На
-            запуске геометрию дополнительно проверит Go.
+            Нужен LineString в WGS84 / EPSG:4326: 2–500 точек, до 64 КиБ. После
+            сохранения геометрию проверит Go отдельным заданием.
           </p>
         </div>
       </div>

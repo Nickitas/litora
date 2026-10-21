@@ -1,0 +1,100 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "82945c226856af9cc3bcf4307ccecf7cdaa7f87ff38067aa9b78fa94a7757fbe",
+    "path": "gelendzhik-01.geojson",
+    "pointCount": 163,
+    "sha256": "31f2831c6ae27bdf1380a0391f066cae44fbda8856e0d07c35deafba5ed6ccd0",
+    "sizeBytes": 3910
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Геленджик",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 1033178833,
+      "sourceWayVersion": 2,
+      "sourceWayEditedAt": "2026-07-15T14:01:59Z",
+      "sourcePath": 14,
+      "regionSegment": "segment-014",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 163,
+      "subdivisionLevel": 0,
+      "pointCount": 163,
+      "lengthKm": 3.310111913106504,
+      "dimension": 1.0103234203987876,
+      "regressionRSquared": 0.9995549592460583,
+      "stableAcrossScales": true,
+      "rejectedCandidates": [
+        "segment-001 / часть 1 / точки 1–500: dimension потребовал бы нормализацию исходной геометрии",
+        "segment-005 / часть 1 / точки 1–102: dimension потребовал бы нормализацию исходной геометрии"
+      ]
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 1,
+  "regionId": "gelendzhik-01",
+  "roi": {
+    "east": 38.15,
+    "north": 44.6,
+    "south": 44.48,
+    "west": 37.99
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:40:21Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "37e96b4441d406eba539a1cfd38ad38856ee005e2f5a10601ca039b9527f59cd",
+    "retrievedAt": "2026-10-21T10:41:46Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/gelendzhik-01.json",
+    "snapshotSha256": "0b4cd03a8da74955f5c8fd3e5112165c4c245fc9fcb7d6c54bf7ad52a047f574",
+    "sourceUrl": "https://www.openstreetmap.org/way/1033178833"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "31f2831c6ae27bdf1380a0391f066cae44fbda8856e0d07c35deafba5ed6ccd0",
+    "sourceBytes": 3910,
+    "pathCount": 1,
+    "pointCount": 163,
+    "truncated": false,
+    "issues": []
+  }
+}

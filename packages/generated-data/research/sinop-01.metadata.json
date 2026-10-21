@@ -1,0 +1,99 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "97ed378416b1641d7fbd28f367dcd638a9ba31f536c3db36a50e8688b251c696",
+    "path": "sinop-01.geojson",
+    "pointCount": 500,
+    "sha256": "dbbca507ce058ece81aac640adb5dd25d11311611040cfa7be5946477b625efc",
+    "sizeBytes": 11918
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Синопский полуостров",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 749028749,
+      "sourceWayVersion": 6,
+      "sourceWayEditedAt": "2026-06-23T16:38:21Z",
+      "sourcePath": 9,
+      "regionSegment": "segment-009",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 500,
+      "subdivisionLevel": 0,
+      "pointCount": 500,
+      "lengthKm": 2.91794844309328,
+      "dimension": 1.025932479153424,
+      "regressionRSquared": 0.9999214080520484,
+      "stableAcrossScales": true,
+      "rejectedCandidates": [
+        "segment-006 / часть 1 / точки 1–170: геометрия не прошла строгую проверку"
+      ]
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 2,
+  "regionId": "sinop-01",
+  "roi": {
+    "east": 35.239999999999995,
+    "north": 42.09,
+    "south": 41.97,
+    "west": 35.08
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:50:29Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "114322c6f9c542f746cb213a53633f082e679a11a13c82319e507b4419a13de6",
+    "retrievedAt": "2026-10-21T10:51:17Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/sinop-01.json",
+    "snapshotSha256": "64ca5c85b7f6720c1110212ebb2fcee1925115f71177952fc462adc06339b745",
+    "sourceUrl": "https://www.openstreetmap.org/way/749028749"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "dbbca507ce058ece81aac640adb5dd25d11311611040cfa7be5946477b625efc",
+    "sourceBytes": 11918,
+    "pathCount": 1,
+    "pointCount": 500,
+    "truncated": false,
+    "issues": []
+  }
+}

@@ -7,6 +7,11 @@ interface ScenarioGuidance {
 }
 
 export const scenarioGuidance = {
+  dataset_validation: {
+    source: "Сохранённая береговая линия с неизменным паспортом и checksum.",
+    limitation: "Проверка геометрии Go не аттестует точность источника и не является прогнозом.",
+    reference: { label: "О проверке береговой линии", href: "/docs/reference/black-sea-regions-and-data.md" },
+  },
   coastline_region: {
     source: "Полный закреплённый контур MarineRegions или ваш GeoJSON в WGS84. Область может находиться в любой части побережья Чёрного моря.",
     limitation: "Отдельные линии и острова сохраняются без соединения разрывов и упрощения. Открытый участок берега не является замкнутой морской областью для сетки; волны и батиметрию выбирайте для своего участка.",
@@ -16,6 +21,11 @@ export const scenarioGuidance = {
     source: "Загруженный GeoJSON-контур с заявленным вами источником и лицензией.",
     limitation: "Проверка структуры и снимок файла не удостоверяют геодезическую точность или право публикации данных.",
     reference: { label: "О выборе источника контура", href: "/docs/reference/coastline-source-selection.md" },
+  },
+  coastline_validation: {
+    source: "Загруженный приватный GeoJSON береговой линии.",
+    limitation: "Проверка геометрии не подтверждает точность съёмки или пригодность для прогноза.",
+    reference: { label: "Об источниках и ограничениях", href: "/docs/reference/coastline-source-selection.md" },
   },
   dimension: {
     source:

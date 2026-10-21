@@ -1,0 +1,97 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "85b76c5bcabf9b13c00b8ab2d3ca24342b86e834a71b5dedb8616c97311e7d04",
+    "path": "poti-rioni-01.geojson",
+    "pointCount": 177,
+    "sha256": "1e16b600c1a4e4c29efd11029f18d699d23d350b2d1ecff3be76c6a6d3cb5bbb",
+    "sizeBytes": 4229
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Поти и устье Риони",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 297344079,
+      "sourceWayVersion": 22,
+      "sourceWayEditedAt": "2024-11-16T22:16:32Z",
+      "sourcePath": 3,
+      "regionSegment": "segment-003",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 177,
+      "subdivisionLevel": 0,
+      "pointCount": 177,
+      "lengthKm": 9.788815292952366,
+      "dimension": 1.0946106829456368,
+      "regressionRSquared": 0.9999282908833643,
+      "stableAcrossScales": true,
+      "rejectedCandidates": []
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 2,
+  "regionId": "poti-rioni-01",
+  "roi": {
+    "east": 41.73,
+    "north": 42.22,
+    "south": 42.099999999999994,
+    "west": 41.57
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:46:22Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "8c95473670e2a9680e06b5a23496d36e1b79da03ecdd9dcb3fdeb8335120e820",
+    "retrievedAt": "2026-10-21T10:47:15Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/poti-rioni-01.json",
+    "snapshotSha256": "d2fef29dfaaf10bd18d261f9188d62789d9faf0d6aa239e5d19364146ea5c7c7",
+    "sourceUrl": "https://www.openstreetmap.org/way/297344079"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "1e16b600c1a4e4c29efd11029f18d699d23d350b2d1ecff3be76c6a6d3cb5bbb",
+    "sourceBytes": 4229,
+    "pathCount": 1,
+    "pointCount": 177,
+    "truncated": false,
+    "issues": []
+  }
+}

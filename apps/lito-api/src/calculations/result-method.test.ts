@@ -26,6 +26,11 @@ test("worker читает ревизию только из соответств�
   assert.equal(resultMethodFromManifest(Buffer.from(JSON.stringify({
     schemaVersion: 2, command: "lito source", artifacts: [],
   })), "source_file"), null);
+  for (const kind of ["coastline_validation", "dataset_validation"] as const) {
+    assert.deepEqual(resultMethodFromManifest(manifest("lito coastline-check", "coastline-validation", "geometry-1"), kind),
+      { id: "coastline-validation", revision: "geometry-1" });
+    assert.throws(() => resultMethodFromManifest(manifest("lito source", "coastline-validation", "geometry-1"), kind));
+  }
   assert.deepEqual(
     resultMethodFromManifest(manifest("lito erosion", "cerc-one-line"), "erosion"),
     { id: "cerc-one-line", revision: "baseline-1" },

@@ -116,6 +116,14 @@ test(
         [job.id],
       );
       assert.equal(linked.rows[0].dataset_id, saved.id);
+      const validation = { kind: "dataset_validation" as const, input: { datasetId: saved.id } };
+      await assert.rejects(jobs.create(users[1], validation), { status: 404 });
+      const simultaneous = await Promise.all(Array.from({ length: 6 }, () => jobs.create(users[0], validation)));
+      assert.equal(new Set(simultaneous.map((item) => item.id)).size, 1,
+        "Конкурентные запросы создают одну активную проверку");
+      await db.query("UPDATE calculation_jobs SET status='failed' WHERE id=$1", [simultaneous[0].id]);
+      assert.notEqual((await jobs.create(users[0], validation)).id, simultaneous[0].id,
+        "После завершения можно запустить проверку снова");
       await db.query(
         `INSERT INTO datasets(owner_id,name,source,license,crs,coordinate_unit,point_count,size_bytes,sha256,object_key)
          SELECT $1::uuid, 'Квота', 'Тест', 'Тест', 'EPSG:4326', 'degrees', 2, 1,

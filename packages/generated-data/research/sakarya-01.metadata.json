@@ -1,0 +1,97 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "92d189ea3488c2c27a5e562488930b9732b6e64e23e25e06a6b772ce910a1c70",
+    "path": "sakarya-01.geojson",
+    "pointCount": 39,
+    "sha256": "1557efe50b2dd7b50ecd5055622263425d4f5a48ae14601121d19ce6030de88f",
+    "sizeBytes": 981
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Устье Сакарьи — Карасу",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 215581186,
+      "sourceWayVersion": 3,
+      "sourceWayEditedAt": "2015-10-18T05:53:21Z",
+      "sourcePath": 2,
+      "regionSegment": "segment-002",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 39,
+      "subdivisionLevel": 0,
+      "pointCount": 39,
+      "lengthKm": 5.655976342409281,
+      "dimension": 0.9733385471193894,
+      "regressionRSquared": 0.9999476321640607,
+      "stableAcrossScales": true,
+      "rejectedCandidates": []
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 2,
+  "regionId": "sakarya-01",
+  "roi": {
+    "east": 30.65,
+    "north": 41.190000000000005,
+    "south": 41.07,
+    "west": 30.490000000000002
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:50:29Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "990795437d0c80657f1700b69d55ae55fffd667a83b8e26fd3a0d964421023aa",
+    "retrievedAt": "2026-10-21T10:52:02Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/sakarya-01.json",
+    "snapshotSha256": "38a869133eae4add735349f3fa27c279983b7baaf4c8bdf4b0e7909ae56d84f1",
+    "sourceUrl": "https://www.openstreetmap.org/way/215581186"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "1557efe50b2dd7b50ecd5055622263425d4f5a48ae14601121d19ce6030de88f",
+    "sourceBytes": 981,
+    "pathCount": 1,
+    "pointCount": 39,
+    "truncated": false,
+    "issues": []
+  }
+}

@@ -10,6 +10,8 @@ import type { DatabaseService } from "../infrastructure/database.service.js";
 import type { ObjectStorageService } from "../infrastructure/object-storage.service.js";
 import { DatasetsController } from "./datasets.controller.js";
 import { DatasetsRepository, type DatasetRow } from "./datasets.repository.js";
+import { CoastlineValidationService } from "../coastline-validation/coastline-validation.service.js";
+import { unrequestedValidation } from "../coastline-validation/state.js";
 
 const owner = randomUUID(),
   id = randomUUID();
@@ -68,6 +70,16 @@ test("HTTP: просмотр и точный экспорт доступны т�
     providers: [
       AuthGuard,
       { provide: DatasetsRepository, useValue: current.repository },
+      { provide: CoastlineValidationService, useValue: {
+        async state(_type: string, sourceId: string, userId: string) {
+          await current.repository.getOwned(sourceId, userId);
+          return unrequestedValidation();
+        },
+        async enqueue(_type: string, sourceId: string, userId: string) {
+          await current.repository.getOwned(sourceId, userId);
+          return { ...unrequestedValidation(), jobId: randomUUID(), status: "queued" };
+        },
+      } },
       {
         provide: AuthService,
         useValue: {
@@ -90,8 +102,9 @@ test("HTTP: просмотр и точный экспорт доступны т�
   try {
     await app.listen(0, "127.0.0.1");
     const base = `${await app.getUrl()}/api/datasets`;
-    const request = (path: string, token?: string) =>
+    const request = (path: string, token?: string, method = "GET") =>
       fetch(`${base}/${path}`, {
+        method,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
     const detail = await request(id, "owner");
@@ -116,7 +129,7 @@ test("HTTP: просмотр и точный экспорт доступны т�
       `attachment; filename="dataset-${id}.geojson"`,
     );
     assert.deepEqual(Buffer.from(await file.arrayBuffer()), original);
-    for (const suffix of ["", "/content"]) {
+    for (const suffix of ["", "/content", "/validation"]) {
       assert.equal((await request(`${id}${suffix}`)).status, 401);
       const foreign = await request(`${id}${suffix}`, "other");
       const missing = await request(`${randomUUID()}${suffix}`, "owner");
@@ -124,6 +137,12 @@ test("HTTP: просмотр и точный экспорт доступны т�
       assert.deepEqual(await foreign.json(), await missing.json());
       assert.equal((await request(`not-a-uuid${suffix}`, "owner")).status, 400);
     }
+    for (const token of [undefined, "other", "owner"]) {
+      const response = await request(`${id}/validation`, token, "POST");
+      assert.equal(response.status, !token ? 401 : token === "owner" ? 201 : 404);
+      if (token === "owner") assert.equal((await response.json()).status, "queued");
+    }
+    assert.equal((await request("not-a-uuid/validation", "owner", "POST")).status, 400);
     assert.equal(
       current.reads(),
       2,

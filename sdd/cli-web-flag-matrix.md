@@ -11,7 +11,8 @@
 
 | Команда | Форма | Worker | Нет в Web/API |
 | --- | --- | --- | --- |
-| `source` | `--input` (`source_file`) | `--output`, `--manifest` | `--source-url`, `--refresh` |
+| `source` | Скрыт из формы; совместимый API `source_file` с `--input` | `--output`, `--manifest` | `--source-url`, `--refresh` |
+| `coastline-check` | Автоматическая проверка загрузки: `dataset_validation`/`coastline_validation`, только UUID | `--input` из приватного S3, `--output`, `--manifest` | Пути и URL пользователя |
 | `map` | `--input` (`map_file`); встроенный контур (`map`) | `--output`, `--manifest` | `--source-url`, `--refresh` |
 | `dimension` | `--input` (`dimension_dataset`/`dimension_file`); встроенный контур (`dimension`) | `--output`, `--manifest` | `--full-black-sea`, `--source-url`, `--refresh` |
 | `mesh` | `--input`, `--cell-sizes`, `--boundary-details`, `--generators`, `--max-cells`, `--allow-large`, `--generator-timeout` | `--gmsh`, `--output`, `--manifest` | — |

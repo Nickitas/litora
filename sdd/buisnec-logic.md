@@ -113,7 +113,9 @@ users 1 ─── N auth_sessions
 
 | kind | Вход из API | Фактическое вычисление | Выход |
 | --- | --- | --- | --- |
-| source_file | UUID приватного GeoJSON-контура | Проверка источника и создание снимка в Go | GeoJSON, manifest, execution.log |
+| source_file | UUID приватного GeoJSON-контура; скрыт в форме, совместимость API | Проверка источника и создание снимка в Go | GeoJSON, manifest, execution.log |
+| dataset_validation | datasetId своего малого набора; автоматическая очередь после сохранения | Go `coastline-check` без изменения исходника | Замечания, SHA-256, manifest; отчёт и при отказе |
+| coastline_validation | UUID своего готового научного контура; heavy-профиль | Та же Go-проверка всех самостоятельных линий/колец | Замечания, SHA-256, manifest; отчёт и при отказе |
 | dimension | Пустой input | Box-counting полного закреплённого контура `data/coastline/black-sea.geojson`, 9 635 точек | JSON-метрики, SVG контура и регрессии, manifest, execution.log |
 | dimension_dataset | datasetId своего GeoJSON LineString | Box-counting после проверки checksum и научной проверки Go | JSON-метрики, SVG, manifest, execution.log |
 | dimension_file | UUID приватного полного GeoJSON-контура | Box-counting файла в Go | JSON-метрики, SVG, manifest, execution.log |

@@ -1,0 +1,100 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "0850309d110879f6167e8f9af65614eb5fd58877cdd6071cdf7f4d7884d5ad67",
+    "path": "burgas-01.geojson",
+    "pointCount": 299,
+    "sha256": "b7024eeffed23b145ef200fdd20bd78feb13bbd899681638d9db2fbc10b1ef76",
+    "sizeBytes": 7055
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Бургасский залив",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 143103249,
+      "sourceWayVersion": 27,
+      "sourceWayEditedAt": "2025-09-15T21:33:13Z",
+      "sourcePath": 3,
+      "regionSegment": "segment-003",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 299,
+      "subdivisionLevel": 0,
+      "pointCount": 299,
+      "lengthKm": 11.765546781799877,
+      "dimension": 1.0934001720177193,
+      "regressionRSquared": 0.9999199901299404,
+      "stableAcrossScales": true,
+      "rejectedCandidates": [
+        "segment-005 / часть 1 / точки 1–500: dimension потребовал бы нормализацию исходной геометрии",
+        "segment-005 / часть 2 / точки 500–677: dimension потребовал бы нормализацию исходной геометрии"
+      ]
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 1,
+  "regionId": "burgas-01",
+  "roi": {
+    "east": 27.569999999999997,
+    "north": 42.550000000000004,
+    "south": 42.43,
+    "west": 27.41
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:43:20Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "efa5e13627aefc509d1e099bd4951b917455608d1839dcfce7d503a1f73f3324",
+    "retrievedAt": "2026-10-21T10:44:02Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/burgas-01.json",
+    "snapshotSha256": "2422b73b35da3e8f52f798c232c8df2b9800405284d58e14ea1e688d695c8329",
+    "sourceUrl": "https://www.openstreetmap.org/way/143103249"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "b7024eeffed23b145ef200fdd20bd78feb13bbd899681638d9db2fbc10b1ef76",
+    "sourceBytes": 7055,
+    "pathCount": 1,
+    "pointCount": 299,
+    "truncated": false,
+    "issues": []
+  }
+}

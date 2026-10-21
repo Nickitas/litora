@@ -13,6 +13,16 @@ func CoastlineRegion() Identity {
 	return Identity{ID: "coastline-region", Revision: "clip-1"}
 }
 
+// ResearchCoastlinePreparation — выбор картографического фрагмента без нормализации.
+func ResearchCoastlinePreparation() Identity {
+	return Identity{ID: "research-coastline-preparation", Revision: "source-1"}
+}
+
+// CoastlineValidation — проверка исходных координат без нормализации и переупорядочивания.
+func CoastlineValidation() Identity {
+	return Identity{ID: "coastline-validation", Revision: "geometry-1"}
+}
+
 // BoxCounting — текущая ревизия оценки фрактальной размерности и её отчётов.
 func BoxCounting() Identity {
 	return Identity{ID: "box-counting", Revision: "reports-2"}

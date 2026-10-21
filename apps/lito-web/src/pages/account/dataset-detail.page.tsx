@@ -8,6 +8,8 @@ import { Button } from "@/shared/shadcn/components/ui/button";
 import { Card } from "@/shared/shadcn/components/ui/card";
 import { DatasetPassport } from "./ui/dataset-passport";
 import { DatasetMap } from "./ui/dataset-map";
+import { useCoastlineValidation, validationPassed } from "./model/use-coastline-validation";
+import { CoastlineValidationPanel } from "./ui/coastline-validation-panel";
 
 function DatasetDetail({ id }: { id: string }) {
   const [dataset, setDataset] = useState<DatasetDetailDto | null>(null);
@@ -17,6 +19,7 @@ function DatasetDetail({ id }: { id: string }) {
   const [revision, setRevision] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState("");
+  const validation = useCoastlineValidation("dataset", dataset ? id : "", dataset?.validation);
 
   useEffect(() => {
     let active = true;
@@ -111,13 +114,13 @@ function DatasetDetail({ id }: { id: string }) {
                 Добавлен {new Date(dataset.createdAt).toLocaleString("ru-RU")}
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button asChild>
+                {validationPassed(validation.state) ? <Button asChild>
                   <Link
                     to={`?${new URLSearchParams({ new: "1", dataset: dataset.id })}`}
                   >
                     Рассчитать размерность
                   </Link>
-                </Button>
+                </Button> : <Button disabled>Рассчитать размерность</Button>}
                 <Button
                   variant="outline"
                   disabled={downloading}
@@ -133,6 +136,7 @@ function DatasetDetail({ id }: { id: string }) {
                 </p>
               )}
             </header>
+            <CoastlineValidationPanel check={validation} />
             <section
               aria-labelledby="dataset-map-heading"
               className="space-y-3"

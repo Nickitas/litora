@@ -22,6 +22,8 @@ import {
 import { AuthGuard, type AuthRequest } from "../auth/auth.guard.js";
 import { DatasetDetailResponse, DatasetResponse } from "../http-models.js";
 import { DatasetsRepository } from "./datasets.repository.js";
+import { CoastlineValidationService } from "../coastline-validation/coastline-validation.service.js";
+import { CoastlineValidationResponse } from "../http-models.js";
 import {
   maxDatasetBytes,
   maxDatasetPoints,
@@ -41,13 +43,14 @@ const datasetIdPipe = new ParseUUIDPipe({
 export class DatasetsController {
   constructor(
     @Inject(DatasetsRepository) private readonly datasets: DatasetsRepository,
+    @Inject(CoastlineValidationService) private readonly validation: CoastlineValidationService,
   ) {}
 
   @Get()
   @ApiOperation({ summary: "Последние 100 своих наборов береговой линии" })
   @ApiResponse({ status: 200, type: [DatasetResponse] })
-  list(@Req() req: AuthRequest) {
-    return this.datasets.list(req.user.id);
+  async list(@Req() req: AuthRequest) {
+    return this.validation.decorateDatasets(req.user.id, await this.datasets.list(req.user.id));
   }
 
   @Get(":id")
@@ -69,7 +72,27 @@ export class DatasetsController {
     @Req() req: AuthRequest,
     @Param("id", datasetIdPipe) id: string,
   ) {
-    return (await this.datasets.readOwned(id, req.user.id)).detail;
+    const { detail } = await this.datasets.readOwned(id, req.user.id);
+    return { ...detail, validation: await this.validation.state("dataset", id, req.user.id) };
+  }
+
+  @Get(":id/validation")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Состояние проверки геометрии своего набора" })
+  @ApiResponse({ status: 200, type: CoastlineValidationResponse })
+  @ApiResponse({ status: 404, description: "Набор отсутствует или принадлежит другому пользователю" })
+  validationState(@Req() req: AuthRequest, @Param("id", datasetIdPipe) id: string) {
+    return this.validation.state("dataset", id, req.user.id);
+  }
+
+  @Post(":id/validation")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Поставить проверку своего набора в очередь Go worker" })
+  @ApiResponse({ status: 201, type: CoastlineValidationResponse })
+  @ApiResponse({ status: 409, description: "Достигнут предел незавершённых заданий" })
+  @ApiResponse({ status: 404, description: "Набор отсутствует или принадлежит другому пользователю" })
+  validate(@Req() req: AuthRequest, @Param("id", datasetIdPipe) id: string) {
+    return this.validation.enqueue("dataset", id, req.user.id);
   }
 
   @Get(":id/content")
@@ -163,7 +186,7 @@ export class DatasetsController {
           },
         },
       },
-      description: `Только EPSG:4326, долгота/широта в градусах. GeoJSON не больше ${maxDatasetBytes} байт. До ${maxDatasetsPerUser} наборов на пользователя. Научная проверка выполняется Go при расчёте.`,
+      description: `Только EPSG:4326, долгота/широта в градусах. GeoJSON не больше ${maxDatasetBytes} байт. До ${maxDatasetsPerUser} наборов на пользователя. После сохранения геометрию проверяет Go worker отдельным заданием; поле validation показывает состояние и замечания.`,
     },
   })
   @ApiResponse({ status: 201, type: DatasetResponse })
@@ -179,8 +202,9 @@ export class DatasetsController {
     status: 409,
     description: "Достигнут лимит сохранённых наборов данных",
   })
-  create(@Req() req: AuthRequest, @Body() body: unknown) {
+  async create(@Req() req: AuthRequest, @Body() body: unknown) {
     const { dataset, bytes } = validateDataset(body);
-    return this.datasets.create(req.user.id, dataset, bytes);
+    const saved = await this.datasets.create(req.user.id, dataset, bytes);
+    return { ...saved, validation: await this.validation.afterSave("dataset", saved.id, req.user.id) };
   }
 }

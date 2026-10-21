@@ -138,8 +138,8 @@ export class CalculationsRepository {
     job: CreateCalculationDto,
   ): Promise<CalculationJobDto> {
     const datasetId =
-      job.kind === "dimension_dataset" ? job.input?.datasetId : null;
-    if (job.kind === "dimension_dataset" && !datasetId)
+      job.kind === "dimension_dataset" || job.kind === "dataset_validation" ? job.input?.datasetId : null;
+    if ((job.kind === "dimension_dataset" || job.kind === "dataset_validation") && !datasetId)
       throw new BadRequestException("Укажите UUID своего набора данных");
     if (datasetId) {
       const owned = await this.database.query<{ id: string }>(
@@ -169,6 +169,16 @@ export class CalculationsRepository {
           throw new BadRequestException("Суммарный размер научных входов превышает 4 ГиБ");
         if (source.origin === "artifact" && source.source_job_id)
           sourceJobIds.add(source.source_job_id);
+      }
+      if (job.kind === "dataset_validation" || job.kind === "coastline_validation") {
+        const active = await client.query<JobRow>(
+          `SELECT * FROM calculation_jobs WHERE user_id=$1 AND kind=$2
+           AND status IN ('queued','running') AND deletion_requested_at IS NULL
+           AND (($3::uuid IS NOT NULL AND dataset_id=$3) OR ($4::text IS NOT NULL AND input->>'coastlineInputId'=$4))
+           ORDER BY created_at DESC LIMIT 1`,
+          [userId, job.kind, datasetId, job.input?.coastlineInputId ?? null],
+        );
+        if (active.rows[0]) return active.rows[0];
       }
       const result = await client.query<JobRow>(
         `INSERT INTO calculation_jobs(user_id,kind,input,dataset_id,input_schema_version,resource_profile)

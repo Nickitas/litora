@@ -1,4 +1,4 @@
-export const calculationInputSchemaVersion = 14;
+export const calculationInputSchemaVersion = 15;
 export const calculationResultSchemaVersion = 1;
 export const datasetSchemaVersion = 1;
 

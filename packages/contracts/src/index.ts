@@ -237,7 +237,11 @@ export interface AuthDto {
   accessToken: string;
   expiresIn: number;
 }
+export { DatasetInputError, parseCreateDataset, smallDatasetLimits } from "./dataset-validation.js";
+
 export type CalculationKind =
+  | "dataset_validation"
+  | "coastline_validation"
   | "source_file"
   | "dimension"
   | "dimension_dataset"
@@ -268,6 +272,7 @@ export interface CalculationKindDto {
   kind: CalculationKind;
   title: string;
   description: string;
+  selectable?: boolean;
 }
 
 export interface CoastlineRegionBoundsDto {
@@ -473,6 +478,29 @@ export interface DatasetDto {
   sizeBytes: number;
   sha256: string;
   createdAt: string;
+  validation?: CoastlineValidationDto;
+}
+
+export interface CoastlineValidationIssueDto {
+  severity: "error" | "warning";
+  code: string;
+  message: string;
+  path?: number;
+  point?: number;
+  segment?: number;
+  otherSegment?: number;
+}
+
+export interface CoastlineValidationDto {
+  jobId: string | null;
+  status: CalculationStatus | "not_requested";
+  accepted: boolean | null;
+  issues: CoastlineValidationIssueDto[];
+  truncated: boolean;
+  message: string | null;
+  methodId: string | null;
+  methodRevision: string | null;
+  updatedAt: string | null;
 }
 
 export interface DatasetDetailDto extends DatasetDto {
@@ -510,6 +538,7 @@ const ownCercInputRequirements = {
 export const scientificInputRequirements = {
   coastline_region: {},
   source_file: { coastlineInputId: "coastline_geojson" },
+  coastline_validation: { coastlineInputId: "coastline_geojson" },
   dimension_file: { coastlineInputId: "coastline_geojson" },
   map_file: { coastlineInputId: "coastline_geojson" },
   mesh: { coastlineInputId: "coastline_geojson" },
@@ -614,6 +643,7 @@ export interface ScientificInputDto extends CreateScientificInputDto {
   status: "pending" | "uploading" | "ready";
   sha256: string | null;
   createdAt: string;
+  validation?: CoastlineValidationDto;
 }
 
 export interface ScientificInputQuotaDto {

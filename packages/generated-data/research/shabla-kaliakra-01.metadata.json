@@ -1,0 +1,100 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "33303a0df7d952aa6ae582561d881d1b1fe26dad4215209f46794606a8581386",
+    "path": "shabla-kaliakra-01.geojson",
+    "pointCount": 500,
+    "sha256": "5e80941ba38a92b0c65978b8d10ef488856b80ca72fac0c53f25f9eaf2dfdc00",
+    "sizeBytes": 11910
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Шабла — Калиакра",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 109841255,
+      "sourceWayVersion": 15,
+      "sourceWayEditedAt": "2025-03-03T10:38:42Z",
+      "sourcePath": 3,
+      "regionSegment": "segment-004",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 500,
+      "subdivisionLevel": 0,
+      "pointCount": 500,
+      "lengthKm": 4.97307596872869,
+      "dimension": 0.9920393495672699,
+      "regressionRSquared": 0.9998444942094843,
+      "stableAcrossScales": true,
+      "rejectedCandidates": [
+        "segment-005 / часть 1 / точки 1–500: dimension потребовал бы нормализацию исходной геометрии",
+        "segment-003 / часть 1 / точки 1–297: dimension потребовал бы нормализацию исходной геометрии"
+      ]
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 2,
+  "regionId": "shabla-kaliakra-01",
+  "roi": {
+    "east": 28.619999999999997,
+    "north": 43.49,
+    "south": 43.37,
+    "west": 28.46
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:53:33Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "bfd1c32044a394bc63c51c6a27f48de1fb9fc2f20e16a8e373858827344b3725",
+    "retrievedAt": "2026-10-21T10:54:39Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/shabla-kaliakra-01.json",
+    "snapshotSha256": "5a4aa649765ac4e70a3096ce3fd5ed8f704ddedd2867c7c9e8753b8e482279e9",
+    "sourceUrl": "https://www.openstreetmap.org/way/109841255"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "5e80941ba38a92b0c65978b8d10ef488856b80ca72fac0c53f25f9eaf2dfdc00",
+    "sourceBytes": 11910,
+    "pathCount": 1,
+    "pointCount": 500,
+    "truncated": false,
+    "issues": []
+  }
+}

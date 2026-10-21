@@ -1,0 +1,97 @@
+{
+  "accuracy": {
+    "controlSource": null,
+    "horizontalRmseM": null,
+    "measurementTime": null,
+    "shorelineProxy": "OSM natural=coastline",
+    "status": "not_independently_validated"
+  },
+  "calculation": {
+    "cliCommand": "lito dimension",
+    "exitCode": 0,
+    "kind": "dimension_dataset",
+    "method": {
+      "id": "box-counting",
+      "revision": "reports-2"
+    },
+    "normalizedGeometryUnchanged": true
+  },
+  "coordinateUnit": "degrees",
+  "crs": "EPSG:4326",
+  "file": {
+    "canonicalGeometrySha256": "24d2db6702906a76bb674bb7d8061c4b155f277d52603cebc5e5f0856e4eb402",
+    "path": "trabzon-rize-01.geojson",
+    "pointCount": 87,
+    "sha256": "46569e823c666be4dd141be5e43fbae9acc28427446307bea5396bd02b25aa26",
+    "sizeBytes": 2104
+  },
+  "limitations": [
+    "Это картографический контур; время правки OSM не является временем береговой съёмки.",
+    "Независимый контроль и RMSE отсутствуют; исследовательская точность положения не подтверждена.",
+    "Один срез не даёт временного ряда, скорости эрозии или прогноза до года.",
+    "Выбран один фрагмент, а не весь названный район; возможны искусственные берега и сооружения.",
+    "Устойчивость оценки по масштабам приводится отдельно; успешное выполнение не аттестует фрактальность природного берега."
+  ],
+  "name": "Трабзон — Ризе",
+  "preparation": {
+    "candidate": {
+      "sourceWayId": 4523910,
+      "sourceWayVersion": 6,
+      "sourceWayEditedAt": "2024-02-15T07:49:15Z",
+      "sourcePath": 1,
+      "regionSegment": "segment-001",
+      "chunk": 1,
+      "startPoint": 1,
+      "endPoint": 87,
+      "subdivisionLevel": 0,
+      "pointCount": 87,
+      "lengthKm": 3.320270679978317,
+      "dimension": 1.0747470732665418,
+      "regressionRSquared": 0.9997138642955126,
+      "stableAcrossScales": true,
+      "rejectedCandidates": []
+    },
+    "clipping": "Отсечение каждого исходного пути рамкой в Go; пересечения рамки интерполируются существующим SelectRegion",
+    "fallbackRule": "Если ни один основной фрагмент не принят, рассматриваются непрерывные половины и их подчасти до 8 точек; выбирается самый длинный пригодный подучасток",
+    "joining": "Разные ways и разрывы не соединяются",
+    "methodId": "research-coastline-preparation",
+    "methodRevision": "source-1",
+    "roiAdjustmentReason": "",
+    "roiRule": "Окно 0.16° долготы × 0.12° широты вокруг поисковой точки протокола 0063",
+    "selectionRule": "Самый длинный пригодный фрагмент: минимум 8 точек и 200 м, максимум 500 точек; порядок OSM сохранён",
+    "simplification": "Не применяется"
+  },
+  "purpose": "Исследование геометрии картографического берега и масштабной зависимости box-counting в выбранном подокне района",
+  "queue": 2,
+  "regionId": "trabzon-rize-01",
+  "roi": {
+    "east": 40.33,
+    "north": 41.080000000000005,
+    "south": 40.96,
+    "west": 40.17
+  },
+  "schemaVersion": "litora-research-coastline/v1",
+  "source": {
+    "attributionUrl": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL-1.0",
+    "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "osmBaseTime": "2026-10-21T10:47:27Z",
+    "provider": "© OpenStreetMap contributors",
+    "responseSha256": "f91eee0b7cf8ef7d26a6da2487cc51a29ede16497a432490f24494ad588aabdc",
+    "retrievedAt": "2026-10-21T10:48:35Z",
+    "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+    "snapshotFile": "sources/trabzon-rize-01.json",
+    "snapshotSha256": "3eb18a500c6d29c523d985c4cbae530acfc0f226f7e3585bd0156074b6981974",
+    "sourceUrl": "https://www.openstreetmap.org/way/4523910"
+  },
+  "validation": {
+    "schemaVersion": "litora-coastline-validation/v1",
+    "accepted": true,
+    "sourceSha256": "46569e823c666be4dd141be5e43fbae9acc28427446307bea5396bd02b25aa26",
+    "sourceBytes": 2104,
+    "pathCount": 1,
+    "pointCount": 87,
+    "truncated": false,
+    "issues": []
+  }
+}

@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "seedEvidenceFile": "../../../sdd/evidence/0063-source-catalogue-probes.json",
+  "seedEvidenceSha256": "59354e8cb085ff07172f05589e284e53b19009065f66bce8aacf7156d694b9d7",
+  "windowDegrees": [
+    0.16,
+    0.12
+  ],
+  "regions": [
+    {
+      "id": "sochi-01",
+      "name": "Сочи",
+      "queue": 1,
+      "searchPoint": [
+        39.69,
+        43.61
+      ]
+    },
+    {
+      "id": "gelendzhik-01",
+      "name": "Геленджик",
+      "queue": 1,
+      "searchPoint": [
+        38.07,
+        44.54
+      ]
+    },
+    {
+      "id": "turkey-01",
+      "name": "Кызылырмакская коса и дельта",
+      "queue": 1,
+      "searchPoint": [
+        35.9,
+        41.75
+      ]
+    },
+    {
+      "id": "anapa-01",
+      "name": "Анапа — Витязево — Благовещенская",
+      "queue": 1,
+      "searchPoint": [
+        37.24,
+        44.99
+      ]
+    },
+    {
+      "id": "batumi-01",
+      "name": "Батумский залив",
+      "queue": 1,
+      "searchPoint": [
+        41.63,
+        41.65
+      ]
+    },
+    {
+      "id": "burgas-01",
+      "name": "Бургасский залив",
+      "queue": 1,
+      "searchPoint": [
+        27.49,
+        42.49
+      ]
+    },
+    {
+      "id": "danube-01",
+      "name": "Морской берег дельты Дуная",
+      "queue": 1,
+      "searchPoint": [
+        29.67,
+        45.16
+      ]
+    },
+    {
+      "id": "odesa-01",
+      "name": "Одесский залив",
+      "queue": 1,
+      "searchPoint": [
+        30.76,
+        46.45
+      ]
+    },
+    {
+      "id": "poti-rioni-01",
+      "name": "Поти и устье Риони",
+      "queue": 2,
+      "searchPoint": [
+        41.65,
+        42.16
+      ]
+    },
+    {
+      "id": "kobuleti-01",
+      "name": "Кобулети — Уреки",
+      "queue": 2,
+      "searchPoint": [
+        41.77,
+        41.95
+      ]
+    },
+    {
+      "id": "trabzon-rize-01",
+      "name": "Трабзон — Ризе",
+      "queue": 2,
+      "searchPoint": [
+        40.25,
+        41.02
+      ]
+    },
+    {
+      "id": "giresun-01",
+      "name": "Гиресун и остров Гиресун",
+      "queue": 2,
+      "searchPoint": [
+        38.43,
+        40.91
+      ]
+    },
+    {
+      "id": "yesilirmak-01",
+      "name": "Дельта Ешильырмака",
+      "queue": 2,
+      "searchPoint": [
+        36.61,
+        41.37
+      ]
+    },
+    {
+      "id": "sinop-01",
+      "name": "Синопский полуостров",
+      "queue": 2,
+      "searchPoint": [
+        35.16,
+        42.03
+      ]
+    },
+    {
+      "id": "sakarya-01",
+      "name": "Устье Сакарьи — Карасу",
+      "queue": 2,
+      "searchPoint": [
+        30.57,
+        41.13
+      ]
+    },
+    {
+      "id": "kilyos-01",
+      "name": "Кильос и открытый берег севернее Стамбула",
+      "queue": 2,
+      "searchPoint": [
+        29,
+        41.25
+      ]
+    },
+    {
+      "id": "igneada-01",
+      "name": "Игнеада и район Резовской",
+      "queue": 2,
+      "searchPoint": [
+        27.99,
+        41.88
+      ]
+    },
+    {
+      "id": "varna-kamchia-01",
+      "name": "Варна — Камчия",
+      "queue": 2,
+      "searchPoint": [
+        27.91,
+        43.07
+      ]
+    },
+    {
+      "id": "shabla-kaliakra-01",
+      "name": "Шабла — Калиакра",
+      "queue": 2,
+      "searchPoint": [
+        28.54,
+        43.43
+      ]
+    },
+    {
+      "id": "mamaia-01",
+      "name": "Мамая — Констанца",
+      "queue": 2,
+      "searchPoint": [
+        28.64,
+        44.25
+      ]
+    },
+    {
+      "id": "tendra-01",
+      "name": "Тендровская коса",
+      "queue": 2,
+      "searchPoint": [
+        31.85,
+        46.2
+      ]
+    },
+    {
+      "id": "kalamita-01",
+      "windowDegrees": [0.24, 0.12],
+      "windowReason": "В исходном окне каждый обрезанный путь имел лишь 2–5 точек; восточная граница исключала подробный участок way 4530032. Окно расширено по долготе без добавления или уплотнения координат.",
+      "name": "Каламитский залив: Евпатория — Саки",
+      "queue": 2,
+      "searchPoint": [
+        33.45,
+        45.08
+      ]
+    },
+    {
+      "id": "yalta-alushta-01",
+      "name": "Ялта — Алушта",
+      "queue": 2,
+      "searchPoint": [
+        34.28,
+        44.55
+      ]
+    },
+    {
+      "id": "feodosia-koktebel-01",
+      "name": "Феодосийский залив — Коктебель",
+      "queue": 2,
+      "searchPoint": [
+        35.3,
+        44.97
+      ]
+    }
+  ]
+}

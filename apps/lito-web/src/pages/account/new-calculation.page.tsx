@@ -52,6 +52,8 @@ import { seabedWorkflows, workflowInputs, type SeabedWorkflowId } from "./model/
 import { SeabedWorkflowPicker } from "./ui/seabed-workflow-picker";
 import { CoastlineRegionPicker, type RegionFields } from "./ui/coastline-region-picker";
 import type { CoastlineContinuation } from "./model/coastline-continuation";
+import { awaitDatasetValidation, useCoastlineValidation, validationPassed } from "./model/use-coastline-validation";
+import { CoastlineValidationPanel } from "./ui/coastline-validation-panel";
 
 const articleSizeFieldPreset = {
   minSize: "50",
@@ -154,6 +156,8 @@ export function NewCalculationDialog({
   const [articlePresetApplied, setArticlePresetApplied] = useState<"adapt" | "compare" | "figure-five" | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const launchController = useRef<AbortController | null>(null);
+  useEffect(() => () => launchController.current?.abort(), []);
   const [deletingInputId, setDeletingInputId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState("");
   const [repeatError, setRepeatError] = useState("");
@@ -403,7 +407,7 @@ export function NewCalculationDialog({
         .catch((error: unknown) => ({ job: null, error: errorMessage(error) }))
       : Promise.resolve({ job: null, error: "" });
     void Promise.all([
-      api.calculationKinds(), api.datasets(), api.scientificInputs(),
+      api.calculationKinds().then((items) => items.filter((item) => item.selectable !== false)), api.datasets(), api.scientificInputs(),
       api.scientificInputQuota().catch(() => null), api.reusableScientificArtifacts(), repeat,
       workflow && sourceJobId
         ? api.calculation(sourceJobId).then((job) => ({ job, error: "" }))
@@ -522,6 +526,7 @@ export function NewCalculationDialog({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     if (!kinds.some((item) => item.kind === kind)) return;
     if (kind === "dimension_dataset" && missingRepeatDataset) {
       setSubmitError("Исходный набор данных недоступен. Явно выберите другой набор или встроенный пример.");
@@ -548,6 +553,13 @@ export function NewCalculationDialog({
         if (selectedScientific[field]) scientificParameters[field] = selectedScientific[field];
       }
     }
+    if (validationBlocked) {
+      setSubmitError("Дождитесь успешной проверки геометрии Go или загрузите исправленный файл.");
+      return;
+    }
+    const launch = new AbortController();
+    launchController.current?.abort();
+    launchController.current = launch;
     setBusy(true);
     setSubmitError("");
     try {
@@ -566,6 +578,13 @@ export function NewCalculationDialog({
           selectedDatasetId = example.id;
         }
       }
+      if (kind === "dimension_dataset") {
+        setDatasetId(selectedDatasetId);
+        await awaitDatasetValidation(selectedDatasetId, launch.signal, (validation) => {
+          setDatasets((current) => current.map((dataset) => dataset.id === selectedDatasetId ? { ...dataset, validation } : dataset));
+        });
+      }
+      if (launch.signal.aborted) return;
       const job = await api.createCalculation({
         kind,
         input: {
@@ -623,9 +642,9 @@ export function NewCalculationDialog({
       onOpenChange(false);
       navigate(`/lab/calculations/${job.id}`);
     } catch (nextError) {
-      setSubmitError(errorMessage(nextError));
+      if (!launch.signal.aborted) setSubmitError(errorMessage(nextError));
     } finally {
-      setBusy(false);
+      if (!launch.signal.aborted) setBusy(false);
     }
   }
 
@@ -664,6 +683,11 @@ export function NewCalculationDialog({
   };
   const selectedDataset = datasets.find((dataset) => dataset.id === datasetId);
   const isDatasetCalculation = kind === "dimension_dataset";
+  const selectedCoastline = scientificInputs.find((input) => input.id === selectedScientific.coastlineInputId && input.role === "coastline_geojson" && input.status === "ready");
+  const datasetValidation = useCoastlineValidation("dataset", isDatasetCalculation ? selectedDataset?.id ?? "" : "", selectedDataset?.validation);
+  const scientificValidation = useCoastlineValidation("scientific", selectedCoastline?.id ?? "", selectedCoastline?.validation);
+  const validationBlocked = Boolean((isDatasetCalculation && selectedDataset && !validationPassed(datasetValidation.state)) ||
+    (selectedCoastline && !validationPassed(scientificValidation.state)));
   const scientificRequirements = scientificInputRequirements[kind as keyof typeof scientificInputRequirements];
   const optionalScientificRequirements = optionalScientificInputRequirements[kind as keyof typeof optionalScientificInputRequirements];
   const scientificFields = scientificRequirements
@@ -1675,6 +1699,9 @@ export function NewCalculationDialog({
           )}
         </form>
 
+        {isDatasetCalculation && selectedDataset && <CoastlineValidationPanel check={datasetValidation} />}
+        {selectedCoastline && <CoastlineValidationPanel check={scientificValidation} />}
+
         {isDatasetCalculation && datasetUploadOpen && (
           <DatasetUpload
             existingNames={datasets.map((dataset) => dataset.name)}
@@ -1723,7 +1750,7 @@ export function NewCalculationDialog({
         <Button
           type="submit"
           form="new-calculation-form"
-          disabled={loading || busy || !scenario}
+          disabled={loading || busy || !scenario || validationBlocked}
           className="sm:min-w-48"
         >
           {busy ? "Ставим в очередь…" : "Запустить расчёт"}

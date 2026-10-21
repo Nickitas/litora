@@ -134,6 +134,15 @@ export class ScientificInputsRepository {
     };
   }
 
+  async ownedCoastline(id: string, userId: string): Promise<ScientificInputRow> {
+    const result = await this.db.query<ScientificInputRow>(
+      "SELECT * FROM scientific_inputs WHERE id=$1 AND owner_id=$2 AND role='coastline_geojson'",
+      [id, userId],
+    );
+    if (!result.rows[0]) throw new NotFoundException("Береговая линия не найдена");
+    return result.rows[0];
+  }
+
   async ownedObservedSeries(id: string, userId: string): Promise<ScientificInputRow> {
     const result = await this.db.query<ScientificInputRow>(
       `SELECT * FROM scientific_inputs

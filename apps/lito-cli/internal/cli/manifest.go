@@ -35,6 +35,8 @@ func methodForCommand(command string) *methods.Identity {
 	switch command {
 	case "lito region":
 		method = methods.CoastlineRegion()
+	case "lito coastline-check":
+		method = methods.CoastlineValidation()
 	case "lito dimension":
 		method = methods.BoxCounting()
 	case "lito map":
