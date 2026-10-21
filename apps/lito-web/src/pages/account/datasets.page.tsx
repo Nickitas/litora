@@ -1,28 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import type { DatasetDto } from "@litora/contracts";
+import { smallDatasetLimits, type DatasetDto } from "@litora/contracts";
 import {
-  coastlineExamples,
-  findSavedExample,
-  type CoastlineExample,
-} from "@litora/generated-data";
-import { Check, ChevronDown, ExternalLink, Plus, Search } from "lucide-react";
+  findSavedResearchDataset,
+  type ResearchCatalogueEntry,
+} from "@litora/generated-data/research";
+import { Plus, Search } from "lucide-react";
 import { api } from "@/shared/api/client";
 import { Badge } from "@/shared/shadcn/components/ui/badge";
 import { Button } from "@/shared/shadcn/components/ui/button";
 import { Card } from "@/shared/shadcn/components/ui/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/shared/shadcn/components/ui/collapsible";
 import { Input } from "@/shared/shadcn/components/ui/input";
 import { Label } from "@/shared/shadcn/components/ui/label";
 import { DatasetUpload } from "./ui/dataset-upload";
 import { DatasetPassport } from "./ui/dataset-passport";
 import { CoastlineValidationSummary } from "./ui/coastline-validation-panel";
 import { validationPending } from "./model/use-coastline-validation";
-import { suggestDatasetName } from "./model/dataset-name";
+import { ResearchCatalogue } from "./ui/research-catalogue";
+import { loadResearchDataset } from "./model/research-catalogue";
+import { WholeSeaResearch } from "./ui/whole-sea-research";
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -69,105 +65,6 @@ function DatasetCard({ dataset }: { dataset: DatasetDto }) {
   );
 }
 
-function ExampleCard({
-  example,
-  saved,
-  suggestedName,
-  disabled,
-  pending,
-  onSave,
-}: {
-  example: CoastlineExample;
-  saved: DatasetDto | undefined;
-  suggestedName: string;
-  disabled: boolean;
-  pending: boolean;
-  onSave: (example: CoastlineExample, name: string) => void;
-}) {
-  const [editedName, setEditedName] = useState<string | null>(null);
-  const name = saved?.name ?? editedName ?? suggestedName;
-  const nameId = `example-name-${example.key}`;
-  return (
-    <li>
-      <Card className="flex h-full min-w-0 flex-col gap-4 p-5 shadow-none">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <p className="text-xs font-medium text-primary">Учебный контур</p>
-            <h3 className="mt-1 text-base font-semibold">
-              {example.dataset.name}
-            </h3>
-          </div>
-          {saved && (
-            <Badge variant="secondary">
-              <Check aria-hidden="true" className="size-3" /> Сохранён
-            </Badge>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground">{example.description}</p>
-        <p className="text-xs text-muted-foreground">
-          {example.dataset.geometry.coordinates.length} точек ·{" "}
-          {example.dataset.crs} · ODbL
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Источник: © OpenStreetMap contributors
-          {example.dataset.sourceRevision &&
-            ` · ${example.dataset.sourceRevision}`}
-        </p>
-        <form
-          className="mt-auto space-y-3 pt-1"
-          aria-busy={pending}
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (name.trim()) onSave(example, name.trim());
-          }}
-        >
-          <div className="space-y-2">
-            <Label htmlFor={nameId}>Название</Label>
-            <Input
-              id={nameId}
-              value={name}
-              onChange={(event) => setEditedName(event.target.value)}
-              required
-              maxLength={100}
-              disabled={Boolean(saved) || disabled || pending}
-              aria-describedby={`${nameId}-hint`}
-            />
-            <p id={`${nameId}-hint`} className="text-xs text-muted-foreground">
-              {saved
-                ? "Название в ваших наборах."
-                : "Можно полностью заменить перед сохранением."}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="submit"
-              size="sm"
-              variant={saved ? "secondary" : "default"}
-              disabled={Boolean(saved) || disabled || pending || !name.trim()}
-            >
-              {saved
-                ? "Уже в моих наборах"
-                : pending
-                  ? "Сохраняем…"
-                  : "Сохранить набор"}
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <a
-                href={example.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Исходные данные{" "}
-                <ExternalLink aria-hidden="true" className="size-3" />
-              </a>
-            </Button>
-          </div>
-        </form>
-      </Card>
-    </li>
-  );
-}
-
 export function DatasetsPage() {
   const [datasets, setDatasets] = useState<DatasetDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -177,8 +74,22 @@ export function DatasetsPage() {
   const [creating, setCreating] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [validationPollError, setValidationPollError] = useState("");
-  const [exampleError, setExampleError] = useState("");
-  const [savingExampleKey, setSavingExampleKey] = useState<string | null>(null);
+  const [catalogueError, setCatalogueError] = useState<{
+    id: string;
+    message: string;
+  } | null>(null);
+  const [savingCatalogueId, setSavingCatalogueId] = useState<string | null>(
+    null
+  );
+  const savingCatalogue = useRef(false);
+  const active = useRef(true);
+  const listVersion = useRef(0);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const reload = useCallback(() => {
     setLoading(true);
     setError("");
@@ -187,10 +98,11 @@ export function DatasetsPage() {
 
   useEffect(() => {
     let mounted = true;
+    const version = listVersion.current;
     void api
       .datasets()
       .then((result) => {
-        if (!mounted) return;
+        if (!mounted || version !== listVersion.current) return;
         setDatasets(result);
         setError("");
       })
@@ -210,27 +122,43 @@ export function DatasetsPage() {
     };
   }, [revision]);
 
-  const hasPendingValidation = datasets.some((dataset) => validationPending(dataset.validation));
+  const hasPendingValidation = datasets.some((dataset) =>
+    validationPending(dataset.validation)
+  );
   useEffect(() => {
     if (!hasPendingValidation) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
+        const version = listVersion.current;
         const next = await api.datasets();
         if (!active) return;
-        setDatasets(next); setValidationPollError("");
-        if (next.some((dataset) => validationPending(dataset.validation))) timer = setTimeout(() => void poll(), 2000);
+        if (version !== listVersion.current) {
+          timer = setTimeout(() => void poll(), 2000);
+          return;
+        }
+        setDatasets(next);
+        setValidationPollError("");
+        if (next.some((dataset) => validationPending(dataset.validation)))
+          timer = setTimeout(() => void poll(), 2000);
       } catch {
-        if (active) setValidationPollError("Не удалось обновить результаты проверки. Сохранённые наборы остаются в списке.");
+        if (active)
+          setValidationPollError(
+            "Не удалось обновить результаты проверки. Сохранённые наборы остаются в списке."
+          );
       }
     };
     timer = setTimeout(() => void poll(), 2000);
-    return () => { active = false; clearTimeout(timer); };
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [hasPendingValidation, revision]);
 
   const normalizedSearch = search.trim().toLocaleLowerCase("ru-RU");
-  const quotaReached = datasets.length >= 100 && !error;
+  const quotaReached =
+    datasets.length >= smallDatasetLimits.maxPerUser && !error;
   const visibleDatasets = normalizedSearch
     ? datasets.filter((dataset) =>
         `${dataset.name} ${dataset.source} ${dataset.sourceRevision ?? ""}`
@@ -240,6 +168,7 @@ export function DatasetsPage() {
     : datasets;
 
   function onSaved(dataset: DatasetDto) {
+    listVersion.current += 1;
     setDatasets((current) => [
       dataset,
       ...current.filter((item) => item.id !== dataset.id),
@@ -251,25 +180,65 @@ export function DatasetsPage() {
     );
   }
 
-  async function saveExample(example: CoastlineExample, name: string) {
-    if (savingExampleKey || !name.trim() || findSavedExample(datasets, example))
+  async function saveCatalogueEntry(
+    entry: ResearchCatalogueEntry,
+    name: string
+  ) {
+    if (
+      savingCatalogue.current ||
+      loading ||
+      error ||
+      quotaReached ||
+      !name.trim() ||
+      findSavedResearchDataset(datasets, entry)
+    )
       return;
-    setSavingExampleKey(example.key);
-    setExampleError("");
+    savingCatalogue.current = true;
+    setSavingCatalogueId(entry.id);
+    setCatalogueError(null);
     try {
-      const saved = await api.createDataset({
-        ...example.dataset,
-        name: name.trim(),
-      });
-      onSaved(saved);
-    } catch (nextError) {
-      setExampleError(
-        nextError instanceof Error
-          ? nextError.message
-          : "Не удалось сохранить пример"
-      );
+      const fresh = await api.datasets();
+      if (!active.current) return;
+      setDatasets(fresh);
+      const existing = findSavedResearchDataset(fresh, entry);
+      if (existing) {
+        onSaved(existing);
+        return;
+      }
+      if (fresh.length >= smallDatasetLimits.maxPerUser)
+        throw new Error("Достигнут лимит 100 сохранённых наборов данных");
+      const prepared = await loadResearchDataset(entry);
+      if (!active.current) return;
+      const saved = await api.createDataset({ ...prepared, name: name.trim() });
+      if (active.current) onSaved(saved);
+    } catch (nextError: unknown) {
+      if (!active.current) return;
+      try {
+        const fresh = await api.datasets();
+        if (!active.current) return;
+        setDatasets(fresh);
+        const existing = findSavedResearchDataset(fresh, entry);
+        if (existing) {
+          onSaved(existing);
+          return;
+        }
+      } catch {
+        if (active.current)
+          setError(
+            "Не удалось обновить список наборов. Повторите загрузку перед сохранением."
+          );
+      }
+      if (active.current)
+        setCatalogueError({
+          id: entry.id,
+          message:
+            nextError instanceof Error
+              ? nextError.message
+              : "Не удалось сохранить набор из каталога",
+        });
     } finally {
-      setSavingExampleKey(null);
+      savingCatalogue.current = false;
+      if (active.current) setSavingCatalogueId(null);
     }
   }
 
@@ -288,7 +257,12 @@ export function DatasetsPage() {
         <Button
           type="button"
           variant={creating ? "outline" : "default"}
-          disabled={loading || quotaReached}
+          disabled={
+            loading ||
+            Boolean(error) ||
+            quotaReached ||
+            Boolean(savingCatalogueId)
+          }
           aria-expanded={creating}
           aria-controls="dataset-creation"
           aria-describedby="dataset-limits"
@@ -302,6 +276,15 @@ export function DatasetsPage() {
         </Button>
       </header>
 
+      <div className="flex flex-wrap gap-3 text-sm">
+        <Button asChild variant="outline" size="sm">
+          <a href="#research-catalogue-heading">Готовые участки: 24</a>
+        </Button>
+        <Button asChild variant="outline" size="sm">
+          <a href="#whole-sea-heading">Всё Чёрное море</a>
+        </Button>
+      </div>
+
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 text-sm">
         <p id="dataset-limits" className="max-w-2xl text-muted-foreground">
           До 100 наборов GeoJSON LineString в WGS84 / EPSG:4326. В каждом —
@@ -309,7 +292,7 @@ export function DatasetsPage() {
         </p>
         <Button asChild variant="link" size="sm" className="h-auto p-0">
           <Link to="/docs/reference/black-sea-source-catalogue.md">
-            Где взять данные
+            Источники и ограничения
           </Link>
         </Button>
       </div>
@@ -321,9 +304,14 @@ export function DatasetsPage() {
         </p>
       )}
 
-      {validationPollError && <div role="alert" className="rounded-lg border p-3 text-sm">
-        <p>{validationPollError}</p><Button type="button" variant="link" onClick={reload}>Обновить состояния</Button>
-      </div>}
+      {validationPollError && (
+        <div role="alert" className="rounded-lg border p-3 text-sm">
+          <p>{validationPollError}</p>
+          <Button type="button" variant="link" onClick={reload}>
+            Обновить состояния
+          </Button>
+        </div>
+      )}
       {savedMessage && (
         <p
           role="status"
@@ -385,8 +373,9 @@ export function DatasetsPage() {
           <div className="rounded-xl border border-dashed bg-card p-6">
             <p className="font-medium">Пока нет сохранённых наборов</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Добавьте свой GeoJSON кнопкой «Добавить набор». После сохранения
-              он появится здесь и в форме нового расчёта.
+              Выберите участок в каталоге ниже или добавьте свой GeoJSON кнопкой
+              «Добавить набор». После сохранения он появится здесь и в форме
+              нового расчёта.
             </p>
           </div>
         ) : datasets.length > 0 ? (
@@ -431,58 +420,24 @@ export function DatasetsPage() {
         ) : null}
       </section>
 
-      <section aria-labelledby="dataset-examples-heading">
-        <Collapsible className="rounded-xl border bg-card">
-          <h2 id="dataset-examples-heading">
-            <CollapsibleTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                className="group h-auto w-full justify-between gap-3 rounded-xl px-5 py-4 text-left text-base font-semibold whitespace-normal sm:px-6"
-              >
-                Примеры для старта
-                <ChevronDown
-                  aria-hidden="true"
-                  className="size-4 shrink-0 transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none"
-                />
-              </Button>
-            </CollapsibleTrigger>
-          </h2>
-          <CollapsibleContent className="space-y-4 border-t p-5 sm:p-6">
-            <p className="max-w-3xl text-sm text-muted-foreground">
-              Фрагменты береговой линии из OpenStreetMap. Это учебные данные, не
-              геодезическая съёмка и не основание для инженерного заключения.
-              Сохраняйте только нужные.
-            </p>
-            <ul className="grid gap-4 lg:grid-cols-3">
-              {coastlineExamples.map((example) => (
-                <ExampleCard
-                  key={example.key}
-                  example={example}
-                  saved={findSavedExample(datasets, example)}
-                  suggestedName={suggestDatasetName(
-                    example.suggestedName,
-                    datasets.map((dataset) => dataset.name)
-                  )}
-                  disabled={
-                    loading ||
-                    Boolean(error) ||
-                    quotaReached ||
-                    Boolean(savingExampleKey)
-                  }
-                  pending={savingExampleKey === example.key}
-                  onSave={(value, name) => void saveExample(value, name)}
-                />
-              ))}
-            </ul>
-          </CollapsibleContent>
-        </Collapsible>
-        {exampleError && (
-          <p role="alert" className="mt-3 text-sm text-destructive">
-            {exampleError}
-          </p>
-        )}
-      </section>
+      <WholeSeaResearch />
+
+      <ResearchCatalogue
+        datasets={datasets}
+        disabled={loading || Boolean(error) || quotaReached}
+        unavailableMessage={
+          loading
+            ? "Сохранение станет доступно после загрузки ваших наборов."
+            : error
+              ? "Для сохранения повторите загрузку списка своих наборов выше."
+              : quotaReached
+                ? "Квота 100 наборов исчерпана. Уже сохранённые участки можно открыть."
+                : ""
+        }
+        pendingId={savingCatalogueId}
+        error={catalogueError}
+        onSave={(entry, name) => void saveCatalogueEntry(entry, name)}
+      />
     </div>
   );
 }

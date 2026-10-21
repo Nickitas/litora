@@ -82,6 +82,7 @@ export function NewCalculationDialog({
   sourceJobId,
   coastlineContinuation,
   initialDatasetId,
+  initialRegionSourceId,
   onOpenChange,
   onRestoreFocus,
 }: {
@@ -90,6 +91,7 @@ export function NewCalculationDialog({
   sourceJobId?: string;
   coastlineContinuation?: CoastlineContinuation;
   initialDatasetId?: string;
+  initialRegionSourceId?: string;
   onOpenChange: (open: boolean) => void;
   onRestoreFocus: () => void;
 }) {
@@ -428,6 +430,18 @@ export function NewCalculationDialog({
             : (nextKinds[0]?.kind ?? current)
         );
         setLoadError("");
+        if (initialRegionSourceId !== undefined && !continuationApplied.current && !repeatJobId) {
+          continuationApplied.current = true;
+          setKind("coastline_region");
+          const selected = nextScientific.find((item) => item.id === initialRegionSourceId && item.role === "coastline_geojson" && item.status === "ready");
+          if (selected) {
+            setSelectedScientific({ coastlineInputId: selected.id });
+            setWorkflowNote("Выбран сохранённый полный исходник. Задайте область; выделение не повышает точность исходных данных.");
+          } else {
+            setMissingRepeatInputs(["coastlineInputId"]);
+            setWorkflowNote("Выбранный исходник недоступен. Выберите свой файл или явно разрешите встроенный контур.");
+          }
+        }
         if (initialDatasetId && !datasetApplied.current && !repeatJobId) {
           datasetApplied.current = true;
           setKind("dimension_dataset");
@@ -437,6 +451,8 @@ export function NewCalculationDialog({
         }
         if (original.error) setRepeatError(`Не удалось открыть исходный расчёт: ${original.error}`);
         else setRepeatError("");
+        if (initialRegionSourceId !== undefined && !nextKinds.some((item) => item.kind === "coastline_region"))
+          setRepeatError("Выделение области сейчас отключено на сервере.");
         if (coastlineContinuation && !continuationApplied.current && !repeatJobId) {
           continuationApplied.current = true;
           setKind(coastlineContinuation.kind);
@@ -489,7 +505,7 @@ export function NewCalculationDialog({
     return () => {
       mounted = false;
     };
-  }, [revision, repeatJobId, applyStoredCalculation, workflow, sourceJobId, selectWorkflow, coastlineContinuation, initialDatasetId]);
+  }, [revision, repeatJobId, applyStoredCalculation, workflow, sourceJobId, selectWorkflow, coastlineContinuation, initialDatasetId, initialRegionSourceId]);
 
   function reload() {
     setLoading(true);
@@ -1215,6 +1231,7 @@ export function NewCalculationDialog({
                           value={selectedScientific[field] || undefined}
                           onValueChange={(value) => {
                             setSelectedScientific((current) => ({ ...current, [field]: value }));
+                            setMissingRepeatInputs((current) => current.filter((missing) => missing !== field));
                             if (isOptional && kind === "all_file")
                               setAllFileOptions((current) => ({ ...current, modelMaxPoints: 0, noModelSimplify: true }));
                           }}
@@ -1277,7 +1294,7 @@ export function NewCalculationDialog({
                   })}
                 </section>
               )}
-              {kind === "coastline_region" && <CoastlineRegionPicker key={selectedScientific.coastlineInputId ?? "bundled"} value={regionBounds} onChange={setRegionBounds} sourceId={selectedScientific.coastlineInputId} />}
+              {kind === "coastline_region" && (missingRepeatInputs.includes("coastlineInputId") ? <p role="status" className="text-sm text-muted-foreground">Карта появится после явного выбора доступного исходника.</p> : <CoastlineRegionPicker key={selectedScientific.coastlineInputId ?? "bundled"} value={regionBounds} onChange={setRegionBounds} sourceId={selectedScientific.coastlineInputId} />)}
               {kind === "mesh" && (
                 <section className="space-y-4 border-t pt-6" aria-label="Параметры плоской сетки">
                   <h3 className="text-lg font-semibold">3. Параметры сетки</h3>

@@ -31,6 +31,7 @@ import { environment } from "./config/environment.js";
 import { CoastlineValidationService } from "./coastline-validation/coastline-validation.service.js";
 import { ScientificInputsController } from "./scientific-inputs/scientific-inputs.controller.js";
 import { ScientificInputsRepository } from "./scientific-inputs/scientific-inputs.repository.js";
+import { ScientificCatalogueService } from "./scientific-inputs/scientific-catalogue.service.js";
 
 @Controller()
 @ApiTags("system")
@@ -90,6 +91,7 @@ class AppController {
     DatasetsRepository,
     CoastlineValidationService,
     ScientificInputsRepository,
+    ScientificCatalogueService,
     AuthService,
     AuthGuard,
   ],

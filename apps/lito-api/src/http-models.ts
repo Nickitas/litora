@@ -14,6 +14,7 @@ import type {
   ObservedShorelineSeriesDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
+  ScientificCatalogueEntryDto,
   ScientificInputQuotaDto,
   ScientificInputRole,
   ScientificInputFormatDto,
@@ -208,6 +209,25 @@ export class ScientificInputResponse implements ScientificInputDto {
   status!: ScientificInputDto["status"];
   @ApiProperty({ type: String, nullable: true }) sha256!: string | null;
   @ApiProperty({ type: String, format: "date-time" }) createdAt!: string;
+}
+
+export class ScientificCatalogueEntryResponse implements ScientificCatalogueEntryDto {
+  @ApiProperty({ type: String }) id!: string;
+  @ApiProperty({ type: String }) name!: string;
+  @ApiProperty({ type: String, enum: ["coastline_geojson"] }) role!: "coastline_geojson";
+  @ApiProperty({ type: String }) filename!: string;
+  @ApiProperty({ type: Number }) sizeBytes!: number;
+  @ApiProperty({ type: String }) source!: string;
+  @ApiProperty({ type: String, required: false }) sourceRevision?: string;
+  @ApiProperty({ type: String }) license!: string;
+  @ApiProperty({ type: String }) crs!: string;
+  @ApiProperty({ type: String }) coordinateUnit!: string;
+  @ApiProperty({ type: String }) sha256!: string;
+  @ApiProperty({ type: String }) sourceUrl!: string;
+  @ApiProperty({ type: String }) licenseUrl!: string;
+  @ApiProperty({ type: String, enum: ["sea_area_boundary"] }) geometryKind!: "sea_area_boundary";
+  @ApiProperty({ type: String }) purpose!: string;
+  @ApiProperty({ type: [String] }) limitations!: string[];
 }
 
 export class ScientificInputQuotaResponse implements ScientificInputQuotaDto {

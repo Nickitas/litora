@@ -31,6 +31,7 @@ import {
   findSavedExample,
 } from "@litora/generated-data";
 import { suggestDatasetName } from "../src/pages/account/model/dataset-name";
+import { findSavedResearchDataset, parseResearchDataset, researchCatalogue } from "@litora/generated-data/research";
 
 const user = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -490,7 +491,7 @@ async function mockApi(
     method: string,
     body: unknown,
     params: URLSearchParams
-  ) => ApiReply | undefined
+  ) => ApiReply | undefined | Promise<ApiReply | undefined>
 ) {
   const unexpected: string[] = [];
   const pageErrors: string[] = [];
@@ -509,7 +510,7 @@ async function mockApi(
       } catch {
         body = undefined;
       }
-      let result = reply(path, method, body, url.searchParams);
+      let result = await reply(path, method, body, url.searchParams);
       const validationRequest = /^\/api\/(datasets|scientific-inputs)\/([^/]+)\/validation$/.exec(path);
       if (!result && validationRequest && method === "GET") {
         const known = ownedValidationSources.get(`${validationRequest[1]}:${validationRequest[2]}`);
@@ -521,7 +522,7 @@ async function mockApi(
       if (!result && path === "/api/scientific-inputs/formats" && method === "GET")
         result = { body: JSON.parse(await readFile(new URL("../../lito-cli/data/schemas/scientific-inputs-v1.json", import.meta.url), "utf8")) };
       if (!result && path === "/api/calculations/page" && method === "GET") {
-        const legacy = reply(
+        const legacy = await reply(
           "/api/calculations",
           "GET",
           undefined,
@@ -540,7 +541,8 @@ async function mockApi(
         !result &&
         method === "GET" &&
         (path === "/api/scientific-inputs" ||
-          path === "/api/scientific-inputs/reusable-artifacts")
+          path === "/api/scientific-inputs/reusable-artifacts" ||
+          path === "/api/scientific-inputs/catalogue")
       )
         result = { body: [] };
       if (!result && path === "/api/scientific-inputs/quota" && method === "GET")
@@ -719,11 +721,8 @@ test("каталог показывает паспорт набора, поис�
   await expect(page.getByRole("heading", { name: dataset.name })).toBeVisible();
   await expect(page.getByText(dataset.sha256)).toHaveCount(2);
   await expect(page.getByText("2 из 100 возможных")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Примеры для старта" })
-  ).toHaveAttribute("aria-expanded", "false");
   const savedList = page.getByRole("region", { name: "Сохранённые наборы" });
-  const examples = page.getByRole("region", { name: "Примеры для старта" });
+  const examples = page.getByRole("region", { name: "Каталог готовых данных" });
   expect(
     await savedList.evaluate(
       (element, examplesId) =>
@@ -732,10 +731,10 @@ test("каталог показывает паспорт набора, поис�
             document.getElementById(examplesId)!.closest("section")!
           ) & Node.DOCUMENT_POSITION_FOLLOWING
         ),
-      "dataset-examples-heading"
+      "research-catalogue-heading"
     )
   ).toBe(true);
-  await expect(examples.getByRole("listitem")).toHaveCount(0);
+  await expect(examples.getByRole("listitem")).toHaveCount(24);
   await page
     .getByRole("textbox", { name: "Поиск по названию и источнику" })
     .fill("экспедиция");
@@ -830,16 +829,171 @@ test("каталог показывает сохранённые записи б
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("каталог сохраняет переименованный пример с паспортом и допускает повтор после ошибки", async ({
+async function researchGeometry(entry = researchCatalogue[0]) {
+  const raw = await readFile(
+    new URL(
+      `../../../packages/generated-data/research/${entry.id}.geojson`,
+      import.meta.url
+    ),
+    "utf8"
+  );
+  return parseResearchDataset(entry, JSON.parse(raw));
+}
+function savedResearch(
+  entry = researchCatalogue[0],
+  name = "Мой исследовательский берег"
+): DatasetDto {
+  return {
+    ...dataset,
+    ...entry.dataset,
+    name,
+    sourceRevision: entry.dataset.sourceRevision ?? null,
+    pointCount: entry.pointCount,
+    sha256: entry.sha256,
+  };
+}
+function researchCard(page: Page, name: string) {
+  return page
+    .getByRole("region", { name: "Каталог готовых данных" })
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("heading", { name, exact: true }) });
+}
+
+test("готовые данные: все 24 паспорта совпадают с GeoJSON и различают версии своих копий", async () => {
+  expect(researchCatalogue).toHaveLength(24);
+  expect(new Set(researchCatalogue.map((entry) => entry.id)).size).toBe(24);
+  expect(new Set(researchCatalogue.map((entry) => entry.sha256)).size).toBe(24);
+  for (const entry of researchCatalogue) {
+    const prepared = await researchGeometry(entry);
+    const bytes = Buffer.from(JSON.stringify(prepared.geometry));
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(entry.sha256);
+    expect(bytes.length).toBeLessThanOrEqual(65_536);
+    expect(prepared.geometry.coordinates).toHaveLength(entry.pointCount);
+    const saved = savedResearch(entry);
+    expect(findSavedResearchDataset([saved], entry)).toBe(saved);
+    for (const difference of [
+      { sha256: "0".repeat(64) },
+      { sourceRevision: "Другая версия" },
+      { license: "Другая лицензия" },
+      { source: "Другой источник" },
+      { pointCount: 2 },
+    ])
+      expect(
+        findSavedResearchDataset([{ ...saved, ...difference }], entry)
+      ).toBeUndefined();
+    expect(() =>
+      parseResearchDataset(entry, {
+        type: "LineString",
+        coordinates: [
+          [1, 1],
+          [2, 2],
+        ],
+      })
+    ).toThrow(/паспортом/);
+  }
+});
+
+test("готовые данные: каталог открыт сразу, поиск и превью доступны без создания записей", async ({
+  page,
+}) => {
+  const submissions: unknown[] = [];
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (method === "POST") {
+      submissions.push(body);
+      return { status: 500, body: {} };
+    }
+  });
+  await page.goto("/lab/datasets");
+  const catalogue = page.getByRole("region", {
+    name: "Каталог готовых данных",
+  });
+  await expect(catalogue.getByRole("listitem")).toHaveCount(24);
+  await expect(catalogue.getByRole("img")).toHaveCount(24);
+  const card = researchCard(page, researchCatalogue[0].name);
+  await expect(
+    card.getByRole("link", { name: "Оригинал в OSM" })
+  ).toHaveAttribute("href", researchCatalogue[0].sourceUrl);
+  await expect(card.getByRole("link", { name: "ODbL-1.0" })).toHaveAttribute(
+    "href",
+    researchCatalogue[0].licenseUrl
+  );
+  await card.getByText("Паспорт и ограничения", { exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(card.getByText(/Это дата базы, а не съёмки/)).toBeVisible();
+  const name = card.getByRole("textbox", { name: "Название своей копии" });
+  await name.fill("Мой черновик Сочи");
+  const search = catalogue.getByRole("textbox", {
+    name: "Поиск участка в каталоге",
+  });
+  await search.fill("синоп");
+  await expect(
+    catalogue.getByRole("heading", { name: "Синопский полуостров" })
+  ).toBeVisible();
+  await expect(catalogue.getByRole("listitem")).toHaveCount(1);
+  await search.fill("неизвестный район");
+  await expect(catalogue.getByText(/Участки не найдены/)).toBeVisible();
+  await search.clear();
+  await expect(name).toHaveValue("Мой черновик Сочи");
+  expect(submissions).toEqual([]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+for (const failure of ["network", "checksum"] as const) {
+  test(`готовые данные: ошибка контура и повтор — ${failure}`, async ({
+    page,
+  }) => {
+    const observed = await mockApi(page, (path, method) => {
+      if (path === "/api/auth/refresh" && method === "POST")
+        return { body: session };
+      if (path === "/api/datasets" && method === "GET") return { body: [] };
+    });
+    const asset = /\/research\/sochi-01\.geojson/;
+    const altered = await researchGeometry();
+    altered.geometry.coordinates[0][0] += 0.00001;
+    await page.route(asset, (route) =>
+      failure === "network"
+        ? route.abort()
+        : route.fulfill({
+            contentType: "application/geo+json",
+            body: JSON.stringify(altered.geometry),
+          })
+    );
+    await page.goto("/lab/datasets");
+    const card = researchCard(page, researchCatalogue[0].name);
+    await expect(card.getByRole("alert")).toContainText(
+      "Не удалось загрузить контур"
+    );
+    await expect(
+      card.getByRole("button", { name: "Сохранить набор" })
+    ).toBeDisabled();
+    await page.unroute(asset);
+    await card
+      .getByRole("button", { name: "Повторить загрузку контура" })
+      .click();
+    await expect(card.getByRole("img")).toBeVisible();
+    await expect(
+      card.getByRole("button", { name: "Сохранить набор" })
+    ).toBeEnabled();
+    expect(observed.unexpected).toEqual([]);
+    expect(observed.pageErrors).toEqual([]);
+  });
+}
+
+test("готовые данные: своё название, повтор после ошибки, паспорт и переход к проверке", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
-  const example = coastlineExamples.find((item) => item.key === "anapa")!;
+  const entry = researchCatalogue.find((item) => item.id === "anapa-01")!;
+  const prepared = await researchGeometry(entry);
   const saved = {
-    ...savedExample(example, "77777777-7777-4777-8777-777777777773"),
-    name: "Берег Анапы для сравнения",
+    ...savedResearch(entry, "Берег Анапы для сравнения"),
+    validation: checkedCoastline,
   };
-  const occupied = { ...dataset, name: example.suggestedName };
+  const occupied = { ...dataset, name: entry.name };
   let savedSuccessfully = false;
   const submissions: unknown[] = [];
   const observed = await mockApi(page, (path, method, body) => {
@@ -847,68 +1001,248 @@ test("каталог сохраняет переименованный прим�
       return { body: session };
     if (path === "/api/datasets" && method === "GET")
       return { body: savedSuccessfully ? [saved, occupied] : [occupied] };
+    if (path === `/api/datasets/${saved.id}` && method === "GET")
+      return { body: { ...saved, geometry: prepared.geometry } };
+    if (path === `/api/datasets/${saved.id}/validation` && method === "GET")
+      return { body: checkedCoastline };
     if (path === "/api/datasets" && method === "POST") {
       submissions.push(body);
       if (submissions.length === 1)
-        return { status: 503, body: { message: "Сохранение временно недоступно" } };
+        return {
+          status: 503,
+          body: { message: "Сохранение временно недоступно" },
+        };
       savedSuccessfully = true;
       return { status: 201, body: saved };
     }
   });
-
   await page.goto("/lab/datasets");
-  const exampleToggle = page.getByRole("button", {
-    name: "Примеры для старта",
-  });
-  await expect(exampleToggle).toHaveAttribute("aria-expanded", "false");
-  expect(submissions).toEqual([]);
-  await exampleToggle.focus();
-  await exampleToggle.press("Enter");
-  await expect(exampleToggle).toHaveAttribute("aria-expanded", "true");
-  await exampleToggle.press("Space");
-  await expect(exampleToggle).toHaveAttribute("aria-expanded", "false");
-  await expect(exampleToggle).toBeFocused();
-  await exampleToggle.press("Enter");
-  const exampleCard = page
-    .getByRole("region", { name: "Примеры для старта" })
-    .getByRole("listitem")
-    .filter({ has: page.getByRole("heading", { name: example.dataset.name }) });
-  const nameInput = exampleCard.getByLabel("Название", { exact: true });
-  await expect(nameInput).toHaveValue(`${example.suggestedName} (2)`);
+  const card = researchCard(page, entry.name);
+  const nameInput = card.getByLabel("Название своей копии", { exact: true });
+  await expect(nameInput).toHaveValue(`${entry.name} (2)`);
   await expect(nameInput).toHaveAttribute("maxlength", "100");
+  await expect(card.getByRole("img")).toBeVisible();
   await nameInput.fill("   ");
-  await expect(exampleCard.getByRole("button", { name: "Сохранить набор" })).toBeDisabled();
+  await expect(
+    card.getByRole("button", { name: "Сохранить набор" })
+  ).toBeDisabled();
   expect(submissions).toEqual([]);
   await chooseTheme(page, "dark");
   await nameInput.fill(saved.name);
   await nameInput.press("Enter");
-  await expect(page.getByRole("alert")).toHaveText("Сохранение временно недоступно");
+  await expect(card.getByRole("alert")).toHaveText(
+    "Сохранение временно недоступно"
+  );
   await expect(nameInput).toHaveValue(saved.name);
   await chooseTheme(page, "light");
   await nameInput.press("Enter");
   await expect(
-    exampleCard.getByRole("button", { name: "Уже в моих наборах" })
+    card.getByRole("button", { name: "Уже в моих наборах" })
   ).toBeDisabled();
   await expect(
     page
       .getByRole("region", { name: "Сохранённые наборы" })
       .getByRole("heading", { name: saved.name })
   ).toBeVisible();
-  const savedCard = page.getByRole("region", { name: "Сохранённые наборы" })
-    .getByRole("listitem")
-    .filter({ has: page.getByRole("heading", { name: saved.name }) });
-  await expect(savedCard.getByText(saved.sha256)).toBeVisible();
-  await expect(savedCard.getByText(saved.source, { exact: true })).toBeVisible();
-  await expect(savedCard.getByText(saved.sourceRevision!, { exact: true })).toBeVisible();
   expect(submissions).toEqual([
-    { ...example.dataset, name: saved.name },
-    { ...example.dataset, name: saved.name },
+    { ...prepared, name: saved.name },
+    { ...prepared, name: saved.name },
   ]);
   await page.reload();
-  await page.getByRole("button", { name: "Примеры для старта" }).click();
-  await expect(exampleCard.getByRole("button", { name: "Уже в моих наборах" })).toBeDisabled();
   await expect(nameInput).toHaveValue(saved.name);
-  await expect(page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).resolves.toBe(true);
+  await expect(
+    card.getByRole("button", { name: "Уже в моих наборах" })
+  ).toBeDisabled();
+  await expect(
+    page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).resolves.toBe(true);
+  await card.getByRole("link", { name: "Открыть набор" }).click();
+  await expect(page).toHaveURL(new RegExp(`/lab/datasets/${saved.id}$`));
+  await expect(
+    page.getByRole("heading", { name: saved.name, exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Рассчитать размерность" })
+  ).toBeEnabled();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+for (const mode of ["loading", "error", "quota"] as const) {
+  test(`готовые данные: каталог доступен, сохранение блокируется при ${mode}`, async ({
+    page,
+  }) => {
+    const submissions: unknown[] = [];
+    let release: (() => void) | undefined;
+    const delayed = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const observed = await mockApi(page, async (path, method, body) => {
+      if (path === "/api/auth/refresh" && method === "POST")
+        return { body: session };
+      if (path === "/api/datasets" && method === "GET") {
+        if (mode === "loading") {
+          await delayed;
+          return { body: [] };
+        }
+        if (mode === "error")
+          return { status: 403, body: { message: "Список недоступен" } };
+        return {
+          body: Array.from({ length: 100 }, (_, index) => ({
+            ...dataset,
+            id: `test-${index}`,
+            name: `Контур ${index}`,
+          })),
+        };
+      }
+      if (method === "POST") {
+        submissions.push(body);
+        return { status: 500, body: {} };
+      }
+    });
+    await page.goto("/lab/datasets");
+    const catalogue = page.getByRole("region", {
+      name: "Каталог готовых данных",
+    });
+    await expect(catalogue.getByRole("listitem")).toHaveCount(24);
+    await expect(catalogue.getByRole("img")).toHaveCount(24);
+    if (mode === "error")
+      await expect(page.getByRole("alert")).toContainText("Список недоступен");
+    if (mode === "quota")
+      await expect(page.getByText(/Достигнут лимит 100 наборов/)).toBeVisible();
+    for (const button of await catalogue
+      .getByRole("button", { name: "Сохранить набор" })
+      .all())
+      await expect(button).toBeDisabled();
+    if (mode === "loading") {
+      release!();
+      await expect(
+        researchCard(page, researchCatalogue[0].name).getByRole("button", {
+          name: "Сохранить набор",
+        })
+      ).toBeEnabled();
+    }
+    expect(submissions).toEqual([]);
+    expect(observed.unexpected).toEqual([]);
+    expect(observed.pageErrors).toEqual([]);
+  });
+}
+
+for (const mode of [
+  "existing",
+  "response-lost",
+  "double-submit",
+  "quota-changed",
+] as const) {
+  test(`готовые данные: защита от повтора — ${mode}`, async ({ page }) => {
+    const entry = researchCatalogue[0];
+    const saved = { ...savedResearch(entry), validation: checkedCoastline };
+    let armed = false,
+      created = false;
+    const submissions: unknown[] = [];
+    const observed = await mockApi(page, async (path, method, body) => {
+      if (path === "/api/auth/refresh" && method === "POST")
+        return { body: session };
+      if (path === "/api/datasets" && method === "GET") {
+        if (created || (mode === "existing" && armed)) return { body: [saved] };
+        if (mode === "quota-changed" && armed)
+          return {
+            body: Array.from({ length: 100 }, (_, index) => ({
+              ...dataset,
+              id: `test-${index}`,
+            })),
+          };
+        return { body: [] };
+      }
+      if (path === "/api/datasets" && method === "POST") {
+        submissions.push(body);
+        created = true;
+        if (mode === "response-lost")
+          return {
+            status: 503,
+            body: { message: "Ответ потерян после сохранения" },
+          };
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return { status: 201, body: saved };
+      }
+    });
+    await page.goto("/lab/datasets");
+    const card = researchCard(page, entry.name);
+    const input = card.getByRole("textbox", { name: "Название своей копии" });
+    await expect(
+      card.getByRole("button", { name: "Сохранить набор" })
+    ).toBeEnabled();
+    await input.fill("Собственное имя");
+    armed = true;
+    await input.evaluate((element) => {
+      const form = element.closest("form")!;
+      form.requestSubmit();
+      form.requestSubmit();
+    });
+    if (mode === "quota-changed") {
+      await expect(page.getByRole("alert")).toHaveText(/Достигнут лимит 100/);
+      await expect(
+        card.getByRole("button", { name: "Сохранить набор" })
+      ).toBeDisabled();
+    } else {
+      await expect(
+        card.getByRole("button", { name: "Уже в моих наборах" })
+      ).toBeDisabled();
+      await expect(
+        card.getByRole("link", { name: "Открыть набор" })
+      ).toHaveAttribute("href", `/lab/datasets/${saved.id}`);
+    }
+    expect(submissions).toHaveLength(
+      mode === "existing" || mode === "quota-changed" ? 0 : 1
+    );
+    expect(observed.unexpected).toEqual([]);
+    expect(observed.pageErrors).toEqual([]);
+  });
+}
+
+test("готовые данные: мобильный экран, клавиатура и обе темы", async ({
+  page,
+}, testInfo) => {
+  const observed = await mockApi(page, (path, method) => {
+    if (path === "/api/auth/refresh" && method === "POST")
+      return { body: session };
+    if (path === "/api/datasets" && method === "GET") return { body: [] };
+  });
+  await page.goto("/lab/datasets");
+  const catalogue = page.getByRole("region", {
+    name: "Каталог готовых данных",
+  });
+  await expect(catalogue.getByRole("img")).toHaveCount(24);
+  for (const width of [1440, 360]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const theme of ["light", "dark"] as const) {
+      await chooseTheme(page, theme);
+      const search = catalogue.getByRole("textbox", {
+        name: "Поиск участка в каталоге",
+      });
+      await search.focus();
+      await expect(search).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(
+        researchCard(page, researchCatalogue[0].name).getByRole("link", {
+          name: "Оригинал в OSM",
+        })
+      ).toBeFocused();
+      await page.getByRole("link", { name: "Готовые участки: 24" }).click();
+      const bounds = await catalogue.getByRole("heading", { name: "Каталог готовых данных" }).boundingBox();
+      expect(bounds?.y).toBeGreaterThanOrEqual(60);
+      await expect(
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth
+        )
+      ).resolves.toBe(true);
+      await page.screenshot({
+        path: testInfo.outputPath(`catalogue-${width}-${theme}.png`),
+      });
+    }
+  }
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -929,11 +1263,11 @@ test("каталог создаёт набор отдельно от запус�
   await page.goto("/lab/datasets");
   await expect(page.getByText("Пока нет сохранённых наборов")).toBeVisible();
   await expect(
-    page.getByText("Добавьте свой GeoJSON кнопкой «Добавить набор».", {
+    page.getByText("добавьте свой GeoJSON кнопкой «Добавить набор».", {
       exact: false,
     })
   ).toBeVisible();
-  await page.getByRole("link", { name: "Где взять данные" }).click();
+  await page.getByRole("link", { name: "Источники и ограничения" }).click();
   await expect(page).toHaveURL(
     /\/docs\/reference\/black-sea-source-catalogue\.md$/
   );
@@ -1035,11 +1369,12 @@ for (const entry of ["каталог", "форма расчёта"] as const) {
     await page.getByLabel("Источник данных").fill(saved.source);
     await page.getByLabel("Версия источника или дата снимка (необязательно)").fill(saved.sourceRevision);
     await page.getByLabel("Лицензия или условия использования").fill(saved.license);
-    await page.getByRole("button", { name: "Сохранить набор" }).click();
+    const upload = page.getByRole("region", { name: "Загрузить свой GeoJSON" });
+    await upload.getByRole("button", { name: "Сохранить набор" }).click();
     await expect(page.getByRole("alert")).toHaveText("Укажите название набора");
     expect(submissions).toEqual([]);
     await nameInput.fill(`  ${saved.name}  `);
-    await page.getByRole("button", { name: "Сохранить набор" }).click();
+    await upload.getByRole("button", { name: "Сохранить набор" }).click();
     if (entry === "каталог") {
       await expect(page.getByRole("heading", { name: saved.name })).toBeVisible();
       await expect(page.getByText(saved.sha256)).toBeVisible();

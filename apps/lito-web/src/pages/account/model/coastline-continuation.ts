@@ -14,3 +14,13 @@ export function parseCoastlineContinuation(params: URLSearchParams): CoastlineCo
 export function coastlineContinuationUrl(value: CoastlineContinuation) {
   return `/lab/calculations?${new URLSearchParams({ new: "1", scenario: value.kind, coastline: value.artifactId, source: value.sourceJobId })}`;
 }
+
+export function regionSourceUrl(id: string) {
+  return `/lab/calculations?${new URLSearchParams({ new: "1", scenario: "coastline_region", coastline: id })}`;
+}
+
+export function parseRegionSource(params: URLSearchParams): string | undefined {
+  // Даже некорректный/пустой ID передаётся форме как недоступный источник:
+  // это не разрешение молча заменить его встроенным контуром.
+  return params.get("scenario") === "coastline_region" ? params.get("coastline") ?? "" : undefined;
+}

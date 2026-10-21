@@ -168,8 +168,9 @@ test("кабинет на 360 px показывает все статусы бе
                   description: "Проверка",
                 },
               ]
-            : path === "/api/datasets"
+            : ["/api/datasets", "/api/scientific-inputs", "/api/scientific-inputs/catalogue", "/api/scientific-inputs/reusable-artifacts"].includes(path)
               ? []
+              : path === "/api/scientific-inputs/quota" ? { usedCount: 0, limitCount: 20, usedBytes: 0, limitBytes: 2147483648 }
               : path === "/api/calculations/page"
                 ? { items: jobs, nextCursor: null, totalCount: jobs.length }
                 : path === "/api/calculations"

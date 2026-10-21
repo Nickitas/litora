@@ -865,7 +865,66 @@ assert.deepEqual(
 );
 assert.equal((await second.request("/calculations")).length, 0);
 const swagger = await (await fetch(`${base}/docs-json`)).json();
+await anonymous.request("/scientific-inputs/catalogue", "GET", undefined, 401);
+const catalogue = await first.request("/scientific-inputs/catalogue");
+const wholeSea = catalogue.find((entry) => entry.id === "black-sea-marineregions");
+assert.equal(wholeSea.geometryKind, "sea_area_boundary");
+const wholeSeaBytes = await readFile(new URL("../apps/lito-cli/data/coastline/black-sea.geojson", import.meta.url));
+assert.equal(createHash("sha256").update(wholeSeaBytes).digest("hex"), wholeSea.sha256);
+await first.request(`/scientific-inputs/catalogue/${wholeSea.id}`, "POST", { name: "Море", url: "https://example.test" }, 400);
+await first.request("/scientific-inputs/catalogue/unknown", "POST", { name: "Море" }, 404);
+const beforeCatalogue = await first.request("/scientific-inputs/quota");
+const catalogueCopies = await Promise.all([0, 1].map(async () => {
+  const response = await fetch(`${base}/scientific-inputs/catalogue/${wholeSea.id}`, {
+    method: "POST", headers: { Origin: new URL(base).origin, "Content-Type": "application/json", Authorization: `Bearer ${first.token}` },
+    body: JSON.stringify({ name: "Мой полный источник" }),
+  });
+  assert.ok([201, 409].includes(response.status));
+  return { status: response.status, body: await response.json() };
+}));
+const wholeSeaCopy = catalogueCopies.find((copy) => copy.status === 201)?.body;
+assert.ok(wholeSeaCopy);
+assert.equal(wholeSeaCopy.status, "ready");
+assert.equal(wholeSeaCopy.sha256, wholeSea.sha256);
+const repeatedCatalogue = await first.request(`/scientific-inputs/catalogue/${wholeSea.id}`, "POST", { name: "Другое имя без новой копии" }, 201);
+assert.equal(repeatedCatalogue.id, wholeSeaCopy.id);
+assert.equal(repeatedCatalogue.name, wholeSeaCopy.name);
+const afterCatalogue = await first.request("/scientific-inputs/quota");
+assert.equal(afterCatalogue.usedCount, beforeCatalogue.usedCount + 1);
+assert.equal(afterCatalogue.usedBytes, beforeCatalogue.usedBytes + wholeSea.sizeBytes);
+await second.request(`/scientific-inputs/${wholeSeaCopy.id}/coastline-preview`, "GET", undefined, 404);
+await second.request(`/scientific-inputs/${wholeSeaCopy.id}/validation`, "GET", undefined, 404);
+const savedOverview = await first.request(`/scientific-inputs/${wholeSeaCopy.id}/coastline-preview`);
+assert.equal(savedOverview.sha256, wholeSea.sha256);
+assert.deepEqual(savedOverview.geojson, JSON.parse(wholeSeaBytes));
+if (process.env.TEST_COASTLINE_VALIDATION_ENABLED === "true") {
+  let checked;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    checked = await first.request(`/scientific-inputs/${wholeSeaCopy.id}/validation`);
+    if (!["queued", "running"].includes(checked.status)) break;
+    await delay(1000);
+  }
+  assert.equal(checked.accepted, true, JSON.stringify(checked));
+}
+const selectedWholeSea = await first.request("/calculations", "POST", { kind: "coastline_region", input: { west: 38, east: 40, south: 43, north: 44.5, coastlineInputId: wholeSeaCopy.id } }, 201);
+let wholeSeaRegion;
+for (let attempt = 0; attempt < 60; attempt++) {
+  wholeSeaRegion = await first.request(`/calculations/${selectedWholeSea.id}`);
+  if (!["queued", "running"].includes(wholeSeaRegion.status)) break;
+  await delay(1000);
+}
+assert.equal(wholeSeaRegion.status, "succeeded", wholeSeaRegion.errorMessage ?? "Выделение области полного моря не завершено");
+const savedLines = (await first.request("/scientific-inputs/reusable-artifacts")).filter((item) => item.jobId === wholeSeaRegion.id);
+assert.ok(savedLines.length > 0);
+const selectedReportFile = wholeSeaRegion.artifacts.find((file) => file.filename === "region/selection.json");
+const selectedReport = await (await fetch(selectedReportFile.downloadUrl)).json();
+assert.equal(selectedReport.source_sha256, wholeSea.sha256);
+await second.request(`/scientific-inputs/${savedLines[0].id}/coastline-preview`, "GET", undefined, 404);
+console.log("Каталог всего моря: приватная копия, повтор/гонка, квота, проверка Go, область и сохранённые линии S3 проверены");
 assert.ok(swagger.paths["/api/calculations"].post);
+assert.ok(swagger.paths["/api/scientific-inputs/catalogue"].get);
+assert.ok(swagger.paths["/api/scientific-inputs/catalogue/{id}"].post);
+assert.ok(swagger.components.schemas.ScientificCatalogueEntryResponse.properties.geometryKind);
 assert.ok(swagger.paths["/api/datasets"].post);
 assert.ok(swagger.paths["/api/scientific-inputs/reusable-artifacts"].get);
 assert.ok(swagger.paths["/api/scientific-inputs/quota"].get);

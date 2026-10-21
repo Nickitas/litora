@@ -6,7 +6,7 @@ import { Button } from "@/shared/shadcn/components/ui/button";
 import { Dialog } from "@/shared/shadcn/components/ui/dialog";
 import { NewCalculationDialog } from "./new-calculation.page";
 import { parseSeabedWorkflow } from "./model/seabed-workflows";
-import { parseCoastlineContinuation } from "./model/coastline-continuation";
+import { parseCoastlineContinuation, parseRegionSource } from "./model/coastline-continuation";
 
 export function AccountPage() {
   const auth = useAuth();
@@ -16,6 +16,7 @@ export function AccountPage() {
   const workflow = parseSeabedWorkflow(searchParams.get("workflow"));
   const sourceJobId = searchParams.get("source") ?? undefined;
   const initialDatasetId = searchParams.get("dataset") ?? undefined;
+  const initialRegionSourceId = workflow ? undefined : parseRegionSource(searchParams);
   const coastlineContinuation = useMemo(() => workflow ? undefined : parseCoastlineContinuation(searchParams), [searchParams, workflow]);
   const [newCalculationOpen, setNewCalculationOpen] = useState(false);
   const newCalculationTriggerRef = useRef<HTMLElement | null>(null);
@@ -102,12 +103,13 @@ export function AccountPage() {
         </div>
         {(newCalculationOpen || repeatJobId || createRequested) && (
           <NewCalculationDialog
-            key={repeatJobId ?? `${workflow ?? "new"}:${sourceJobId ?? ""}:${coastlineContinuation?.kind ?? ""}:${coastlineContinuation?.artifactId ?? ""}:${initialDatasetId ?? ""}`}
+            key={repeatJobId ?? `${workflow ?? "new"}:${sourceJobId ?? ""}:${coastlineContinuation?.kind ?? ""}:${coastlineContinuation?.artifactId ?? ""}:${initialDatasetId ?? ""}:${initialRegionSourceId ?? ""}`}
             repeatJobId={repeatJobId ?? undefined}
             workflow={repeatJobId ? undefined : workflow}
             sourceJobId={sourceJobId}
             coastlineContinuation={repeatJobId ? undefined : coastlineContinuation}
-            initialDatasetId={repeatJobId || workflow || coastlineContinuation ? undefined : initialDatasetId}
+            initialDatasetId={repeatJobId || workflow || coastlineContinuation || initialRegionSourceId !== undefined ? undefined : initialDatasetId}
+            initialRegionSourceId={repeatJobId ? undefined : initialRegionSourceId}
             onOpenChange={changeNewCalculationOpen}
             onRestoreFocus={() => {
               const trigger = newCalculationTriggerRef.current;

@@ -646,6 +646,22 @@ export interface ScientificInputDto extends CreateScientificInputDto {
   validation?: CoastlineValidationDto;
 }
 
+/** Закреплённый научный источник; содержимое сохраняет API, клиент выбирает только ID. */
+export interface ScientificCatalogueEntryDto extends CreateScientificInputDto {
+  id: string;
+  sha256: string;
+  sourceUrl: string;
+  licenseUrl: string;
+  geometryKind: "sea_area_boundary";
+  purpose: string;
+  limitations: string[];
+}
+
+/** Имя своей копии закреплённого научного источника. */
+export interface SaveScientificCatalogueDto {
+  name: string;
+}
+
 export interface ScientificInputQuotaDto {
   usedCount: number;
   limitCount: number;

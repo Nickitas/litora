@@ -94,10 +94,24 @@ function dto(row: ScientificInputRow): ScientificInputDto {
 export class ScientificInputsRepository {
   constructor(@Inject(DatabaseService) private readonly db: DatabaseService) {}
 
-  async create(userId: string, input: CreateScientificInputDto) {
+  async create(userId: string, input: CreateScientificInputDto, catalogueChecksum?: string) {
     const id = randomUUID();
     return this.db.transaction(async (client) => {
       await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [userId]);
+      // Checksum задаёт только серверный каталог. Повтор не расходует квоту,
+      // в том числе после потерянного ответа и из другой вкладки.
+      if (catalogueChecksum) {
+        const existing = await client.query<ScientificInputRow>(
+          `SELECT * FROM scientific_inputs WHERE owner_id=$1 AND role=$2 AND filename=$3
+           AND size_bytes=$4 AND source=$5 AND source_revision IS NOT DISTINCT FROM $6
+           AND license=$7 AND crs=$8 AND coordinate_unit=$9
+           AND ((status='ready' AND sha256=$10) OR status IN ('pending','uploading'))
+           ORDER BY (status='ready') DESC, created_at LIMIT 1`,
+          [userId, input.role, input.filename, input.sizeBytes, input.source,
+            input.sourceRevision ?? null, input.license, input.crs, input.coordinateUnit, catalogueChecksum],
+        );
+        if (existing.rows[0]) return dto(existing.rows[0]);
+      }
       const usage = await client.query<UsageRow>(usageSql, [userId]);
       if (
         Number(usage.rows[0].count) >= maxScientificInputsPerUser ||

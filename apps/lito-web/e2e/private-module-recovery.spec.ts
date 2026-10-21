@@ -84,7 +84,7 @@ test("после исчезновения модуля лаборатории о
   await page.getByRole("link", { name: "Вся история" }).click();
 
   await expect(page).toHaveURL(/\/lab\/calculations$/);
-  await expect(page.getByRole("heading", { name: "Расчёты" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Расчёты", exact: true, level: 1 })).toBeVisible();
   await expect(page.getByText("Сессия завершена. Войдите снова.")).toHaveCount(0);
   expect(moduleRequests).toBe(2);
   expect(documentRequests).toBe(2);

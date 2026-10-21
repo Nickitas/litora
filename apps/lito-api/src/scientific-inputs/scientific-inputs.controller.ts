@@ -21,6 +21,8 @@ import {
   UnsupportedMediaTypeException,
   UseGuards,
   BadRequestException,
+  HttpException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
@@ -41,6 +43,8 @@ import { previewGeoJSON } from "../calculations/coastline-preview.js";
 import { validateScientificFile } from "./file-validation.js";
 import { CoastlineValidationService } from "../coastline-validation/coastline-validation.service.js";
 import { CoastlineValidationResponse } from "../http-models.js";
+import { ScientificCatalogueService } from "./scientific-catalogue.service.js";
+import { ScientificCatalogueEntryResponse } from "../http-models.js";
 
 const maxObservedSeriesBytes = 16 * 1024 * 1024;
 const coastlineIdPipe = new ParseUUIDPipe({ exceptionFactory: () => new BadRequestException("Некорректный UUID береговой линии") });
@@ -56,6 +60,7 @@ export class ScientificInputsController {
     @Inject(ObjectStorageService)
     private readonly storage: ObjectStorageService,
     @Inject(CoastlineValidationService) private readonly validation: CoastlineValidationService,
+    @Inject(ScientificCatalogueService) private readonly catalogueService: ScientificCatalogueService,
   ) {}
 
   @Get()
@@ -63,6 +68,30 @@ export class ScientificInputsController {
   @ApiResponse({ status: 200, type: [ScientificInputResponse] })
   async list(@Req() req: AuthRequest) {
     return this.validation.decorateInputs(req.user.id, await this.inputs.list(req.user.id));
+  }
+
+  @Get("catalogue")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Закреплённые научные источники с назначением и ограничениями" })
+  @ApiResponse({ status: 200, type: [ScientificCatalogueEntryResponse] })
+  @ApiResponse({ status: 503, description: "Закреплённый исходник недоступен или не совпадает с паспортом" })
+  catalogue() { return this.catalogueService.catalogue(); }
+
+  @Post("catalogue/:id")
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Сохранить свою приватную копию закреплённого источника", description: "Повтор использует свою копию с тем же паспортом; действуют квоты научных файлов. Проверку геометрии выполняет Go worker." })
+  @ApiBody({ schema: { type: "object", additionalProperties: false, required: ["name"], properties: { name: { type: "string", minLength: 1, maxLength: 100 } } } })
+  @ApiResponse({ status: 201, type: ScientificInputResponse })
+  @ApiResponse({ status: 400, description: "Некорректное название или неизвестные поля" })
+  @ApiResponse({ status: 404, description: "Источник отсутствует в каталоге" })
+  @ApiResponse({ status: 409, description: "Квота исчерпана или копия уже сохраняется; повторите после обновления списка" })
+  @ApiResponse({ status: 503, description: "Исходник или хранилище недоступны; сохранённая запись допускает повтор" })
+  async saveCatalogue(@Req() req: AuthRequest, @Param("id") id: string, @Body() body: unknown) {
+    try { return await this.catalogueService.save(req.user.id, id, body); }
+    catch (error: unknown) {
+      if (error instanceof HttpException) throw error;
+      throw new ServiceUnavailableException("Не удалось сохранить полный исходник. Обновите список и повторите попытку.", { cause: error });
+    }
   }
 
   @Get(":id/validation")

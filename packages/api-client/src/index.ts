@@ -20,6 +20,8 @@ import type {
   ReleaseDto,
   ReusableScientificArtifactDto,
   ScientificInputDto,
+  ScientificCatalogueEntryDto,
+  SaveScientificCatalogueDto,
   ScientificInputQuotaDto,
   ObservedShorelineSeriesDto,
   ShorelinePointSeriesDto,
@@ -308,6 +310,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
     createDataset: (body: CreateDatasetDto) =>
       send<DatasetDto>("/datasets", "POST", body),
     scientificInputs: () => send<ScientificInputDto[]>("/scientific-inputs"),
+    scientificCatalogue: () => send<ScientificCatalogueEntryDto[]>("/scientific-inputs/catalogue"),
+    saveScientificCatalogue: (id: string, body: SaveScientificCatalogueDto) =>
+      send<ScientificInputDto>(`/scientific-inputs/catalogue/${encodeURIComponent(id)}`, "POST", body),
     scientificInputQuota: () => send<ScientificInputQuotaDto>("/scientific-inputs/quota"),
     shorelineObservationSeries: (id: string) =>
       send<ObservedShorelineSeriesDto>(

@@ -7,7 +7,9 @@ export function CoastlineRegionResults({ job, kinds }: { job: CalculationJobDto;
   if (job.kind !== "coastline_region" || job.status !== "succeeded" || job.deletionRequestedAt) return null;
   const lines = job.artifacts.filter((file) => file.category === "output" && /^region\/segments\/segment-\d{3}\.geojson$/.test(file.filename));
   return <section aria-labelledby="region-lines-heading" className="space-y-4 rounded-2xl border bg-card p-5">
-    <h2 id="region-lines-heading" className="text-xl font-semibold">Выделенные береговые линии · {lines.length}</h2>
+    <h2 id="region-lines-heading" className="text-xl font-semibold">Выделенные линии контура · {lines.length}</h2>
+    <p className="text-sm text-muted-foreground">Файлы сохранены приватно и доступны на странице наборов. Для MarineRegions это фрагменты границы морского района, включая служебные границы акватории; выделение не превращает их в береговую съёмку.</p>
+    <Button asChild variant="link"><Link to="/lab/datasets#saved-region-lines">Открыть сохранённые участки</Link></Button>
     <p className="text-sm text-muted-foreground">Раздельные участки и острова не соединены. Выберите нужную линию для дальнейшего расчёта; файл подставится без скачивания и повторной загрузки.</p>
     <p className="text-sm text-muted-foreground">Для CERC дополнительно нужны волны и батиметрия именно этого участка. Открытая линия берега не заменяет замкнутую границу морской области для Gmsh.</p>
     <ul className="space-y-3">{lines.map((file, index) => <li key={file.id} className="min-w-0 space-y-2 rounded-xl border p-3">
