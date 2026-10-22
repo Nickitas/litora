@@ -6,6 +6,11 @@
 
 ## Проблема и границы
 
+Уточнение 22.10.2026: описанный ниже архив `article_1` не совпадает с
+текущим `todo/examples_figures/fig_05_actual_mesh_fragments.svg` размером
+1600×1600. Текущий эталон создаёт `seabed render` → `mesh-details.svg`;
+различия зафиксированы в [матрице эталонов](../reference-figure-matrix.md).
+
 Архивный `fig_05_actual_mesh_fragments.svg` — это 1800×760 SVG с тремя
 встроенными карточками AI-01: `eval-kizilirmak-spit`, `eval-batumi-bay` и
 `eval-anatolian-isobaths` уровня `coarse:125:250` и генератора `delaunay`.

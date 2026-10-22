@@ -2,7 +2,7 @@ import type {
   CalculationJobDto,
   CalculationMetadataExportV1,
 } from "@litora/contracts";
-import { optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
+import { findCalculationReport, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -28,7 +28,10 @@ function sha256OrNull(value: unknown) {
 
 function knownInput(job: CalculationJobDto) {
   if (!isRecord(job.input)) return null;
-  if (job.kind === "dimension" || job.kind === "map") return {};
+  const report = findCalculationReport(job.kind, job.input.reportType);
+  const reportInput: Record<string, string> = report ? { reportType: report.type } : {};
+  if (job.kind === "dimension") return reportInput;
+  if (job.kind === "map") return {};
   if (job.kind === "erosion" || job.kind === "all_demo" || job.kind === "erosion_file" || job.kind === "all_file") {
     const steps = countOrNull(job.input.steps);
     if (steps === null || (steps === 0 && job.kind !== "erosion_file" && job.kind !== "all_file")) return null;
@@ -77,7 +80,7 @@ function knownInput(job: CalculationJobDto) {
   if (job.kind === "dimension_dataset") {
     const datasetId = job.input.datasetId;
     return typeof datasetId === "string" && uuidPattern.test(datasetId)
-      ? { datasetId }
+      ? { datasetId, ...reportInput }
       : null;
   }
   const fields = scientificInputRequirements[job.kind as keyof typeof scientificInputRequirements];
@@ -96,6 +99,8 @@ function knownInput(job: CalculationJobDto) {
         input[key] = id;
       }
     }
+    const selectedReport = findCalculationReport(job.kind, job.input.reportType);
+    if (selectedReport) input.reportType = selectedReport.type;
     const allowedParameters: Record<string, string[]> = {
       source_file: [],
       dimension_file: [],

@@ -26,7 +26,9 @@ import { CalculationImagePreview } from "./ui/calculation-image-preview";
 import { isPreviewableImage } from "./ui/calculation-image-preview.utils";
 import { CalculationMetadataDownload } from "./ui/calculation-metadata-download";
 import { CalculationTitle } from "./ui/calculation-title";
-import { seabedReportLabels } from "./model/seabed-workflows";
+import { findCalculationReport } from "@litora/contracts";
+import { RequestedCalculationReport } from "./ui/requested-calculation-report";
+import { calculationReportLabels } from "./model/calculation-reports";
 import { SeabedNextSteps } from "./ui/seabed-next-steps";
 import { CoastlineRegionResults } from "./ui/coastline-region-results";
 
@@ -270,7 +272,8 @@ function CalculationDetail({ jobId }: { jobId: string }) {
   }
 
   const summary = job?.resultSummary;
-  const images = job?.artifacts.filter(isPreviewableImage);
+  const requestedReport = job && findCalculationReport(job.kind, job.input.reportType);
+  const images = job?.artifacts.filter((file) => isPreviewableImage(file) && (!requestedReport || file.category !== "output" || file.filename !== requestedReport.filename));
 
   return (
     <section className="min-w-0 space-y-6" aria-label="Результат расчёта">
@@ -447,6 +450,7 @@ function CalculationDetail({ jobId }: { jobId: string }) {
             <AINecessityResults summary={summary ?? null} />
           )}
 
+          <RequestedCalculationReport job={job} onRefreshLinks={reload} />
           <SeabedNextSteps job={job} kinds={kinds} />
           <CoastlineRegionResults job={job} kinds={kinds} />
 
@@ -456,16 +460,16 @@ function CalculationDetail({ jobId }: { jobId: string }) {
                 id="visual-reports-heading"
                 className="mb-3 text-xl font-semibold"
               >
-                Визуальные отчёты
+                {requestedReport ? "Дополнительные визуальные отчёты" : "Визуальные отчёты"}
               </h2>
               <div className="grid gap-4 md:grid-cols-2">
                 {images.map((file) => (
                   <CalculationImagePreview
                     key={file.id}
                     file={file}
-                    alt={seabedReportLabels[file.filename]?.title ?? `Отчёт: ${file.filename}`}
-                    caption={seabedReportLabels[file.filename]?.title}
-                    description={seabedReportLabels[file.filename]?.description}
+                    alt={calculationReportLabels[file.filename]?.title ?? `Отчёт: ${file.filename}`}
+                    caption={calculationReportLabels[file.filename]?.title}
+                    description={calculationReportLabels[file.filename]?.description}
                     onRefreshLinks={reload}
                   />
                 ))}

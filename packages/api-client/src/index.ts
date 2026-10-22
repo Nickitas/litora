@@ -4,6 +4,7 @@ import type {
   CalculationDeletionOverviewDto,
   CalculationDeletionRequestDto,
   CalculationKindDto,
+  CalculationKindListQueryDto,
   CoastlinePreviewDto,
   ScientificInputFormatDto,
   CalculationPageDto,
@@ -293,7 +294,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
         endSession("logout");
       });
     },
-    calculationKinds: () => send<CalculationKindDto[]>("/calculations/kinds"),
+    calculationKinds: (query: CalculationKindListQueryDto = {}) => send<CalculationKindDto[]>(
+      query.includeUnavailable === undefined ? "/calculations/kinds" : `/calculations/kinds?includeUnavailable=${String(query.includeUnavailable)}`
+    ),
     blackSeaCoastline: () => send<CoastlinePreviewDto>("/calculations/coastline-preview"),
     scientificCoastline: (id: string) => send<CoastlinePreviewDto>(`/scientific-inputs/${encodeURIComponent(id)}/coastline-preview`),
     scientificInputFormats: () => send<ScientificInputFormatDto[]>("/scientific-inputs/formats"),

@@ -11,25 +11,37 @@ import (
 type LogLogPoint struct {
 	LogInverseScale float64
 	LogBoxes        float64
+	BoxesCovered    int // Округлённое среднее из метрик, без обратного вычисления из логарифма.
 	BoxSizeMeters   float64
 	InRegression    bool
 }
 
 // LogLogPlotOptions содержит данные и подписи отдельного графика аудита.
 type LogLogPlotOptions struct {
-	Title          string
-	Subtitle       string
-	Points         []LogLogPoint
-	Dimension      float64
-	RSquared       float64
-	RegressionFrom int
-	RegressionTo   int
+	Title               string
+	Subtitle            string
+	Points              []LogLogPoint
+	Dimension           float64
+	RSquared            float64
+	RegressionIntercept float64 // Свободный член принятой регрессии из Go-анализа.
+	RegressionFrom      int
+	RegressionTo        int
 }
 
 // DrawLogLogSVG сохраняет график log(1/ε) — log(N(ε)) отдельным SVG-файлом.
 func DrawLogLogSVG(options LogLogPlotOptions, filename string) error {
 	if len(options.Points) < 2 {
 		return fmt.Errorf("для log-log графика требуется минимум две точки")
+	}
+
+	for index, point := range options.Points {
+		if !finiteLogLog(point.LogInverseScale) || !finiteLogLog(point.LogBoxes) ||
+			!finiteLogLog(point.BoxSizeMeters) || point.BoxSizeMeters <= 0 || point.BoxesCovered <= 0 {
+			return fmt.Errorf("точка log-log %d содержит недопустимый масштаб или покрытие", index+1)
+		}
+	}
+	if !finiteLogLog(options.Dimension) || !finiteLogLog(options.RSquared) || !finiteLogLog(options.RegressionIntercept) {
+		return fmt.Errorf("параметры регрессии log-log должны быть конечными")
 	}
 
 	const (
@@ -64,8 +76,8 @@ func DrawLogLogSVG(options LogLogPlotOptions, filename string) error {
 			color = "#c2410c"
 			radius = 6.5
 		}
-		pointsSVG += fmt.Sprintf(`  <circle cx="%.2f" cy="%.2f" r="%.1f" fill="%s"><title>ε=%.0f м, N(ε)=%.0f</title></circle>`+"\n",
-			projectX(point.LogInverseScale), projectY(point.LogBoxes), radius, color, point.BoxSizeMeters, math.Exp(point.LogBoxes))
+		pointsSVG += fmt.Sprintf(`  <circle cx="%.2f" cy="%.2f" r="%.1f" fill="%s"><title>ε=%.0f м, N(ε)≈%d (округлено)</title></circle>`+"\n",
+			projectX(point.LogInverseScale), projectY(point.LogBoxes), radius, color, point.BoxSizeMeters, point.BoxesCovered)
 		labelsSVG += fmt.Sprintf(`  <text x="%.2f" y="%.2f" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#6b7a87" text-anchor="middle">%d</text>`+"\n",
 			projectX(point.LogInverseScale), projectY(point.LogBoxes)-12, index+1)
 	}
@@ -77,9 +89,9 @@ func DrawLogLogSVG(options LogLogPlotOptions, filename string) error {
 		to := options.Points[options.RegressionTo]
 		regressionMinX = math.Min(from.LogInverseScale, to.LogInverseScale)
 		regressionMaxX = math.Max(from.LogInverseScale, to.LogInverseScale)
-		intercept := from.LogBoxes - options.Dimension*from.LogInverseScale
-		regressionSVG = fmt.Sprintf(`  <line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="#16324f" stroke-width="2.4" stroke-dasharray="8 5"/>`+"\n",
-			projectX(regressionMinX), projectY(options.Dimension*regressionMinX+intercept),
+		intercept := options.RegressionIntercept
+		regressionSVG = fmt.Sprintf(`  <line class="regression-line" data-intercept="%.17g" data-dimension="%.17g" x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="#16324f" stroke-width="2.4" stroke-dasharray="8 5"/>`+"\n",
+			intercept, options.Dimension, projectX(regressionMinX), projectY(options.Dimension*regressionMinX+intercept),
 			projectX(regressionMaxX), projectY(options.Dimension*regressionMaxX+intercept))
 	}
 
@@ -104,8 +116,8 @@ func DrawLogLogSVG(options LogLogPlotOptions, filename string) error {
 %s%s%s%s
   <line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="#16324f" stroke-width="1.5"/>
   <line x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f" stroke="#16324f" stroke-width="1.5"/>
-  <text x="%.2f" y="%.2f" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="700" fill="#16324f" text-anchor="middle">log(1/ε)</text>
-  <text x="%.2f" y="%.2f" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="700" fill="#16324f" text-anchor="middle" transform="rotate(-90, %.2f, %.2f)">log(N(ε))</text>
+  <text x="%.2f" y="%.2f" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="700" fill="#16324f" text-anchor="middle">ln(1/ε_rel)</text>
+  <text x="%.2f" y="%.2f" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="700" fill="#16324f" text-anchor="middle" transform="rotate(-90, %.2f, %.2f)">ln(N(ε))</text>
   <text x="%.0f" y="%.0f" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#c2410c">оранжевые точки — регрессионное окно</text>
   <text x="%.0f" y="%.0f" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#16324f">D=%.5f · R²=%.4f</text>
 </svg>
@@ -128,4 +140,8 @@ func paddedRange(minimum, maximum float64) (float64, float64) {
 	}
 	padding := (maximum - minimum) * 0.08
 	return minimum - padding, maximum + padding
+}
+
+func finiteLogLog(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }

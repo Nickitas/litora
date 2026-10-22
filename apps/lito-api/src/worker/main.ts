@@ -28,7 +28,6 @@ import {
   validateCalculation,
 } from "../calculations/commands.js";
 import {
-  assertPinnedSochiInputs,
   bundledInputProvenance,
 } from "../calculations/input-provenance.js";
 import { resultMethodFromManifest } from "../calculations/result-method.js";
@@ -136,6 +135,7 @@ async function run(job: JobRow) {
   }, environment.jobTimeoutMs);
   try {
     assertSupportedInputSchemaVersion(job.input_schema_version);
+    const validated = validateCalculation({ kind: job.kind, input: job.input });
     await mkdir(environment.jobsDirectory, { recursive: true });
     await mkdir(directory);
     ownsDirectory = true;
@@ -147,11 +147,8 @@ async function run(job: JobRow) {
       join(directory, "data"),
       { recursive: true, force: false, errorOnExist: true },
     );
-    if (job.kind === "erosion" || job.kind === "all_demo")
-      await assertPinnedSochiInputs(join(directory, "data"));
     if (job.kind === "dimension" || job.kind === "map" || job.kind === "coastline_region")
       await bundledInputProvenance(job.kind, join(directory, "data"));
-    const validated = validateCalculation({ kind: job.kind, input: job.input });
     let datasetPath: string | undefined;
     let provenance: Record<string, unknown> | undefined;
     if (job.kind === "dimension_dataset" || job.kind === "dataset_validation") {
@@ -323,8 +320,6 @@ async function run(job: JobRow) {
       provenance = {
         ...(await bundledInputProvenance(job.kind, join(directory, "data"))),
       };
-    if (job.kind === "erosion" || job.kind === "all_demo")
-      await assertPinnedSochiInputs(join(directory, "data"));
     const metrics: Record<string, unknown> = {};
     let totalBytes = 0;
     for (const path of outputs) {
@@ -358,12 +353,9 @@ async function run(job: JobRow) {
     const summary = {
       fileCount: outputs.length,
       totalBytes,
-      scenario:
-        job.kind === "erosion" || job.kind === "all_demo"
-          ? "demo"
-          : job.kind === "dimension_dataset" || job.kind === "dataset_validation" || scientificFiles.length > 0
-            ? "user-data"
-            : "bundled-data",
+      scenario: job.kind === "dimension_dataset" || job.kind === "dataset_validation" || scientificFiles.length > 0
+        ? "user-data"
+        : "bundled-data",
       ...(provenance ? { provenance } : {}),
       method,
       ...(scientificRejection ? { scientificAccepted: false } : {}),
@@ -409,30 +401,31 @@ async function run(job: JobRow) {
       console.error(`Расчёт ${job.id}: ${message}`);
       return;
     }
-    try {
-      if (!ownsDirectory) throw new Error("Scratch-каталог не принадлежит этому запуску");
-      const path = join(output, "failure.log");
-      await mkdir(output, { recursive: true });
-      await writeFile(path, `${message}\n${log}`);
-      const objectKey = `users/${job.id}/failure.log`;
-      await storage.uploadFile(objectKey, path, "text/plain");
+    if (ownsDirectory) {
       try {
-        await repository.addArtifact({
-          jobId: job.id,
-          category: "log",
-          filename: "failure.log",
-          bucket: storage.bucket,
-          objectKey,
-          contentType: "text/plain",
-          sizeBytes: (await stat(path)).size,
-          sha256: await sha256(path),
-        });
-      } catch (metadataError) {
-        await storage.deleteObject(objectKey);
-        throw metadataError;
+        const path = join(output, "failure.log");
+        await mkdir(output, { recursive: true });
+        await writeFile(path, `${message}\n${log}`);
+        const objectKey = `users/${job.id}/failure.log`;
+        await storage.uploadFile(objectKey, path, "text/plain");
+        try {
+          await repository.addArtifact({
+            jobId: job.id,
+            category: "log",
+            filename: "failure.log",
+            bucket: storage.bucket,
+            objectKey,
+            contentType: "text/plain",
+            sizeBytes: (await stat(path)).size,
+            sha256: await sha256(path),
+          });
+        } catch (metadataError) {
+          await storage.deleteObject(objectKey);
+          throw metadataError;
+        }
+      } catch (uploadError) {
+        console.error(`Не удалось сохранить журнал ${job.id}`, uploadError);
       }
-    } catch (uploadError) {
-      console.error(`Не удалось сохранить журнал ${job.id}`, uploadError);
     }
     console.error(`Расчёт ${job.id}: ${message}`);
   } finally {

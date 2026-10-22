@@ -7,11 +7,6 @@ import type {
   ShorelineVisualizationChunkDto,
   ShorelineVisualizationIndexDto,
 } from "@litora/contracts";
-import {
-  loadShorelineDemoChunk,
-  loadShorelineDemoPointSeries,
-  shorelineDemoIndex,
-} from "@litora/generated-data";
 import { api } from "@/shared/api/client";
 import { Button } from "@/shared/shadcn/components/ui/button";
 import { DatePicker } from "@/shared/shadcn/components/ui/date-picker";
@@ -45,8 +40,8 @@ const mapKinds: { value: MapKind | "all"; label: string }[] = [
   { value: "all", label: "Все сценарии CERC" },
   { value: "erosion_file", label: "Эрозия · свои данные" },
   { value: "all_file", label: "Полный расчёт · свои данные" },
-  { value: "erosion", label: "Эрозия · встроенные данные" },
-  { value: "all_demo", label: "Полный расчёт · встроенные данные" },
+  { value: "erosion", label: "Эрозия · демо (история)" },
+  { value: "all_demo", label: "Полный расчёт · демо (история)" },
 ];
 const indexFilename = "erosion/visualization/index.json";
 const units: { value: ShorelineTimeUnit; label: string }[] = [
@@ -97,7 +92,6 @@ function frameLabel(index: ShorelineVisualizationIndexDto, position: number) {
 export function ShorelineVisualizationPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const jobId = searchParams.get("job") ?? "";
-  const isDemo = !jobId;
   const [mapKind, setMapKind] = useState<MapKind | "all">("all");
   const mapQuery = `visualization=shoreline&status=succeeded&limit=20${mapKind === "all" ? "" : `&kind=${mapKind}`}`;
   const {
@@ -112,7 +106,7 @@ export function ShorelineVisualizationPage() {
     reload: reloadList,
   } = useInfiniteCalculationHistory(mapQuery);
   const [revision, setRevision] = useState(0);
-  const requestKey = isDemo ? "demo:sochi" : `${jobId}:${revision}`;
+  const requestKey = `${jobId}:${revision}`;
   const [loaded, setLoaded] = useState<{
     key: string;
     job: CalculationJobDto | null;
@@ -121,18 +115,15 @@ export function ShorelineVisualizationPage() {
   } | null>(null);
   const active = loaded?.key === requestKey ? loaded : null;
   const job = active?.job ?? null;
-  const index = isDemo ? shorelineDemoIndex : (active?.index ?? null);
+  const index = active?.index ?? null;
   const error = active?.error ?? "";
   const loading = Boolean(jobId && !active);
   const [unit, setUnit] = useState<ShorelineTimeUnit>("month");
-  const [anchor, setAnchor] = useState(
-    () => new Date(shorelineDemoIndex.frames[0].time ?? 0)
-  );
-  const [frameIndex, setFrameIndex] = useState<number | null>(0);
+  const [anchor, setAnchor] = useState(() => new Date(0));
+  const [frameIndex, setFrameIndex] = useState<number | null>(null);
   const [selectedPoint, setSelectedPoint] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [playbackDelay, setPlaybackDelay] = useState(1400);
-  const [playbackStep, setPlaybackStep] = useState(24);
   const [viewRevision, setViewRevision] = useState(0);
   const [viewResult, setViewResult] = useState<{
     key: string;
@@ -150,17 +141,6 @@ export function ShorelineVisualizationPage() {
     error: string;
   } | null>(null);
   const seriesCache = useRef(new Map<string, ShorelinePointSeriesDto>());
-
-  useEffect(() => {
-    if (jobId) return;
-    const timer = window.setTimeout(() => {
-      setFrameIndex(0);
-      setAnchor(new Date(shorelineDemoIndex.frames[0].time ?? 0));
-      setSelectedPoint(0);
-      setPlaying(false);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [jobId]);
 
   useEffect(() => {
     let alive = true;
@@ -241,9 +221,7 @@ export function ShorelineVisualizationPage() {
       const cacheKey = `${requestKey}:${id}`;
       const cached = chunks.current.get(cacheKey);
       if (cached) return cached;
-      const result = isDemo
-        ? await loadShorelineDemoChunk(id)
-        : await api.shorelineVisualizationChunk(jobId, id);
+      const result = await api.shorelineVisualizationChunk(jobId, id);
       chunks.current.set(cacheKey, result);
       return result;
     };
@@ -277,7 +255,7 @@ export function ShorelineVisualizationPage() {
     return () => {
       alive = false;
     };
-  }, [jobId, isDemo, index, currentMeta, requestKey, viewKey]);
+  }, [jobId, index, currentMeta, requestKey, viewKey]);
 
   useEffect(() => {
     let alive = true;
@@ -293,9 +271,7 @@ export function ShorelineVisualizationPage() {
         alive = false;
       };
     }
-    void (isDemo
-      ? loadShorelineDemoPointSeries(selectedPoint)
-      : api.shorelinePointSeries(jobId, selectedPoint))
+    void api.shorelinePointSeries(jobId, selectedPoint)
       .then((result) => {
         if (!alive) return;
         if (seriesCache.current.size >= 8) {
@@ -316,13 +292,13 @@ export function ShorelineVisualizationPage() {
     return () => {
       alive = false;
     };
-  }, [jobId, isDemo, index, requestKey, selectedPoint, seriesKey]);
+  }, [jobId, index, requestKey, selectedPoint, seriesKey]);
 
   useEffect(() => {
     if (!playing || !index || frameIndex === null || viewLoading || viewError)
       return;
     const timer = window.setTimeout(() => {
-      const next = Math.min((frameIndex ?? -1) + (isDemo ? playbackStep : 1), index.frames.length - 1);
+      const next = Math.min(frameIndex + 1, index.frames.length - 1);
       if (next <= frameIndex) {
         setPlaying(false);
         return;
@@ -332,11 +308,10 @@ export function ShorelineVisualizationPage() {
       setFrameIndex(next);
     }, playbackDelay);
     return () => window.clearTimeout(timer);
-  }, [playing, index, frameIndex, isDemo, playbackDelay, playbackStep, viewLoading, viewError]);
+  }, [playing, index, frameIndex, playbackDelay, viewLoading, viewError]);
 
   function chooseJob(id: string) {
-    setFrameIndex(id ? null : 0);
-    if (!id) setAnchor(new Date(shorelineDemoIndex.frames[0].time ?? 0));
+    setFrameIndex(null);
     setPlaying(false);
     setSearchParams(id ? { job: id } : {});
   }
@@ -444,13 +419,6 @@ export function ShorelineVisualizationPage() {
             Расчётные сценарии CERC
           </a>
         </nav>
-        {isDemo && (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Ниже в блоке CERC по умолчанию открыт пример участка Сочи за
-            18–25 августа 2026, 00:00 UTC. Собственный расчёт для просмотра
-            примера не нужен.
-          </p>
-        )}
       </header>
       <ObservedShorelineSeries />
       <h2 id="cerc-shoreline-heading" className="text-xl font-semibold">Расчётные сценарии CERC</h2>
@@ -477,15 +445,15 @@ export function ShorelineVisualizationPage() {
           <div className="space-y-2">
             <Label htmlFor="shoreline-job">Данные для карты</Label>
             <Select
-              value={jobId || "__demo__"}
-              onValueChange={(value) => chooseJob(value === "__demo__" ? "" : value)}
+              value={jobId || "__none__"}
+              onValueChange={(value) => chooseJob(value === "__none__" ? "" : value)}
             >
               <SelectTrigger id="shoreline-job" aria-label="Данные для карты">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="max-w-[calc(100vw-2rem)]">
-                <SelectItem value="__demo__">
-                  Пример Сочи · 169 кадров · 18–25 августа 2026
+                <SelectItem value="__none__">
+                  Выберите сохранённый расчёт
                 </SelectItem>
                 {jobId && !jobs.some((item) => item.id === jobId) && (
                   <SelectItem value={jobId}>Расчёт {jobId.slice(0, 8)}</SelectItem>
@@ -523,8 +491,7 @@ export function ShorelineVisualizationPage() {
           )}
         </div>
         <p className="text-sm text-muted-foreground">
-          Пример создан Go CLI по сохранённому волновому прогнозу. Собственные
-          расчёты CERC с сохранённым индексом карты доступны здесь после
+          Собственные расчёты CERC с сохранённым индексом карты доступны здесь после
           завершения, включая старые страницы истории.
         </p>
         <p className="text-sm text-muted-foreground">
@@ -553,7 +520,24 @@ export function ShorelineVisualizationPage() {
         )}
       </div>
 
-      {loading ? (
+      {!jobId ? (
+        <div className="space-y-3 rounded-xl border border-dashed bg-card p-5">
+          <h3 className="font-semibold">Выберите результат для просмотра динамики</h3>
+          <p className="text-sm text-muted-foreground">
+            Откройте сохранённый расчёт в списке выше. Для нового исследования
+            подготовьте береговой контур, волновой ряд, батиметрию и паспорт участка,
+            затем выберите сценарий по своим данным.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link to="/lab/datasets">Выбрать или подготовить данные</Link>
+            </Button>
+            <Button asChild>
+              <Link to="/lab/calculations?new=1">Новый расчёт</Link>
+            </Button>
+          </div>
+        </div>
+      ) : loading ? (
         <p role="status">Загружаем расчёт и индекс карты…</p>
       ) : error ? (
         <div
@@ -568,7 +552,7 @@ export function ShorelineVisualizationPage() {
             Повторить
           </Button>
         </div>
-      ) : !isDemo && job?.status !== "succeeded" ? (
+      ) : job?.status !== "succeeded" ? (
         <p className="rounded-xl border p-5 text-muted-foreground">
           Карта будет доступна после успешного завершения расчёта. Текущий
           статус: {job ? statusLabel(job.status) : "неизвестен"}.
@@ -644,26 +628,8 @@ export function ShorelineVisualizationPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                {isDemo && <div className="flex items-center gap-2">
-                  <Label htmlFor="shoreline-playback-step">Шаг просмотра</Label>
-                  <Select value={String(playbackStep)} onValueChange={(value) => setPlaybackStep(Number(value))}>
-                    <SelectTrigger id="shoreline-playback-step" aria-label="Шаг просмотра" className="min-h-9 w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Каждый час</SelectItem>
-                      <SelectItem value="24">Каждые сутки</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>}
               </div>
             </div>
-            {isDemo && <div className="rounded-lg bg-warning-background p-3 text-sm text-warning">
-              Демонстрационный расчёт за 7 суток: это состояния модели по сохранённым волнам, не наблюдения и не годовой прогноз.
-              <details className="mt-1"><summary className="cursor-pointer font-medium">Как исследовать более длинный период</summary>
-                <p className="mt-2">По умолчанию реплей показывает суточные переходы; все часы доступны на шкале. Для исследования за год нужны датированные наблюдения, архив волн не менее 8766 часов, батиметрия и параметры активного профиля. Сначала калибруйте CERC по наблюдениям, затем запускайте полный волновой ряд с числом шагов 0. Результат требует независимой проверки; приливы и подъём уровня моря CERC автоматически не учитывает. <Link to="/lab" className="underline">Создать расчёт по своим данным</Link>.</p>
-              </details>
-            </div>}
             {frameIndex === null ? (
               <p role="status" className="text-sm text-muted-foreground">Выберите период с сохранённым состоянием.</p>
             ) : viewError ? (
@@ -749,14 +715,12 @@ export function ShorelineVisualizationPage() {
               <h2 id="shoreline-passport" className="text-xl font-semibold">
                 Паспорт просмотра
               </h2>
-              {!isDemo && (
-                <Link
-                  to={`/lab/calculations/${jobId}`}
-                  className="text-sm text-primary underline"
-                >
-                  Открыть полный расчёт
-                </Link>
-              )}
+              <Link
+                to={`/lab/calculations/${jobId}`}
+                className="text-sm text-primary underline"
+              >
+                Открыть полный расчёт
+              </Link>
             </div>
             <p className="rounded-lg bg-warning-background p-3 text-sm text-warning">
               {index.scenarioStatus === "demo"
@@ -781,7 +745,7 @@ export function ShorelineVisualizationPage() {
               <div>
                 <dt className="text-muted-foreground">Метод</dt>
                 <dd className="font-medium">
-                  {isDemo ? "cerc-one-line · baseline-1" : `${job?.methodId ?? "Не указан"} · ${job?.methodRevision ?? "ревизия не указана"}`}
+                  {job?.methodId ?? "Не указан"} · {job?.methodRevision ?? "ревизия не указана"}
                 </dd>
               </div>
               <div>

@@ -35,133 +35,43 @@ export const installationPageContent = {
     commands: [
       {
         title: "Валидация и метрики загруженной береговой линии",
-        code: "./lito real coastline",
+        code: "./lito source",
       },
       {
         title: "Полный сценарий (все этапы)",
-        code: "./lito all",
+        code: "./lito all --input data/coast-segment.geojson --wave-input data/waves.csv --bathymetry data/bathymetry.json",
       },
       {
         title: "Геоморфологическое моделирование эрозии",
-        code: "lito model erosion",
+        code: "./lito erosion --input data/coast-segment.geojson --wave-input data/waves.csv --bathymetry data/bathymetry.json",
       },
     ],
   },
 
   cliCommands: [
     {
-      command: "./lito real coastline",
-      description: "Метрики загруженной береговой линии",
+      command: "./lito source --input data/coastline/black-sea.geojson",
+      description: "Проверка реального сохранённого контура и его происхождения",
     },
     {
-      command: "./lito real coastline --refresh",
-      description: "Принудительное обновление данных",
+      command: "./lito dimension --input data/coastline/black-sea.geojson",
+      description: "Box-counting полного закреплённого контура MarineRegions",
     },
     {
-      command:
-        "./lito real coastline --source-url '' --input data/coastline/black-sea.geojson",
-      description: "Использование локального файла",
+      command: "./lito map black-sea --input data/coastline/black-sea.geojson",
+      description: "Обзорная карта сохранённого контура Чёрного моря",
     },
     {
-      command: "./lito model dimension --iterations 6 --seed 42",
-      description: "Базовый анализ фрактальной размерности",
+      command: "./lito erosion --input data/coast-segment.geojson --wave-input data/waves.csv --wave-source 'Источник и период волн' --bathymetry data/bathymetry.json",
+      description: "CERC по вашим файлам участка; замените пути своими, подготовьте паспорт батиметрии",
     },
     {
-      command:
-        "./lito model erosion --steps 10 --erosion-strength 50 --wave-direction 0",
-      description: "Простая эрозия с геометрическим proxy",
+      command: "./lito erosion --input data/coast-segment.geojson --wave-input data/waves.csv --bathymetry data/bathymetry.json --steps 0 --svg-max-frames 64 --output-csv erosion.csv",
+      description: "Расчёт всего заданного волнового ряда с ограничением числа SVG и экспортом CSV",
     },
     {
-      command:
-        "./lito model erosion \
-        --steps 15 \
-        --erosion-strength 50 \
-        --bathymetry data/black-sea-bathymetry.json \
-        --wave-direction 45 \
-        --wind-speed 14",
-      description: "Моделирование с батиметрией",
-    },
-    {
-      command:
-        "./lito model erosion \
-        --steps 10 \
-        --lithology data/black-sea-lithology.json \
-        --enable-lithology \
-        --output-csv erosion_lithology.csv",
-      description: "Моделирование с учётом сопротивления пород с CSV экспортом",
-    },
-    {
-      command:
-        "./lito model erosion \
-          --steps 15 \
-          --erosion-strength 50 \
-          --wave-direction 45 \
-          --wind-speed 14 \
-          --bathymetry data/black-sea-bathymetry.json \
-          --lithology data/black-sea-lithology.json \
-          --enable-lithology \
-          --output-csv full_model.csv \
-          --csv-format long",
-      description:
-        "Моделирование полной физической модели (батиметрия + литология + CSV)",
-    },
-    {
-      command:
-        "./lito model erosion \
-        --target-years 10 \
-        --years-per-step 1 \
-        --steps 10",
-      description: "Временная динамика моделирование на 10 лет (1 год за шаг)",
-    },
-    {
-      command:
-        "./lito model erosion \
-        --target-years 20 \
-        --years-per-step 2 \
-        --storm-probability 0.3 \
-        --storm-intensity 2.5 \
-        --output-csv storm_analysis.csv",
-      description:
-        "Временная динамика штормового климата (30% вероятность штормов, интенсивность 2.5x)",
-    },
-    {
-      command:
-        "./lito model erosion \
-        --target-years 15 \
-        --years-per-step 3 \
-        --enable-seasonality \
-        --seasonal-phase 3.14 \
-        --csv-format wide",
-      description:
-        "Временная динамика с сезонными колебаниями (пик эрозии зимой, wide формат)",
-    },
-    {
-      command:
-        "./lito model erosion \
-        --target-years 50 \
-        --years-per-step 5 \
-        --storm-probability 0.2 \
-        --storm-intensity 2.5 \
-        --sea-level-rise 0.01 \
-        --enable-seasonality \
-        --bathymetry data/black-sea-bathymetry.json \
-        --lithology data/black-sea-lithology.json \
-        --enable-lithology \
-        --output-csv climate_rcp85.csv",
-      description: "Климатический сценарий RCP8.5 с учётом всех факторов",
-    },
-    {
-      command:
-        "./lito all \
-        --iterations 4 \
-        --steps 10 \
-        --target-years 20 \
-        --years-per-step 2 \
-        --storm-probability 0.15 \
-        --enable-seasonality \
-        --output ./output",
-      description:
-        "Полный научный сценарий: валидация + фрактальный анализ + эрозия с временными параметрами",
+      command: "./lito all --input data/coast-segment.geojson --wave-input data/waves.csv --bathymetry data/bathymetry.json --output output/research",
+      description: "Проверка, размерность и CERC по явно выбранным файлам; научная аттестация не выполняется автоматически",
     },
   ] as CliCommand[],
 

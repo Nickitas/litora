@@ -86,27 +86,29 @@ func AnalyzeBoxCounting(points []geometry.LatLon) BoxCountingAnalysis {
 
 	if window.slope < 0.5 || window.slope > 3.0 {
 		return BoxCountingAnalysis{
-			Samples:            samples,
-			LocalDimensions:    localDimensions,
-			RegressionRSquared: window.rSquared,
-			StabilitySpread:    spread,
-			GridOffsets:        gridOffsetsForAnalysis(),
-			RegressionStart:    window.start,
-			RegressionEnd:      window.end,
+			Samples:             samples,
+			LocalDimensions:     localDimensions,
+			RegressionRSquared:  window.rSquared,
+			RegressionIntercept: window.intercept,
+			StabilitySpread:     spread,
+			GridOffsets:         gridOffsetsForAnalysis(),
+			RegressionStart:     window.start,
+			RegressionEnd:       window.end,
 		}
 	}
 
 	return BoxCountingAnalysis{
-		Dimension:          window.slope,
-		RegressionRSquared: window.rSquared,
-		StableAcrossScales: stable,
-		StabilitySpread:    spread,
-		Samples:            samples,
-		LocalDimensions:    localDimensions,
-		GridOffsets:        gridOffsetsForAnalysis(),
-		RegressionStart:    window.start,
-		RegressionEnd:      window.end,
-		Valid:              true,
+		Dimension:           window.slope,
+		RegressionRSquared:  window.rSquared,
+		RegressionIntercept: window.intercept,
+		StableAcrossScales:  stable,
+		StabilitySpread:     spread,
+		Samples:             samples,
+		LocalDimensions:     localDimensions,
+		GridOffsets:         gridOffsetsForAnalysis(),
+		RegressionStart:     window.start,
+		RegressionEnd:       window.end,
+		Valid:               true,
 	}
 }
 
@@ -486,27 +488,29 @@ func AnalyzeBoxCountingParallel(ctx context.Context, points []geometry.LatLon) B
 
 	if window.slope < 0.5 || window.slope > 3.0 {
 		return BoxCountingAnalysis{
-			Samples:            samples,
-			LocalDimensions:    localDimensions,
-			RegressionRSquared: window.rSquared,
-			StabilitySpread:    spread,
-			GridOffsets:        gridOffsetsForAnalysis(),
-			RegressionStart:    window.start,
-			RegressionEnd:      window.end,
+			Samples:             samples,
+			LocalDimensions:     localDimensions,
+			RegressionRSquared:  window.rSquared,
+			RegressionIntercept: window.intercept,
+			StabilitySpread:     spread,
+			GridOffsets:         gridOffsetsForAnalysis(),
+			RegressionStart:     window.start,
+			RegressionEnd:       window.end,
 		}
 	}
 
 	return BoxCountingAnalysis{
-		Dimension:          window.slope,
-		RegressionRSquared: window.rSquared,
-		StableAcrossScales: stable,
-		StabilitySpread:    spread,
-		Samples:            samples,
-		LocalDimensions:    localDimensions,
-		GridOffsets:        gridOffsetsForAnalysis(),
-		RegressionStart:    window.start,
-		RegressionEnd:      window.end,
-		Valid:              true,
+		Dimension:           window.slope,
+		RegressionRSquared:  window.rSquared,
+		RegressionIntercept: window.intercept,
+		StableAcrossScales:  stable,
+		StabilitySpread:     spread,
+		Samples:             samples,
+		LocalDimensions:     localDimensions,
+		GridOffsets:         gridOffsetsForAnalysis(),
+		RegressionStart:     window.start,
+		RegressionEnd:       window.end,
+		Valid:               true,
 	}
 }
 

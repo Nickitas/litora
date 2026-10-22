@@ -403,9 +403,9 @@ for (const source of [sourceId, "неверный-id", ""])
     await expect(
       dialog.getByRole("img", { name: /Карта для выбора/ })
     ).toHaveCount(0);
-    await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-    await expect(dialog.getByRole("alert")).toContainText(
-      "Исходный контур недоступен"
+    await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+    await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText(
+      "Недоступный необязательный вход нужно явно заменить или исключить"
     );
     expect(
       observed.posts.filter((item) => item.path === "/api/calculations")

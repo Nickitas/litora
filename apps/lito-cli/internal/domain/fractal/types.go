@@ -11,7 +11,7 @@ type BoxCountingSample struct {
 	ScaleFactor   float64 // Коэффициент масштаба относительно размера области
 	RelativeScale float64 // Относительный размер ячейки (0-1)
 	BoxSizeMeters float64 // Размер ячейки в метрах
-	BoxesCovered  int     // Количество покрытых ячеек
+	BoxesCovered  int     // Округлённое среднее покрытие по смещениям сетки
 	LogInvScale   float64 // Логарифм обратного масштаба
 	LogBoxes      float64 // Логарифм количества ячеек
 }
@@ -24,14 +24,15 @@ type GridOffset struct {
 
 // BoxCountingAnalysis представляет полный анализ фрактальной размерности
 type BoxCountingAnalysis struct {
-	Dimension          float64             // Вычисленная фрактальная размерность
-	RegressionRSquared float64             // Коэффициент детерминации R²
-	StableAcrossScales bool                // Стабильность на разных масштабах
-	StabilitySpread    float64             // Разброс локальных размерностей
-	Samples            []BoxCountingSample // Все замеры на разных масштабах
-	LocalDimensions    []float64           // Локальные фрактальные размерности
-	GridOffsets        []GridOffset        // Смещения, использованные для усреднения
-	RegressionStart    int                 // Первый индекс sample в регрессионном окне
-	RegressionEnd      int                 // Последний индекс sample в регрессионном окне
-	Valid              bool                // Валидность результата
+	Dimension           float64             // Вычисленная фрактальная размерность
+	RegressionIntercept float64             // Свободный член выбранной регрессии
+	RegressionRSquared  float64             // Коэффициент детерминации R²
+	StableAcrossScales  bool                // Стабильность на разных масштабах
+	StabilitySpread     float64             // Разброс локальных размерностей
+	Samples             []BoxCountingSample // Все замеры на разных масштабах
+	LocalDimensions     []float64           // Локальные фрактальные размерности
+	GridOffsets         []GridOffset        // Смещения, использованные для усреднения
+	RegressionStart     int                 // Первый индекс sample в регрессионном окне
+	RegressionEnd       int                 // Последний индекс sample в регрессионном окне
+	Valid               bool                // Валидность результата
 }

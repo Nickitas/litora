@@ -15,6 +15,8 @@ import (
 
 const defaultBlackSeaMapOutput = "output/black-sea-map"
 
+const blackSeaMapReferencePath = "data/examples/sochi-local-segment.geojson"
+
 var (
 	mapInput     string
 	mapSourceURL string
@@ -54,7 +56,7 @@ func runMap(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("загрузка контура Чёрного моря: %w", err)
 	}
-	sochi, err := coastline.Load(coastline.LoadOptions{LocalPath: blackSeaSochiCoastlinePath})
+	sochi, err := coastline.Load(coastline.LoadOptions{LocalPath: blackSeaMapReferencePath})
 	if err != nil {
 		return fmt.Errorf("загрузка стартового участка Сочи: %w", err)
 	}

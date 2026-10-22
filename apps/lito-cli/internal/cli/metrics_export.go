@@ -156,22 +156,23 @@ type fractalIterationMetrics struct {
 }
 
 type dimensionMetrics struct {
-	Valid              bool                       `json:"valid"`
-	Dimension          float64                    `json:"dimension,omitempty"`
-	RegressionRSquared float64                    `json:"regression_r_squared,omitempty"`
-	StableAcrossScales bool                       `json:"stable_across_scales"`
-	StabilitySpread    float64                    `json:"stability_spread,omitempty"`
-	SampleCount        int                        `json:"sample_count"`
-	BoxSizeMeters      float64                    `json:"representative_box_size_meters,omitempty"`
-	Samples            []boxCountingSampleMetrics `json:"samples,omitempty"`
-	GridOffsets        []gridOffsetMetrics        `json:"grid_offsets,omitempty"`
-	RegressionStart    int                        `json:"regression_start_sample,omitempty"`
-	RegressionEnd      int                        `json:"regression_end_sample,omitempty"`
-	RegressionStdError float64                    `json:"regression_standard_error,omitempty"`
-	DimensionCI95Low   float64                    `json:"dimension_ci95_low,omitempty"`
-	DimensionCI95High  float64                    `json:"dimension_ci95_high,omitempty"`
-	LocalDimensions    []float64                  `json:"local_dimensions,omitempty"`
-	LogLogSVGFile      string                     `json:"log_log_svg_file,omitempty"`
+	Valid               bool                       `json:"valid"`
+	Dimension           float64                    `json:"dimension,omitempty"`
+	RegressionIntercept float64                    `json:"regression_intercept"`
+	RegressionRSquared  float64                    `json:"regression_r_squared,omitempty"`
+	StableAcrossScales  bool                       `json:"stable_across_scales"`
+	StabilitySpread     float64                    `json:"stability_spread,omitempty"`
+	SampleCount         int                        `json:"sample_count"`
+	BoxSizeMeters       float64                    `json:"representative_box_size_meters,omitempty"`
+	Samples             []boxCountingSampleMetrics `json:"samples,omitempty"`
+	GridOffsets         []gridOffsetMetrics        `json:"grid_offsets,omitempty"`
+	RegressionStart     int                        `json:"regression_start_sample,omitempty"`
+	RegressionEnd       int                        `json:"regression_end_sample,omitempty"`
+	RegressionStdError  float64                    `json:"regression_standard_error,omitempty"`
+	DimensionCI95Low    float64                    `json:"dimension_ci95_low,omitempty"`
+	DimensionCI95High   float64                    `json:"dimension_ci95_high,omitempty"`
+	LocalDimensions     []float64                  `json:"local_dimensions,omitempty"`
+	LogLogSVGFile       string                     `json:"log_log_svg_file,omitempty"`
 }
 
 type boxCountingSampleMetrics struct {
@@ -388,11 +389,12 @@ func dimensionMetricsFromAnalysis(analysis fractal.BoxCountingAnalysis) *dimensi
 	}
 
 	result := &dimensionMetrics{
-		Valid:              analysis.Valid,
-		RegressionRSquared: analysis.RegressionRSquared,
-		StableAcrossScales: analysis.StableAcrossScales,
-		StabilitySpread:    analysis.StabilitySpread,
-		SampleCount:        len(analysis.Samples),
+		Valid:               analysis.Valid,
+		RegressionRSquared:  analysis.RegressionRSquared,
+		RegressionIntercept: analysis.RegressionIntercept,
+		StableAcrossScales:  analysis.StableAcrossScales,
+		StabilitySpread:     analysis.StabilitySpread,
+		SampleCount:         len(analysis.Samples),
 	}
 	result.Samples = make([]boxCountingSampleMetrics, 0, len(analysis.Samples))
 	for _, sample := range analysis.Samples {

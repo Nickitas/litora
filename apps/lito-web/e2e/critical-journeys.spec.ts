@@ -18,9 +18,10 @@ import type {
   ScientificInputRole,
 } from "@litora/contracts";
 import {
-  allDemoDefaults,
+  adaptiveParameterDefinitions,
   allFileDefaults,
   cercCalibrationDefaults,
+  cercSiteParameterNames,
   erosionDemoDefaults,
   erosionFileDefaults,
 } from "@litora/contracts";
@@ -33,16 +34,108 @@ import {
 import { suggestDatasetName } from "../src/pages/account/model/dataset-name";
 import { findSavedResearchDataset, parseResearchDataset, researchCatalogue } from "@litora/generated-data/research";
 
+// Выбранные значения транспортных тестов, не рекомендации для участка.
+async function fillCercSiteParameters(page: Page, prefix = "erosion") {
+  for (const field of cercSiteParameterNames) {
+    if (prefix === "calibration" && field === "cercCoefficient") continue;
+    await page.locator(`#${prefix}-${field}`).fill(String(erosionFileDefaults[field]));
+  }
+}
+
 const user = {
   id: "11111111-1111-4111-8111-111111111111",
   email: "browser@example.test",
   name: "Тестовый исследователь",
 };
+
+for (const theme of ["light", "dark"] as const) {
+  test(`параметры участка CERC остаются пустыми до явного ввода · ${theme}`, async ({ page }) => {
+    const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json"] as const;
+    const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
+    const inputs = roles.map((role, index) => ({ ...articleInputs[0], role,
+      id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`, name: `Участок ${index + 1}` }));
+    let posts = 0;
+    const observed = await mockApi(page, (path, method) => {
+      if (path === "/api/auth/refresh") return { body: session };
+      if (path === "/api/calculations/kinds") return { body: kinds };
+      if (path === "/api/scientific-inputs") return { body: inputs };
+      if (path === "/api/datasets") return { body: [] };
+      if (path === "/api/calculations") { if (method === "POST") posts++; return { body: [] }; }
+    });
+    await page.setViewportSize({ width: 360, height: 780 });
+    await openNewCalculation(page, theme);
+    await chooseOption(page, "Что рассчитать", "Эрозия по своим данным");
+    const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+    for (const field of cercSiteParameterNames) {
+      const input = dialog.locator(`#erosion-${field}`);
+      await expect(input).toBeEmpty();
+      await expect(input).toHaveAttribute("aria-describedby", `erosion-${field}-hint`);
+      await expect(dialog.locator(`#erosion-${field}-hint`)).toContainText("Технический диапазон");
+    }
+    for (const [index, field] of fields.entries()) {
+      await dialog.locator(`#scientific-${field}`).click();
+      await page.getByRole("option", { name: new RegExp(`Участок ${index + 1}`) }).click();
+    }
+    await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+    await fillCercSiteParameters(page);
+    await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeEnabled();
+    const left = dialog.locator("#erosion-leftBoundaryTransport");
+    await expect(left).toHaveValue("0");
+    await left.fill("");
+    await expect(left).toBeEmpty();
+    await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+    await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("Поток через левую границу");
+    await left.fill("0");
+    await dialog.locator("#erosion-bermHeight").fill("101");
+    await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+    await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("0.001…100");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+    await dialog.locator("#erosion-bermHeight").scrollIntoViewIfNeeded();
+    await expect(dialog.getByRole("button", { name: "Закрыть окно нового расчёта" })).toBeInViewport();
+    expect(await dialog.locator("footer").evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(200);
+    await page.screenshot({ path: `/private/tmp/litora-0075-${theme}-parameters.png` });
+    expect(posts).toBe(0);
+    expect(observed.unexpected).toEqual([]);
+    expect(observed.pageErrors).toEqual([]);
+  });
+}
 const session = {
   user,
   accessToken: "browser-test-token",
   expiresIn: 900,
 } satisfies AuthDto;
+
+test("предел шага батиметрии и начальные настройки адаптации берутся из общего контракта", async ({ page }) => {
+  const observed = await mockApi(page, (path) => {
+    if (path === "/api/auth/refresh") return { body: session };
+    if (path === "/api/calculations/kinds") return { body: [
+      { kind: "calibrate_cerc", title: "Калибровка CERC", description: "Тест" },
+      { kind: "seabed_adapt", title: "Поле размера", description: "Тест" },
+    ] };
+    if (["/api/datasets", "/api/scientific-inputs", "/api/calculations"].includes(path)) return { body: [] };
+  });
+  await openNewCalculation(page, "light");
+  await chooseOption(page, "Что рассчитать", "Калибровка CERC");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await expect(dialog.locator("#calibration-resolution")).toBeEmpty();
+  await expect(dialog.locator("#calibration-resolution")).toHaveAttribute("max", "0.1");
+  await expect(dialog.locator("#calibration-coefficients")).toBeEmpty();
+  await expect(dialog.locator("#calibration-maxObservationDistance")).toBeEmpty();
+  await dialog.locator("#calibration-resolution").fill("0.2");
+  await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("1e-9…0.1");
+  await chooseOption(page, "Что рассчитать", "Отчёты по модели дна");
+  await expect(dialog.getByRole("combobox", { name: "Подтип отчёта" })).toHaveText("Поле размера ячеек");
+  for (const [field, definition] of Object.entries(adaptiveParameterDefinitions)) {
+    const input = dialog.locator(`#adapt-${field}`);
+    await expect(input).toHaveValue(String(definition.defaultValue));
+    await expect(input).toHaveAttribute("min", String(definition.minimum));
+    await expect(input).toHaveAttribute("max", String(definition.maximum));
+  }
+  await dialog.locator("#adapt-minSize").fill("600");
+  await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("min ≤ coast ≤ shelf ≤ deep");
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
 const job = {
   id: "22222222-2222-4222-8222-222222222222",
   kind: "erosion",
@@ -70,6 +163,7 @@ const kinds = [
     description: "GeoJSON LineString",
   },
   { kind: "erosion", title: "Размыв", description: "Тестовый сценарий" },
+  { kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC" },
   { kind: "map", title: "Карта", description: "Тестовый сценарий" },
 ] satisfies CalculationKindDto[];
 const dataset = {
@@ -298,7 +392,7 @@ test("просмотр набора: карта, точный экспорт и 
   expect(submissions).toEqual([]);
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${job.id}$`));
-  expect(submissions).toEqual([{ kind: "dimension_dataset", input: { datasetId: dataset.id } }]);
+  expect(submissions).toEqual([{ kind: "dimension_dataset", input: { datasetId: dataset.id, reportType: "coastline_box_counting" } }]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -341,8 +435,8 @@ test("просмотр набора: отсутствующий UUID в форм
   await page.goto(`/lab?new=1&dataset=${dataset.id}`);
   await expect(page.getByRole("dialog", { name: "Новый расчёт" })).toBeVisible();
   await expect(page.getByText("Исходный набор больше недоступен.", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(page.getByRole("alert")).toContainText("Исходный набор данных недоступен");
+  await expect(page.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+  await expect(page.getByRole("region", { name: "4. Результат" })).toContainText("Исходный набор данных недоступен");
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -434,10 +528,10 @@ const seabedOutputs: ReusableScientificArtifactDto[] = ([
   sha256: "b".repeat(64), createdAt: job.createdAt,
 }));
 
-async function mockSeabedFigures(page: Page, submissions: unknown[], source: CalculationJobDto = seabedBuildJob, missing = false, outputs = seabedOutputs) {
+async function mockSeabedFigures(page: Page, submissions: unknown[], source: CalculationJobDto = seabedBuildJob, missing = false, outputs = seabedOutputs, catalog: CalculationKindDto[] = seabedKinds) {
   return mockApi(page, (path, method, body) => {
     if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds") return { body: seabedKinds };
+    if (path === "/api/calculations/kinds") return { body: catalog };
     if (path === "/api/datasets") return { body: [] };
     if (path === "/api/scientific-inputs/reusable-artifacts") return { body: outputs };
     if (path === "/api/calculations" && method === "GET") return { body: [] };
@@ -593,8 +687,11 @@ async function chooseOption(page: Page, label: string, option: string) {
 async function chooseTheme(page: Page, mode: "light" | "dark" | "system") {
   const button = page.getByRole("button", { name: /^Тема оформления:/ });
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    if ((await button.getAttribute("data-theme")) === mode) return;
+    const current = await button.getAttribute("data-theme");
+    if (current === mode) return;
+    const next = current === "system" ? "light" : current === "light" ? "dark" : "system";
     await button.click();
+    await expect(button).toHaveAttribute("data-theme", next);
   }
   await expect(button).toHaveAttribute("data-theme", mode);
 }
@@ -1531,9 +1628,16 @@ test("обзор сообщает об усечении активных и от
 test("расчёт из истории открывает редактируемые параметры без автоматического запуска", async ({
   page,
 }) => {
-  const original = { ...job, status: "succeeded" as const };
+  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
+  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json"] as const;
+  const inputs: ScientificInputDto[] = roles.map((role, index) => ({
+    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Сохранённый вход ${index + 1}`,
+  }));
+  const storedInputs = Object.fromEntries(fields.map((field, index) => [field, inputs[index].id]));
+  const original = { ...job, kind: "erosion_file", input: { ...erosionFileDefaults, ...storedInputs, steps: 4 }, status: "succeeded" as const };
   const created = {
-    ...job,
+    ...original,
     id: "44444444-4444-4444-8444-444444444444",
     input: { steps: 5 },
   };
@@ -1544,6 +1648,7 @@ test("расчёт из истории открывает редактируем
     if (path === "/api/calculations/kinds" && method === "GET")
       return { body: kinds };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
     if (path === "/api/calculations" && method === "GET")
       return { body: [original] };
     if (path === `/api/calculations/${original.id}` && method === "GET")
@@ -1560,7 +1665,7 @@ test("расчёт из истории открывает редактируем
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
   await expect(dialog).toBeVisible();
-  const steps = dialog.getByLabel("Шаги волнового ряда (1–168)");
+  const steps = dialog.getByLabel("Шаги волнового ряда (0–48; 0 — весь ряд)");
   await expect(steps).toHaveValue("4");
   expect(submitted).toBeUndefined();
   await steps.fill("5");
@@ -1572,9 +1677,10 @@ test("расчёт из истории открывает редактируем
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(submitted).toEqual({
-    kind: "erosion",
+    kind: "erosion_file",
     input: {
-      ...erosionDemoDefaults,
+      ...erosionFileDefaults,
+      ...storedInputs,
       steps: 5,
       cercCoefficient: 0.5,
       outputCsv: true,
@@ -1587,18 +1693,26 @@ test("расчёт из истории открывает редактируем
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("полный демо-конвейер позволяет настроить GIF и повторить параметры", async ({
+test("полный расчёт по своим данным позволяет настроить GIF и повторить параметры", async ({
   page,
 }) => {
   const fullKind = [
-    { kind: "all_demo", title: "Полный конвейер Сочи", description: "Демо" },
+    { kind: "all_file", title: "Полный расчёт по своим данным", description: "CERC" },
   ] satisfies CalculationKindDto[];
+  const fields = ["coastlineInputId", "waveInputId", "bathymetryInputId", "bathymetryMetadataInputId"] as const;
+  const roles = ["coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json"] as const;
+  const inputs: ScientificInputDto[] = roles.map((role, index) => ({
+    ...articleInputs[0], role, id: `88888888-8888-4888-8888-${String(index + 1).padStart(12, "0")}`,
+    name: `Сохранённый вход ${index + 1}`,
+  }));
+  const storedInputs = Object.fromEntries(fields.map((field, index) => [field, inputs[index].id]));
   const original = {
     ...job,
-    kind: "all_demo" as const,
+    kind: "all_file" as const,
     status: "succeeded" as const,
     input: {
-      ...allDemoDefaults,
+      ...allFileDefaults,
+      ...storedInputs,
       steps: 4,
       outputGif: true,
       gifFps: 8,
@@ -1617,6 +1731,7 @@ test("полный демо-конвейер позволяет настроит
     if (path === "/api/calculations/kinds" && method === "GET")
       return { body: fullKind };
     if (path === "/api/datasets" && method === "GET") return { body: [] };
+    if (path === "/api/scientific-inputs" && method === "GET") return { body: inputs };
     if (path === "/api/calculations" && method === "GET")
       return { body: [original] };
     if (path === `/api/calculations/${original.id}` && method === "GET")
@@ -1633,8 +1748,8 @@ test("полный демо-конвейер позволяет настроит
   await page.goto(`/lab/calculations/${original.id}`);
   await page.getByRole("link", { name: "Создать на основе" }).click();
   const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
-  await expect(dialog.getByText("Демонстрационный сценарий")).toBeVisible();
-  await expect(dialog.getByLabel("Шаги волнового ряда (1–24)")).toHaveValue(
+  await expect(dialog.getByText("Демонстрационный сценарий")).toHaveCount(0);
+  await expect(dialog.getByLabel("Шаги волнового ряда (0–48; 0 — весь ряд)")).toHaveValue(
     "4"
   );
   await expect(dialog.getByLabel("Сохранить анимацию GIF")).toBeChecked();
@@ -1645,9 +1760,10 @@ test("полный демо-конвейер позволяет настроит
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
   expect(submitted).toEqual({
-    kind: "all_demo",
+    kind: "all_file",
     input: {
-      ...allDemoDefaults,
+      ...allFileDefaults,
+      ...storedInputs,
       steps: 4,
       outputGif: true,
       gifFps: 12,
@@ -1655,6 +1771,78 @@ test("полный демо-конвейер позволяет настроит
       modelMaxPoints: 300,
     },
   });
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+for (const demoKind of ["erosion", "all_demo"] as const) {
+  for (const available of [true, false]) {
+    test(`повтор демо требует своих данных: ${demoKind}, сценарий доступен=${available}`, async ({ page }) => {
+      const ownKind = demoKind === "erosion" ? "erosion_file" : "all_file";
+      const original = { ...job, kind: demoKind, status: "succeeded" as const,
+        input: { ...erosionDemoDefaults, steps: 24, bermHeight: 90, coastlineInputId: articleInputs[5].id } };
+      const submissions: unknown[] = [];
+      const observed = await mockApi(page, (path, method, body) => {
+        if (path === "/api/auth/refresh") return { body: session };
+        if (path === "/api/calculations/kinds") return { body: [
+          { kind: demoKind, title: "Историческое демо", description: "Демо", selectable: true },
+          ...(available ? [{ kind: ownKind, title: "Исследование по своим данным", description: "CERC" }] : []),
+        ] };
+        if (path === "/api/datasets") return { body: [] };
+        if (path === "/api/scientific-inputs") return { body: [articleInputs[5]] };
+        if (path === "/api/calculations" && method === "GET") return { body: [original] };
+        if (path === `/api/calculations/${job.id}`) return { body: original };
+        if (path === "/api/calculations" && method === "POST") { submissions.push(body); return { body: job }; }
+      });
+      await page.setViewportSize({ width: 360, height: 800 });
+      if (demoKind === "erosion") {
+        await page.goto(`/lab/calculations/${original.id}`);
+        await expect(page.getByText("Демонстрационный сценарий", { exact: false })).toBeVisible();
+        await page.getByRole("link", { name: "Создать на основе" }).click();
+      } else {
+        await page.goto(`/lab/calculations?repeat=${original.id}`);
+      }
+      const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
+      await expect(dialog.getByRole("alert")).toContainText("Повтор демонстрационного расчёта недоступен");
+      await expect(dialog.getByRole("alert")).toContainText("параметры не перенесены");
+      await expect(dialog.getByRole("link", { name: "Выбрать или подготовить данные" })).toHaveAttribute("href", "/lab/datasets");
+      if (available) {
+        await expect(dialog.getByLabel("Шаги волнового ряда (0–48; 0 — весь ряд)")).toHaveValue(String(ownKind === "erosion_file" ? erosionFileDefaults.steps : allFileDefaults.steps));
+        await expect(dialog.locator("#erosion-bermHeight")).toBeEmpty();
+        await expect(dialog.locator("#scientific-coastlineInputId")).toContainText("Выберите");
+        await dialog.getByLabel("Что рассчитать").click();
+        await expect(page.getByRole("option", { name: "Историческое демо" })).toHaveCount(0);
+        await page.keyboard.press("Escape");
+      } else {
+        await expect(dialog.getByText("Сейчас нет доступных сценариев для запуска.")).toBeVisible();
+        await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+      }
+      expect(submissions).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      expect(observed.unexpected).toEqual([]);
+      expect(observed.pageErrors).toEqual([]);
+    });
+  }
+}
+
+test("новая форма исключает оба демо, даже когда API предлагает только их", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh") return { body: session };
+    if (path === "/api/calculations/kinds") return { body: [
+      { kind: "erosion", title: "Демо эрозии", description: "Демо" },
+      { kind: "all_demo", title: "Демо конвейера", description: "Демо", selectable: true },
+    ] };
+    if (path === "/api/datasets" || (path === "/api/calculations" && method === "GET")) return { body: [] };
+    if (path === "/api/calculations" && method === "POST") { submissions.push(body); return { body: job }; }
+  });
+  await openNewCalculation(page, "dark");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  await expect(dialog.getByText("Сейчас нет доступных сценариев для запуска.")).toBeVisible();
+  await expect(dialog.getByLabel("Что рассчитать")).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+  await dialog.locator("form").evaluate((form: HTMLFormElement) => form.requestSubmit());
+  expect(submissions).toEqual([]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -1730,12 +1918,13 @@ test("свой CERC выбирает приватные файлы и необя
   }
   await dialog.locator("#scientific-sedimentSourcesInputId").click();
   await page.getByRole("option", { name: /Вход CERC 5/ }).click();
+  await fillCercSiteParameters(page);
   await dialog.locator("#erosion-steps").fill("8");
   await dialog
-    .getByRole("button", { name: "Параметры CERC и экспорт" })
+    .getByRole("button", { name: "Экспорт и численные ограничения" })
     .click();
-  await dialog.getByLabel("Поток через левую границу, м³/с").fill("0.02");
-  await dialog.getByLabel("Поток через правую границу, м³/с").fill("-0.01");
+  await dialog.getByLabel("Поток через левую границу").fill("0.02");
+  await dialog.getByLabel("Поток через правую границу").fill("-0.01");
   await dialog.getByLabel("Сохранить анимацию GIF").check();
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
@@ -1828,8 +2017,9 @@ test("свой CERC запускает весь ряд с ограниченно
       .click();
   }
   await dialog
-    .getByRole("button", { name: "Параметры CERC и экспорт" })
+    .getByRole("button", { name: "Экспорт и численные ограничения" })
     .click();
+  await fillCercSiteParameters(page);
   await dialog.getByLabel("Сохранить анимацию GIF").check();
   await dialog.locator("#erosion-steps").fill("0");
   await expect(dialog.getByLabel("Максимум SVG эрозии (2–128)")).toHaveValue(
@@ -1939,10 +2129,10 @@ test("полный конвейер по своим файлам повторя�
     "Вход полного конвейера 5"
   );
   await expect(
-    dialog.getByLabel("Поток через левую границу, м³/с")
+    dialog.getByLabel("Поток через левую границу")
   ).toHaveValue("0.04");
   await expect(
-    dialog.getByLabel("Поток через правую границу, м³/с")
+    dialog.getByLabel("Поток через правую границу")
   ).toHaveValue("-0.03");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${created.id}$`));
@@ -2038,9 +2228,9 @@ test("повтор не отбрасывает недоступный индек
       exact: false,
     })
   ).toBeVisible();
-  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(dialog.getByRole("alert")).toContainText(
-    "Исходный индексный профиль больше недоступен"
+  await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+  await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText(
+    "Недоступный необязательный вход нужно явно заменить или исключить"
   );
   expect(submitted).toBeUndefined();
   await dialog
@@ -2130,7 +2320,10 @@ test("калибровка CERC требует наблюдения и факт�
   await dialog.getByLabel("Фактический шаг батиметрии, градусы").fill("0.005");
   await expect(
     dialog.getByLabel("Коэффициенты CERC (1–8 через запятую)")
-  ).toHaveValue(cercCalibrationDefaults.cercCoefficients);
+  ).toBeEmpty();
+  await fillCercSiteParameters(page, "calibration");
+  await dialog.locator("#calibration-coefficients").fill(cercCalibrationDefaults.cercCoefficients);
+  await dialog.locator("#calibration-maxObservationDistance").fill("500");
   for (let index = 0; index < fields.length; index += 1) {
     await dialog.locator(`#scientific-${fields[index]}`).click();
     await page
@@ -2271,8 +2464,8 @@ test("отсутствующий исходный набор не заменяе
   await expect(
     dialog.getByText("Исходный набор больше недоступен.", { exact: false })
   ).toBeVisible();
-  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(dialog.getByRole("alert")).toContainText(
+  await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+  await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText(
     "Исходный набор данных недоступен"
   );
   expect(datasetCreated).toBe(false);
@@ -2287,7 +2480,7 @@ test("отсутствующий исходный набор не заменяе
   expect(datasetCreated).toBe(true);
   expect(submitted).toEqual({
     kind: "dimension_dataset",
-    input: { datasetId: dataset.id },
+    input: { datasetId: dataset.id, reportType: "coastline_box_counting" },
   });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -2335,10 +2528,8 @@ test("недоступный научный файл требует нового
       exact: false,
     })
   ).toBeVisible();
-  await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
-  await expect(dialog.getByRole("alert")).toContainText(
-    "Выберите все научные входные файлы"
-  );
+  await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+  await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("Выберите вход:");
   expect(submitted).toBe(false);
   await dialog
     .getByRole("button", { name: "Закрыть окно нового расчёта" })
@@ -2548,7 +2739,101 @@ test("кабинет и запуск доступны в эквиваленте 
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("перед запуском объясняются входы, ограничения и справка каждого сценария", async ({
+for (const theme of ["light", "dark"] as const) {
+  test(`справка сценария сохраняет форму, клавиатуру и фокус · ${theme}`, async ({ page }) => {
+    const coastline = { ...articleInputs[0], role: "coastline_geojson" as const, name: "Контур участка для формы" };
+    const helpKinds: CalculationKindDto[] = [...kinds, {
+      kind: "seabed_compare_adaptive", title: "Сравнение сеток", description: "Сравнение сеток по полю размера",
+    }];
+    let posts = 0;
+    const observed = await mockApi(page, (path, method) => {
+      if (path === "/api/auth/refresh") return { body: session };
+      if (path === "/api/calculations/kinds") return { body: helpKinds };
+      if (path === "/api/datasets") return { body: [] };
+      if (path === "/api/scientific-inputs") return { body: [coastline] };
+      if (path === "/api/calculations") { if (method === "POST") posts++; return { body: [] }; }
+    });
+    await page.setViewportSize({ width: 360, height: 640 });
+    await openNewCalculation(page, theme);
+    await chooseOption(page, "Что рассчитать", "Эрозия по своим данным");
+    const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+    await dialog.locator("#scientific-coastlineInputId").click();
+    await page.getByRole("option", { name: /Контур участка для формы/ }).click();
+    await dialog.locator("#erosion-steps").fill("7");
+    await dialog.locator("#erosion-bermHeight").fill("2.5");
+    await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("Выберите вход:");
+    await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+    await expect(dialog.getByText("Ваш локальный контур, волновой ряд CSV/JSON", { exact: false })).toHaveCount(0);
+    const trigger = dialog.getByRole("button", { name: "Справка о расчёте «Эрозия по своим данным»", exact: true });
+    await trigger.focus();
+    await trigger.press("Enter");
+    const help = page.getByRole("dialog", { name: "Справка: Эрозия по своим данным", exact: true });
+    await expect(help).toHaveAttribute("aria-modal", "true");
+    const close = help.getByRole("button", { name: "Закрыть справку", exact: true });
+    await expect(close).toBeFocused();
+    const method = help.getByRole("link", { name: /О модели CERC и её ограничениях/ });
+    await expect(method).toHaveAttribute("target", "_blank");
+    await expect(method).toHaveAttribute("rel", "noopener noreferrer");
+    const helpBody = help.getByRole("region", { name: "Содержание справки" });
+    await page.keyboard.press("Tab");
+    await expect(helpBody).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(method).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(helpBody).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(close).toBeFocused();
+    for (let index = 0; index < 5; index++) {
+      await page.keyboard.press("Tab");
+      expect(await help.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+    }
+    await page.keyboard.press("Escape");
+    await expect(help).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await expect(trigger).toBeFocused();
+    await expect(dialog.locator("#erosion-steps")).toHaveValue("7");
+    await expect(dialog.locator("#erosion-bermHeight")).toHaveValue("2.5");
+    await expect(dialog.locator("#scientific-coastlineInputId")).toContainText(coastline.name);
+    await expect(dialog.locator("#erosion-bermHeight-hint")).toContainText("Технический диапазон");
+    await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("Выберите вход:");
+    await trigger.press("Space");
+    await expect(help).toBeVisible();
+    await close.click();
+    await expect(trigger).toBeFocused();
+    await trigger.press("Enter");
+    await expect(help).toBeVisible();
+    await page.locator('[data-slot="dialog-overlay"]').last().click({ position: { x: 2, y: 2 } });
+    await expect(help).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await expect(trigger).toBeFocused();
+    await trigger.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `/private/tmp/litora-0076-${theme}-form.png` });
+    await chooseOption(page, "Что рассчитать", "Сравнение сеток");
+    const compareTrigger = dialog.getByRole("button", { name: "Справка о расчёте «Сравнение сеток»", exact: true });
+    await compareTrigger.click();
+    const compareHelp = page.getByRole("dialog", { name: "Справка: Сравнение сеток", exact: true });
+    await expect(compareHelp.getByText("Расчёт может занять часы", { exact: false })).toBeVisible();
+    await expect(compareHelp.getByText("Ваш локальный контур, волновой ряд CSV/JSON", { exact: false })).toHaveCount(0);
+    const body = compareHelp.getByRole("region", { name: "Содержание справки" });
+    await body.focus();
+    await body.press("PageDown");
+    await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect(compareHelp.getByRole("button", { name: "Закрыть справку" })).toBeInViewport();
+    await expect(compareHelp.getByRole("link")).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+    await page.screenshot({ path: `/private/tmp/litora-0076-${theme}-help.png` });
+    await page.keyboard.press("Escape");
+    await expect(compareTrigger).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Новый расчёт", exact: true })).toBeFocused();
+    expect(posts).toBe(0);
+    expect(observed.unexpected).toEqual([]);
+    expect(observed.pageErrors).toEqual([]);
+  });
+}
+
+test("справка перед запуском объясняет входы и ограничения каждого сценария", async ({
   page,
 }) => {
   const observed = await mockApi(page, (path, method) => {
@@ -2582,9 +2867,9 @@ test("перед запуском объясняются входы, огран�
       reference: "black-sea-map.md",
     },
     {
-      kind: "erosion",
-      source: "Закреплённый почасовой прогноз волн на 7 суток",
-      limitation: "Демонстрация CERC по старому оперативному прогнозу волн",
+      kind: "erosion_file",
+      source: "Ваш локальный контур, волновой ряд CSV/JSON",
+      limitation: "Без независимой калибровки результат не является прогнозом размыва",
       reference: "cerc-one-line-model.md",
     },
   ]) {
@@ -2593,19 +2878,25 @@ test("перед запуском объясняются входы, огран�
       "Что рассчитать",
       kinds.find((kind) => kind.kind === item.kind)?.title ?? item.kind
     );
-    await expect(dialog.getByText(item.source, { exact: false })).toBeVisible();
-    await expect(
-      dialog.getByText(item.limitation, { exact: false })
-    ).toBeVisible();
-    await expect(
-      dialog.getByRole("link", { name: /откроется в новой вкладке/ })
-    ).toHaveAttribute("href", `/docs/reference/${item.reference}`);
+    await expect(dialog.getByText(item.source, { exact: false })).toHaveCount(0);
+    await expect(dialog.getByText(item.limitation, { exact: false })).toHaveCount(0);
+    const helpTrigger = dialog.getByRole("button", { name: /^Справка о расчёте/ });
+    await helpTrigger.click();
+    const help = page.getByRole("dialog", { name: /^Справка:/ });
+    await expect(help.getByText(item.source, { exact: false })).toBeVisible();
+    await expect(help.getByText(item.limitation, { exact: false })).toBeVisible();
+    await expect(help.getByRole("link", { name: /откроется в новой вкладке/ }))
+      .toHaveAttribute("href", `/docs/reference/${item.reference}`);
+    await help.getByRole("button", { name: "Закрыть справку" }).click();
+    await expect(helpTrigger).toBeFocused();
   }
-  await expect(dialog.getByText("Демонстрационный сценарий")).toBeVisible();
-  await expect(dialog.locator("footer").getByText("Демо")).toBeVisible();
+  await expect(dialog.getByText("Демонстрационный сценарий")).toHaveCount(0);
+  await expect(dialog.locator("footer").getByText("Демо")).toHaveCount(0);
   await expect(dialog.getByText("до 5 незавершённых расчётов")).toBeVisible();
+  await dialog.getByRole("button", { name: /^Справка о расчёте/ }).click();
+  const help = page.getByRole("dialog", { name: /^Справка:/ });
   const referencePage = page.waitForEvent("popup");
-  await dialog
+  await help
     .getByRole("link", { name: /О модели CERC и её ограничениях/ })
     .click();
   const referenceTab = await referencePage;
@@ -2619,6 +2910,7 @@ test("перед запуском объясняются входы, огран�
     })
   ).toBeVisible();
   await referenceTab.close();
+  await help.getByRole("button", { name: "Закрыть справку" }).click();
   await expect(dialog).toBeVisible();
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -2688,7 +2980,7 @@ test("участки побережья: выделенная линия под�
   await expect(dialog.locator("#scientific-coastlineInputId")).toContainText(artifact.filename);
   await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
   await expect.poll(() => submissions.length).toBe(1);
-  expect(submissions[0]).toEqual({ kind: "dimension_file", input: { coastlineInputId: artifact.id } });
+  expect(submissions[0]).toEqual({ kind: "dimension_file", input: { coastlineInputId: artifact.id, reportType: "coastline_box_counting" } });
   expect(observed.unexpected).toEqual([]); expect(observed.pageErrors).toEqual([]);
 });
 
@@ -2717,17 +3009,18 @@ for (const theme of ["light", "dark"] as const) {
     await next.focus();
     await next.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
-    await expect(dialog.getByRole("combobox", { name: "Что рассчитать" })).toHaveText("Карты и 3D-рельеф дна");
+    await expect(dialog.getByRole("combobox", { name: "Что рассчитать" })).toHaveText("Отчёты по модели дна");
     for (const field of ["modelInputId", "exportMetadataInputId", "sourceMetadataInputId"]) {
       await expect(dialog.locator(`#scientific-${field}`)).not.toHaveText(/Выберите|Нет подходящих/);
     }
-    await expect(dialog.getByText("Обзор глубин и фрагменты", { exact: false })).toBeVisible();
+    await expect(dialog.getByRole("combobox", { name: "Подтип отчёта" })).toHaveText("Фрагменты фактической сетки");
+    await expect(dialog.getByText("Карты и сетки дна", { exact: false })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
     await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
     await expect.poll(() => submissions.length).toBe(1);
     expect(submissions[0]).toMatchObject({ kind: "seabed_render", input: {
       modelInputId: seabedOutputs[0].id, exportMetadataInputId: seabedOutputs[1].id,
-      sourceMetadataInputId: seabedOutputs[2].id, isobaths: "20,50,100,200,500,1000,1500,2000",
+      sourceMetadataInputId: seabedOutputs[2].id, reportType: "mesh_details", isobaths: "20,50,100,200,500,1000,1500,2000",
     } });
     expect(observed.unexpected).toEqual([]);
     expect(observed.pageErrors).toEqual([]);
@@ -2747,11 +3040,219 @@ test("карты дна: рисунок 4 использует поле прим
   await expect.poll(() => submissions.length).toBe(1);
   expect(submissions[0]).toMatchObject({ kind: "seabed_adapt", input: {
     modelInputId: seabedOutputs[0].id, sourceMetadataInputId: seabedOutputs[2].id,
-    minSize: 200, coastSize: 300, shelfSize: 500, deepSize: 1000,
+    reportType: "size_field", minSize: 200, coastSize: 300, shelfSize: 500, deepSize: 1000,
   } });
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
+
+for (const theme of ["light", "dark"] as const) {
+  test(`подтипы отчёта сохраняют файлы и параметры при переключении, ${theme}`, async ({ page }) => {
+    const submissions: unknown[] = [];
+    const observed = await mockSeabedFigures(page, submissions);
+    await page.setViewportSize({ width: 360, height: 780 });
+    await page.goto("/lab/calculations");
+    await chooseTheme(page, theme);
+    await page.goto(`/lab/calculations?new=1&workflow=bathymetry&source=${seabedBuildJob.id}`);
+    const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+    const subtype = dialog.getByRole("combobox", { name: "Подтип отчёта" });
+    await expect(subtype).toHaveText("Обзор глубин");
+    await expect(dialog.locator("#seabed-vertical")).toBeHidden();
+    await dialog.locator("#seabed-isobaths").fill("25,100");
+    await subtype.focus();
+    await subtype.press("Enter");
+    await expect(page.getByRole("listbox")).toBeVisible();
+    await expect(page.getByRole("option", { name: "Обзор глубин", exact: true })).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("option", { name: "Поле размера ячеек", exact: true })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(subtype).toHaveText("Поле размера ячеек");
+    await expect(subtype).toBeFocused();
+    await expect(dialog.locator("#scientific-exportMetadataInputId")).toHaveCount(0);
+    await expect(dialog.locator("#seabed-isobaths")).toHaveCount(0);
+    await dialog.locator("#adapt-minSize").fill("220");
+    await chooseOption(page, "Подтип отчёта", "Обзор глубин");
+    await expect(dialog.locator("#seabed-isobaths")).toHaveValue("25,100");
+    await expect(dialog.locator("#scientific-exportMetadataInputId")).not.toHaveText(/Выберите|Нет подходящих/);
+    await chooseOption(page, "Подтип отчёта", "Поле размера ячеек");
+    await expect(dialog.locator("#adapt-minSize")).toHaveValue("220");
+    await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("Новая сетка ещё не построена");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+    await page.screenshot({ path: `/private/tmp/litora-0078-${theme}-size-field.png` });
+    await chooseOption(page, "Подтип отчёта", "Фрагменты фактической сетки");
+    await page.screenshot({ path: `/private/tmp/litora-0078-${theme}-mesh-details.png` });
+    await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+    await expect.poll(() => submissions.length).toBe(1);
+    expect(submissions[0]).toMatchObject({ kind: "seabed_render", input: {
+      reportType: "mesh_details", isobaths: "25,100", modelInputId: seabedOutputs[0].id,
+      exportMetadataInputId: seabedOutputs[1].id, sourceMetadataInputId: seabedOutputs[2].id,
+    } });
+    expect(observed.unexpected).toEqual([]); expect(observed.pageErrors).toEqual([]);
+  });
+}
+
+test("подтип отчёта восстанавливается при повторе с собственными файлами", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const original = { ...seabedBuildJob, kind: "seabed_render", input: {
+    reportType: "mesh_details", modelInputId: seabedOutputs[0].id, exportMetadataInputId: seabedOutputs[1].id,
+    sourceMetadataInputId: seabedOutputs[2].id, isobaths: "10,50,150", verticalExaggeration: 65, controlPoints: false,
+  } } satisfies CalculationJobDto;
+  const observed = await mockSeabedFigures(page, submissions, original);
+  await page.goto(`/lab/calculations?repeat=${original.id}`);
+  const dialog = page.getByRole("dialog", { name: "Расчёт на основе", exact: true });
+  await expect(dialog.getByRole("combobox", { name: "Подтип отчёта" })).toHaveText("Фрагменты фактической сетки");
+  await dialog.getByRole("button", { name: "Параметры дополнительного 3D-отчёта" }).click();
+  await expect(dialog.locator("#seabed-vertical")).toHaveValue("65");
+  await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  expect(submissions[0]).toMatchObject({ kind: "seabed_render", input: original.input });
+  expect(observed.unexpected).toEqual([]); expect(observed.pageErrors).toEqual([]);
+});
+
+for (const state of ["ready", "queued", "missing"] as const) {
+  test(`выбранный отчёт в задании: ${state}`, async ({ page }) => {
+    const filename = "seabed/svg/mesh-details.svg";
+    const selected = { ...seabedBuildJob, kind: "seabed_render", input: {
+      reportType: "mesh_details", modelInputId: seabedOutputs[0].id,
+      exportMetadataInputId: seabedOutputs[1].id, sourceMetadataInputId: seabedOutputs[2].id,
+    },
+      status: state === "queued" ? "queued" as const : "succeeded" as const,
+      artifacts: state === "ready" ? [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", category: "output" as const,
+        filename, contentType: "image/svg+xml", sizeBytes: 256, sha256: "c".repeat(64), downloadUrl: "/private/selected.svg" }] : [],
+    } satisfies CalculationJobDto;
+    await page.route("**/private/selected.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="160" height="100" fill="teal"/></svg>' }));
+    const observed = await mockSeabedFigures(page, [], selected);
+    await page.goto(`/lab/calculations/${selected.id}`);
+    const report = page.getByRole("region", { name: "Выбранный отчёт: Фрагменты фактической сетки" });
+    await expect(report).toBeVisible();
+    if (state === "ready") {
+      await expect(report.getByRole("img", { name: "Рисунок 5 · Фрагменты фактической сетки" })).toBeVisible();
+      await expect(page.getByRole("img")).toHaveCount(1);
+      const downloading = page.waitForEvent("download");
+      await page.getByRole("button", { name: "Скачать паспорт JSON", exact: true }).click();
+      const path = await (await downloading).path();
+      if (!path) throw new Error("Паспорт не скачался");
+      const passport = JSON.parse(await readFile(path, "utf8")) as { calculation: { input: { reportType: string } } };
+      expect(passport.calculation.input.reportType).toBe("mesh_details");
+    } else if (state === "queued") await expect(report.getByRole("status")).toContainText("после завершения");
+    else await expect(report.getByRole("alert")).toContainText("отсутствует среди результатов");
+    expect(observed.unexpected).toEqual([]); expect(observed.pageErrors).toEqual([]);
+  });
+}
+
+test("подтипы учитывают доступность каждого вычислительного сценария", async ({ page }) => {
+  const catalog = seabedKinds.map((item) => item.kind === "seabed_render" ? { ...item, available: false } : item);
+  const observed = await mockSeabedFigures(page, [], seabedBuildJob, false, seabedOutputs, catalog);
+  await page.goto("/lab/calculations?new=1");
+  await chooseOption(page, "Что рассчитать", "Отчёты по модели дна");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+  await expect(dialog.getByRole("combobox", { name: "Подтип отчёта" })).toHaveText("Поле размера ячеек");
+  await dialog.getByRole("combobox", { name: "Подтип отчёта" }).click();
+  await expect(page.getByRole("option", { name: "Обзор глубин · недоступен", exact: true })).toBeDisabled();
+  await expect(page.getByRole("option", { name: "Фрагменты фактической сетки · недоступен", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog.getByRole("button", { name: "Запустить расчёт", exact: true })).toBeDisabled();
+  expect(observed.unexpected).toEqual([]); expect(observed.pageErrors).toEqual([]);
+});
+
+const boxKinds = [
+  { kind: "dimension", title: "Размерность", description: "Полный закреплённый контур MarineRegions" },
+  { kind: "dimension_dataset", title: "Своя береговая линия", description: "Сохранённый набор" },
+  { kind: "dimension_file", title: "Размерность полного контура", description: "Научный GeoJSON" },
+] satisfies CalculationKindDto[];
+const boxInput: ScientificInputDto = { ...articleInputs[0], role: "coastline_geojson", name: "Контур для box-counting",
+  filename: "coastline.geojson", crs: "EPSG:4326", coordinateUnit: "degrees", validation: checkedCoastline };
+
+async function mockBoxCounting(page: Page, submissions: unknown[], original?: CalculationJobDto) {
+  return mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh") return { body: session };
+    if (path === "/api/calculations/kinds") return { body: boxKinds };
+    if (path === "/api/datasets") return { body: [{ ...dataset, validation: checkedCoastline }] };
+    if (path === "/api/scientific-inputs") return { body: [boxInput] };
+    if (path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") { submissions.push(body); return { status: 201, body: job }; }
+    if (path === `/api/calculations/${job.id}`) return { body: original ?? job };
+  });
+}
+
+for (const [kind, title, theme] of [
+  ["dimension", "Размерность", "light"], ["dimension", "Размерность", "dark"],
+  ["dimension_dataset", "Своя береговая линия", "light"],
+  ["dimension_file", "Размерность полного контура", "dark"],
+] as const) {
+  test(`box-counting: выбор отчёта сохраняет входы ${kind} · ${theme}`, async ({ page }) => {
+    const submissions: unknown[] = [];
+    const observed = await mockBoxCounting(page, submissions);
+    await page.setViewportSize({ width: 360, height: 780 });
+    await openNewCalculation(page, theme);
+    await chooseOption(page, "Что рассчитать", title);
+    const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+    if (kind === "dimension_dataset") {
+      await dialog.getByRole("combobox", { name: "Набор данных" }).click();
+      await page.getByRole("option", { name: new RegExp(dataset.name) }).click();
+    } else if (kind === "dimension_file") {
+      await dialog.locator("#scientific-coastlineInputId").click();
+      await page.getByRole("option", { name: /Контур для box-counting/ }).click();
+    }
+    const picker = dialog.getByRole("combobox", { name: "Вид отчёта box-counting" });
+    await expect(picker).toHaveText("Берег и аналитическая сетка");
+    await picker.focus(); await picker.press("Enter");
+    await expect(page.getByRole("option", { name: "Берег и аналитическая сетка", exact: true })).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("option", { name: "График регрессии", exact: true })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(picker).toHaveText("График регрессии");
+    await expect(picker).toBeFocused();
+    if (kind === "dimension_dataset") await expect(dialog.getByLabel("Набор данных")).toContainText(dataset.name);
+    if (kind === "dimension_file") await expect(dialog.locator("#scientific-coastlineInputId")).toContainText(boxInput.name);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+    if (kind === "dimension") await page.screenshot({ path: `/private/tmp/litora-0079-${theme}-regression-form.png` });
+    await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+    await expect.poll(() => submissions.length).toBe(1);
+    expect(submissions[0]).toEqual({ kind, input: { reportType: "box_counting_regression",
+      ...(kind === "dimension_dataset" ? { datasetId: dataset.id } : {}),
+      ...(kind === "dimension_file" ? { coastlineInputId: boxInput.id } : {}),
+    } });
+    expect(observed.unexpected).toEqual([]); expect(observed.pageErrors).toEqual([]);
+  });
+}
+
+for (const [reportType, title, filename] of [
+  ["coastline_box_counting", "Берег и аналитическая сетка", "svg/dimension_0.svg"],
+  ["box_counting_regression", "График регрессии", "svg/dimension_loglog_0.svg"],
+] as const) {
+  test(`box-counting: ${reportType} выделен, экспортируется и восстанавливается`, async ({ page }) => {
+    const original = { ...job, kind: "dimension_file", status: "succeeded" as const,
+      methodId: "box-counting", methodRevision: "reports-3", input: { coastlineInputId: boxInput.id, reportType },
+      artifacts: ["svg/dimension_0.svg", "svg/dimension_loglog_0.svg"].map((name, i) => ({
+        id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(i + 1).padStart(12, "0")}`, category: "output" as const,
+        filename: name, contentType: "image/svg+xml", sha256: "a".repeat(64), sizeBytes: 200, downloadUrl: `/private/box-${i}.svg`,
+      })),
+    } satisfies CalculationJobDto;
+    await page.route("**/private/box-*.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="160" height="100" fill="teal"/></svg>' }));
+    const submissions: unknown[] = [];
+    const observed = await mockBoxCounting(page, submissions, original);
+    await page.goto(`/lab/calculations/${job.id}`);
+    const selected = page.getByRole("region", { name: `Выбранный отчёт: ${title}` });
+    await expect(selected.getByRole("img")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Дополнительные визуальные отчёты", exact: true })).toBeVisible();
+    await expect(page.getByRole("img")).toHaveCount(2);
+    await expect(selected.getByRole("img")).toHaveAttribute("src", original.artifacts.find((file) => file.filename === filename)!.downloadUrl);
+    const downloading = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Скачать паспорт JSON", exact: true }).click();
+    const path = await (await downloading).path(); if (!path) throw new Error("Нет паспорта");
+    const passport = JSON.parse(await readFile(path, "utf8")) as CalculationMetadataExportV1;
+    expect(passport.calculation.input?.reportType).toBe(reportType);
+    expect(passport.calculation.methodRevision).toBe("reports-3");
+    await page.getByRole("link", { name: "Создать на основе", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Расчёт на основе", exact: true });
+    await expect(dialog.getByRole("combobox", { name: "Вид отчёта box-counting" })).toHaveText(title);
+    await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+    await expect.poll(() => submissions.length).toBe(1);
+    expect(submissions[0]).toMatchObject({ kind: "dimension_file", input: original.input });
+    expect(observed.unexpected).toEqual([]); expect(observed.pageErrors).toEqual([]);
+  });
+}
 
 test("карты дна: недоступный источник не подменяется чужой или последней моделью", async ({ page }) => {
   const submissions: unknown[] = [];
@@ -2760,8 +3261,8 @@ test("карты дна: недоступный источник не подме
   const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
   await expect(dialog.getByRole("alert")).toContainText("Не удалось открыть исходный расчёт");
   await expect(dialog.locator("#scientific-modelInputId")).toHaveText("Выберите вход");
-  await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
-  await expect(dialog.getByText("Выберите все научные входные файлы для этого сценария.")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Запустить расчёт", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("Выберите вход:");
   expect(submissions).toEqual([]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -2793,7 +3294,8 @@ test("карты дна: несколько плоских сеток требу
   await page.goto(`/lab/calculations?new=1&workflow=build&source=${meshed.id}`);
   const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
   await expect(dialog.locator("#scientific-flatMeshInputId")).toHaveText("Выберите вход");
-  await dialog.getByRole("button", { name: "Запустить расчёт", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Запустить расчёт", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("Выберите вход: Плоская расчётная сетка MSH");
   expect(submissions).toEqual([]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -2802,15 +3304,15 @@ test("карты дна: несколько плоских сеток требу
 test("карты дна: отключённые heavy-сценарии остаются видимыми и не запускаются", async ({ page }) => {
   const observed = await mockApi(page, (path, method) => {
     if (path === "/api/auth/refresh" && method === "POST") return { body: session };
-    if (path === "/api/calculations/kinds") return { body: kinds };
+    if (path === "/api/calculations/kinds") return { body: [...kinds, ...seabedKinds.map((item) => ({ ...item, available: false, unavailableReason: "Тяжёлые расчёты отключены на сервере." }))] };
     if (path === "/api/datasets" || path === "/api/calculations") return { body: [] };
   });
   await openNewCalculation(page);
   const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
-  for (const name of ["Рисунок 3 · Обзор глубин", "Рисунок 4 · Поле размера ячеек", "Рисунок 5 · Фактическая сетка"]) {
-    await expect(dialog.getByRole("button", { name, exact: true })).toBeDisabled();
-  }
-  await expect(dialog.getByText("Расчёты дна отключены на сервере.").first()).toBeVisible();
+  await dialog.getByRole("combobox", { name: "Что рассчитать" }).click();
+  await expect(page.getByRole("option", { name: "Отчёты по модели дна · недоступен", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog.getByText("Тяжёлые расчёты отключены на сервере.", { exact: true })).toBeVisible();
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -2824,10 +3326,10 @@ test("карты дна: галерея подписывает реальные 
   await page.route("**/private/*.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="160" height="100" fill="teal"/></svg>' }));
   const observed = await mockSeabedFigures(page, [], rendered);
   await page.goto(`/lab/calculations/${rendered.id}`);
-  for (const title of ["Рисунок 3 · Обзор глубин", "Рисунок 4 · Поле размера ячеек", "Рисунок 5 · Фактическая сетка"]) {
+  for (const title of ["Рисунок 3 · Обзор глубин", "Рисунок 4 · Поле размера ячеек", "Рисунок 5 · Фрагменты фактической сетки"]) {
     await expect(page.getByRole("img", { name: title, exact: true })).toBeVisible();
   }
-  await expect(page.getByText("Новая сетка ещё не построена.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Новая сетка ещё не построена", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "Рисунок 4 · Поле размера ячеек", exact: true }))
     .toHaveAttribute("href", `/lab/calculations?new=1&workflow=size-field&source=${rendered.id}`);
   expect(observed.unexpected).toEqual([]);
@@ -2912,6 +3414,7 @@ test("принятая адаптивная MSH выбирается как вх
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth)
   ).toBeLessThanOrEqual(360);
+  await dialog.locator("#build-maxSourceDistance").fill("50000");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect.poll(() => submissions.length).toBe(1);
   expect(submissions[0]).toMatchObject({
@@ -2937,10 +3440,10 @@ test("пресет рисунка 4 переносит точные параме
   await expect(page.locator("html")).toHaveClass(/light/);
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
   await dialog
-    .getByRole("button", { name: "Заполнить как рисунок 4: поле 50–250 м" })
+    .getByRole("button", { name: "Архив статьи: поле 50–250 м" })
     .click();
-  await expect(dialog.getByRole("status")).toContainText(
-    "Параметры рисунка 4 заполнены"
+  await expect(dialog.getByRole("region", { name: "3. Параметры" }).getByRole("status")).toContainText(
+    "Параметры архивного поля 50–250 м заполнены"
   );
   await expect(
     dialog.getByText("пресет не выбирает файлы", { exact: false })
@@ -2960,6 +3463,7 @@ test("пресет рисунка 4 переносит точные параме
     input: {
       modelInputId: articleInputs[0].id,
       sourceMetadataInputId: articleInputs[1].id,
+      reportType: "size_field",
       minSize: 50,
       coastSize: 75,
       shelfSize: 125,
@@ -2989,7 +3493,7 @@ test("пресет рисунков 6–7 задаёт архивный уров
   await dialog
     .getByRole("button", { name: "Заполнить как рисунки 6–7: сетки 125–250 м" })
     .click();
-  await expect(dialog.getByRole("status")).toContainText(
+  await expect(dialog.getByRole("region", { name: "3. Параметры" }).getByRole("status")).toContainText(
     "Большой расчёт не разрешён автоматически"
   );
   await expect(
@@ -3054,7 +3558,7 @@ test("рисунок 5 собирается из AI-01 с выбранными �
       name: "Компоновка AI-01: три фрагмента 125–250 м",
     })
     .click();
-  await expect(dialog.getByRole("status")).toContainText(
+  await expect(dialog.getByRole("region", { name: "3. Параметры" }).getByRole("status")).toContainText(
     "Для рисунка 5 выбраны уровень coarse, Delaunay и карточки AI-01"
   );
   await expect(
@@ -3455,6 +3959,7 @@ test("QA-03 запускается с пятью входами, сохраня�
     "bathymetryMetadataInputId",
   ].entries())
     await selectArticleInput(page, field, index);
+  await dialog.locator("#full-maxSourceDistance").fill("50000");
   await dialog.locator("#full-targetEdge").fill("900");
   await dialog.locator("#full-isobaths").fill("20,100,1000");
   await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
@@ -3493,6 +3998,100 @@ test("QA-03 запускается с пятью входами, сохраня�
   await repeat.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect.poll(() => submissions.length).toBe(2);
   expect(submissions[1]).toEqual(submissions[0]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("api-client запрашивает недоступные сценарии только явно", async () => {
+  const urls: string[] = [];
+  const client = createApiClient({ fetch: async (input) => {
+    urls.push(String(input));
+    return new Response("[]", { headers: { "content-type": "application/json" } });
+  } });
+  await client.calculationKinds();
+  await client.calculationKinds({ includeUnavailable: true });
+  await client.calculationKinds({ includeUnavailable: false });
+  expect(urls.map((url) => new URL(url, "https://example.test").search)).toEqual([
+    "", "?includeUnavailable=true", "?includeUnavailable=false",
+  ]);
+});
+
+test("новая композиция: данные предшествуют параметрам CERC, готовность видна до запуска", async ({ page }) => {
+  const submissions: unknown[] = [];
+  const observed = await mockApi(page, (path, method, body) => {
+    if (path === "/api/auth/refresh") return { body: session };
+    if (path === "/api/calculations/kinds") return { body: kinds };
+    if (path === "/api/datasets" || path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === "/api/calculations" && method === "POST") { submissions.push(body); return { body: job }; }
+  });
+  await openNewCalculation(page);
+  await chooseOption(page, "Что рассчитать", "Эрозия по своим данным");
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+  expect(await dialog.getByRole("heading", { level: 3 }).allTextContents()).toEqual([
+    "1. Тип расчёта", "2. Исходные данные", "3. Параметры", "4. Результат",
+  ]);
+  expect(await dialog.evaluate((element) => {
+    const ids = Array.from(element.querySelectorAll("[id]"), (node) => node.id);
+    return ids.filter((id, index) => ids.indexOf(id) !== index);
+  })).toEqual([]);
+  await expect(dialog.getByRole("region", { name: "2. Исходные данные" }).getByLabel("GeoJSON береговой линии или полного контура", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("region", { name: "3. Параметры" }).locator("#erosion-steps")).toHaveValue("3");
+  expect(await dialog.locator("#erosion-steps").evaluate((input: HTMLInputElement) => input.form?.id)).toBe("new-calculation-form");
+  await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("Выберите вход:");
+  await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+  await dialog.getByRole("button", { name: "Загрузить файл", exact: true }).first().click();
+  await expect(dialog.getByRole("region", { name: "2. Исходные данные" }).locator("form")).toHaveCount(1);
+  await expect(dialog.locator("form form")).toHaveCount(0);
+  await chooseOption(page, "Что рассчитать", "Размерность");
+  await expect(dialog.getByRole("region", { name: "2. Исходные данные" })).toContainText("MarineRegions");
+  await expect(dialog.getByRole("region", { name: "3. Параметры" })).toContainText("нет дополнительных параметров");
+  await expect(dialog.locator("#erosion-steps")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeEnabled();
+  expect(submissions).toEqual([]);
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("новая композиция: сервер объясняет heavy в селекторе и блокирует недоступный повтор", async ({ page }) => {
+  const reason = "Тяжёлые расчёты отключены на сервере. Доступность настраивает администратор.";
+  let includesUnavailable = false;
+  const submissions: unknown[] = [];
+  const observed = await mockApi(page, (path, method, body, params) => {
+    if (path === "/api/auth/refresh") return { body: session };
+    if (path === "/api/calculations/kinds") {
+      includesUnavailable ||= params.get("includeUnavailable") === "true";
+      return { body: [kinds[0], { ...kinds[3], available: false, unavailableReason: reason }] };
+    }
+    if (path === "/api/datasets" || path === "/api/calculations" && method === "GET") return { body: [] };
+    if (path === `/api/calculations/${job.id}`) return { body: { ...job, kind: "erosion_file", input: { ...erosionFileDefaults, steps: 7 } } };
+    if (path === "/api/calculations" && method === "POST") { submissions.push(body); return { body: job }; }
+  });
+  await page.goto(`/lab?repeat=${job.id}`);
+  const dialog = page.getByRole("dialog", { name: "Расчёт на основе" });
+  await expect(dialog.locator("#erosion-steps")).toHaveValue("7");
+  await expect(dialog.locator("#erosion-steps")).toBeDisabled();
+  await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText(reason);
+  await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+  const helpTrigger = dialog.getByRole("button", { name: /^Справка о расчёте/ });
+  await expect(helpTrigger).toBeEnabled();
+  await helpTrigger.click();
+  const help = page.getByRole("dialog", { name: /^Справка:/ });
+  await expect(help.getByText("Ваш локальный контур, волновой ряд CSV/JSON", { exact: false })).toBeVisible();
+  await expect(help.getByRole("button", { name: "Закрыть справку" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(help).toHaveCount(0);
+  await expect(helpTrigger).toBeFocused();
+  await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText(reason);
+  await helpTrigger.press("Enter");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Расчёт на основе", includeHidden: true })).toHaveCount(1);
+  if (await help.count() > 0) await help.getByRole("button", { name: "Закрыть справку" }).click();
+  await expect(helpTrigger).toBeFocused();
+  await dialog.getByLabel("Что рассчитать").click();
+  await expect(page.getByRole("option", { name: "Эрозия по своим данным · недоступен", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  expect(includesUnavailable).toBe(true);
+  expect(submissions).toEqual([]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -3541,9 +4140,33 @@ test("пустой каталог сценариев не позволяет с�
   await expect(
     dialog.getByText("Сейчас нет доступных сценариев для запуска.")
   ).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /^Справка о расчёте/ })).toHaveCount(0);
   await expect(
     dialog.getByRole("button", { name: "Запустить расчёт" })
   ).toBeDisabled();
+  expect(observed.unexpected).toEqual([]);
+  expect(observed.pageErrors).toEqual([]);
+});
+
+test("ошибка каталога остаётся в форме, справка появляется после успешной загрузки", async ({ page }) => {
+  let failed = true;
+  const observed = await mockApi(page, (path) => {
+    if (path === "/api/auth/refresh") return { body: session };
+    if (path === "/api/calculations/kinds") return failed
+      ? { status: 503, body: { message: "Каталог временно недоступен" } }
+      : { body: [kinds[0]] };
+    if (["/api/calculations", "/api/datasets"].includes(path)) return { body: [] };
+  });
+  await openNewCalculation(page);
+  const dialog = page.getByRole("dialog", { name: "Новый расчёт", exact: true });
+  await expect(dialog.getByRole("alert")).toContainText("Каталог временно недоступен");
+  await expect(dialog.getByRole("button", { name: /^Справка о расчёте/ })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+  failed = false;
+  await dialog.getByRole("button", { name: "Повторить загрузку", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Справка о расчёте «Размерность»", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Справка: Размерность", exact: true })).toBeVisible();
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
 });
@@ -3957,8 +4580,7 @@ test("кабинет показывает ошибку расчёта и поз�
   });
 
   await openNewCalculation(page);
-  await chooseOption(page, "Что рассчитать", "Размыв");
-  await page.getByLabel("Шаги волнового ряда (1–168)").fill("4");
+  await chooseOption(page, "Что рассчитать", "Размерность");
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page.getByRole("alert")).toContainText(
     "Вычислитель временно недоступен"
@@ -3970,8 +4592,8 @@ test("кабинет показывает ошибку расчёта и поз�
     page.getByRole("region", { name: "Результат расчёта" })
   ).toContainText(job.id);
   expect(requests).toEqual([
-    { kind: "erosion", input: { ...erosionDemoDefaults, steps: 4 } },
-    { kind: "erosion", input: { ...erosionDemoDefaults, steps: 4 } },
+    { kind: "dimension", input: { reportType: "coastline_box_counting" } },
+    { kind: "dimension", input: { reportType: "coastline_box_counting" } },
   ]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -4068,7 +4690,7 @@ test("загрузка своего GeoJSON и запуск dimension через
     },
   });
   expect(jobs).toEqual([
-    { kind: "dimension_dataset", input: { datasetId: dataset.id } },
+    { kind: "dimension_dataset", input: { datasetId: dataset.id, reportType: "coastline_box_counting" } },
   ]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -4112,7 +4734,7 @@ test("встроенный пример GeoJSON сохраняется при з
 
   expect(uploads).toEqual([defaultCoastlineDataset]);
   expect(jobs).toEqual([
-    { kind: "dimension_dataset", input: { datasetId: example.id } },
+    { kind: "dimension_dataset", input: { datasetId: example.id, reportType: "coastline_box_counting" } },
   ]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -4160,7 +4782,7 @@ test("повторный расчёт использует переименов�
   await page.getByRole("button", { name: "Запустить расчёт" }).click();
   await expect(page).toHaveURL(new RegExp(`/lab/calculations/${job.id}$`));
   expect(jobs).toEqual([
-    { kind: "dimension_dataset", input: { datasetId: example.id } },
+    { kind: "dimension_dataset", input: { datasetId: example.id, reportType: "coastline_box_counting" } },
   ]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);
@@ -4208,7 +4830,7 @@ test("расчёт своего контура без загруженного �
   ).toContainText(job.id);
   expect(uploads).toEqual([defaultCoastlineDataset]);
   expect(jobs).toEqual([
-    { kind: "dimension_dataset", input: { datasetId: example.id } },
+    { kind: "dimension_dataset", input: { datasetId: example.id, reportType: "coastline_box_counting" } },
   ]);
   expect(observed.unexpected).toEqual([]);
   expect(observed.pageErrors).toEqual([]);

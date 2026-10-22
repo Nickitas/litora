@@ -12,24 +12,21 @@ export const CommandsSection = () => {
     <section className="space-y-4 rounded-lg border p-4 sm:p-6">
       <h2 className="text-xl font-semibold sm:text-2xl">CLI команды</h2>
 
-      {/* Demo terminal with example command */}
+      {/* Пример команды с явно выбранными входными файлами. */}
       <div className="mb-6">
         <Terminal>
           <TypingAnimation>
-            ./lito model erosion \ --steps 15 \ --erosion-strength 50 \
-            --wave-direction 45 \ --wind-speed 14 \ --bathymetry
-            data/black-sea-bathymetry.json \ --lithology
-            data/black-sea-lithology.json \ --enable-lithology \ --output
-            ./output/erosion-full
+            ./lito erosion --input data/coast-segment.geojson --wave-input
+            data/waves.csv --bathymetry data/bathymetry.json --output output/research
           </TypingAnimation>
           <AnimatedSpan className="text-primary">
-            ✔ Загрузка батиметрии…
+            Замените пути своими сохранёнными файлами участка.
           </AnimatedSpan>
           <AnimatedSpan className="text-primary">
-            ✔ Подготовка модели эрозии…
+            Рядом с батиметрией подготовьте её паспорт .metadata.json.
           </AnimatedSpan>
           <AnimatedSpan className="text-status-succeeded">
-            ✓ Расчёт завершён. Результаты сохранены в ./output/
+            Пустой запуск не подставляет демонстрационные данные.
           </AnimatedSpan>
         </Terminal>
       </div>

@@ -406,7 +406,8 @@ curl --fail --silent --show-error --output /dev/null https://litora.example.org/
    Не публиковать JSON с ключом в журнале приёмки. `/login`: регистрация с этим
    ключом, вход, reload, logout; повторное использование ключа запрещено.
    Cookie Secure/HttpOnly/SameSite, access token не в storage, нет mixed content.
-2. `/lab`: последовательно dimension, map, erosion. Дождаться реального succeeded,
+2. `/lab`: последовательно dimension, map и erosion_file по подготовленным
+   реальным входам участка. Дождаться реального succeeded,
    открыть отчёт, скачать manifest, сопоставить размер/SHA-256 файла с реестром.
 3. Второй пользователь не получает job первого; отмена не становится success позже.
 4. URL без подписи не даёт файл, signed URL снаружи сервера работает только до срока.

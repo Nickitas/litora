@@ -272,23 +272,24 @@ await second.request("/calculations", "POST", {
   kind: "dimension_dataset", input: { datasetId: uploaded.id },
 }, 404);
 let deletableMap;
-for (const kind of ["dimension", "dimension_dataset", "map", "erosion", "all_demo"]) {
-  const demo = kind === "erosion" || kind === "all_demo";
+const beforeRetired = await first.request("/calculations/page?limit=1");
+for (const kind of ["erosion", "all_demo"]) {
+  const error = await first.request("/calculations", "POST", { kind, input: { steps: 2 } }, 400);
+  assert.match(error.message, /Демонстрационный сценарий удалён/);
+}
+assert.equal((await first.request("/calculations/page?limit=1")).totalCount, beforeRetired.totalCount);
+for (const kind of ["dimension", "dimension_dataset", "map"]) {
   const expectedMethod = {
     dimension: "box-counting",
     dimension_dataset: "box-counting",
     map: "black-sea-overview",
-    erosion: "cerc-one-line",
-    all_demo: null,
   }[kind];
-  const expectedRevision = kind === "map" ? "scientific-map-3" : "reports-2";
+  const expectedRevision = kind === "map" ? "scientific-map-3" : "reports-3";
   const job = await first.request(
     "/calculations",
     "POST",
-    { kind, input: demo ? {
-      steps: 2, cercCoefficient: 0.5, outputCsv: true, csvFormat: "wide",
-    } :
-      kind === "dimension_dataset" ? { datasetId: uploaded.id } : {} },
+    { kind, input: kind === "dimension_dataset" ? { datasetId: uploaded.id, reportType: "coastline_box_counting" }
+      : kind === "dimension" ? { reportType: "box_counting_regression" } : {} },
     201,
   );
   await second.request(`/calculations/${job.id}`, "GET", undefined, 404);
@@ -311,6 +312,7 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion", "all_dem
   assert.equal(result.resultSchemaVersion, 1);
   assert.equal(result.methodId, expectedMethod);
   assert.equal(result.methodRevision, expectedMethod ? expectedRevision : null);
+  if (kind !== "map") assert.equal(result.input.reportType, kind === "dimension" ? "box_counting_regression" : "coastline_box_counting");
   assert.deepEqual(result.resultSummary.method, expectedMethod ? {
     id: expectedMethod,
     revision: expectedRevision,
@@ -339,16 +341,13 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion", "all_dem
     const bytes = Buffer.from(await (await fetch(svg.downloadUrl)).arrayBuffer());
     assert.equal(createHash("sha256").update(bytes).digest("hex"), svg.sha256);
     assert.match(bytes.toString("utf8"), /D=1\.10840/);
+    const regression = result.artifacts.find((file) => file.filename === "svg/dimension_loglog_0.svg");
+    assert.ok(regression);
+    const graph = await (await fetch(regression.downloadUrl)).text();
+    assert.equal(createHash("sha256").update(graph).digest("hex"), regression.sha256);
+    assert.ok(graph.includes("N(ε)≈21 (округлено)"));
+    assert.equal(Number(graph.match(/data-intercept="([^"]+)"/)[1]), metrics.iterations[0].dimension.regression_intercept);
     assert.ok(result.artifacts.some((file) => file.filename === "svg/dimension_loglog_0.svg"));
-  }
-  if (demo)
-    assert.match(result.resultSummary.provenance.declaredSources.waves, /Open-Meteo/);
-  if (demo) {
-    assert.match(result.commandLine, /--black-sea-sochi --offline/);
-    assert.match(result.commandLine, /--cerc-coefficient 0\.5/);
-    assert.match(result.commandLine, kind === "all_demo"
-      ? /--output-csv all-metrics\.csv --csv-format wide/
-      : /--output-csv erosion-metrics\.csv --csv-format wide/);
   }
   if (kind === "dimension_dataset") {
     assert.equal(result.resultSummary.provenance.datasetId, uploaded.id);
@@ -394,14 +393,6 @@ for (const kind of ["dimension", "dimension_dataset", "map", "erosion", "all_dem
     revision: expectedRevision,
   } : undefined);
   assert.ok(manifest.artifacts.length > 0);
-  if (demo) {
-    const csvName = kind === "all_demo" ? "csv/all-metrics.csv" : "csv/erosion-metrics.csv";
-    const csv = result.artifacts.find((file) => file.filename === csvName);
-    assert.ok(csv, "CLI должен создать CSV для демонстрационного расчёта");
-    const csvBytes = Buffer.from(await (await fetch(csv.downloadUrl)).arrayBuffer());
-    assert.equal(createHash("sha256").update(csvBytes).digest("hex"), csv.sha256);
-    assert.ok(manifest.artifacts.some((file) => file.path === csvName));
-  }
   const unsigned = new URL(artifact.downloadUrl);
   unsigned.search = "";
   assert.equal(
@@ -489,7 +480,7 @@ for (const ownSource of [false, true]) {
 }
 if (process.env.TEST_HEAVY_ENABLED === "true") {
   const next = await first.request("/calculations", "POST", {
-    kind: "dimension_file", input: { coastlineInputId: selectedCoastline.id },
+    kind: "dimension_file", input: { coastlineInputId: selectedCoastline.id, reportType: "box_counting_regression" },
   }, 201);
   let state;
   for (let attempt = 0; attempt < 150; attempt++) {
@@ -499,6 +490,8 @@ if (process.env.TEST_HEAVY_ENABLED === "true") {
   }
   assert.equal(state.status, "succeeded", JSON.stringify(state));
   assert.equal(state.resultSummary.provenance.files[0].sha256, selectedCoastline.sha256);
+  assert.equal(state.input.reportType, "box_counting_regression");
+  assert.equal(state.methodRevision, "reports-3");
   console.log("coastline_region → dimension_file: расчёт по выделенной линии, SHA-256 источника совпал");
   await second.request("/calculations", "POST", {
     kind: "source_file", input: { coastlineInputId: scientificRecord.id },
@@ -705,11 +698,11 @@ if (process.env.TEST_MESH_ENABLED === "true") {
       "bathymetry_grid_metadata_json", "Паспорт набора GEBCO для теста");
     await second.request("/calculations", "POST", { kind: "seabed_build", input: {
       flatMeshInputId: flatMesh.id, bathymetryInputId, bathymetryMetadataInputId,
-      coastlineInputId: coastline.id, boundaryDetail: 2000,
+      coastlineInputId: coastline.id, boundaryDetail: 2000, maxSourceDistance: 50000,
     } }, 404);
     const build = await first.request("/calculations", "POST", { kind: "seabed_build", input: {
       flatMeshInputId: flatMesh.id, bathymetryInputId, bathymetryMetadataInputId,
-      coastlineInputId: coastline.id, boundaryDetail: 2000,
+      coastlineInputId: coastline.id, boundaryDetail: 2000, maxSourceDistance: 50000,
     } }, 201);
     let built;
     for (let attempt = 0; attempt < 150; attempt++) {
@@ -756,6 +749,7 @@ if (process.env.TEST_MESH_ENABLED === "true") {
           await delay(1000);
         }
         assert.equal(state.status, "succeeded", JSON.stringify(state));
+        if (input.reportType !== undefined) assert.equal(state.input.reportType, input.reportType);
         const artifact = state.artifacts.find((file) => file.filename === expectedFilename);
         assert.ok(artifact, `${kind} должен сохранить ${expectedFilename}`);
         const response = await fetch(artifact.downloadUrl);
@@ -779,10 +773,16 @@ if (process.env.TEST_MESH_ENABLED === "true") {
         return next.id;
       };
       await runSeabed("seabed_render", {
-        modelInputId, exportMetadataInputId, sourceMetadataInputId,
+        modelInputId, exportMetadataInputId, sourceMetadataInputId, reportType: "bathymetry_overview",
       }, "seabed/svg/bathymetry-overview.svg");
+      await first.request("/calculations", "POST", { kind: "seabed_render", input: {
+        modelInputId, exportMetadataInputId, sourceMetadataInputId, reportType: "size_field",
+      } }, 400);
+      await runSeabed("seabed_render", {
+        modelInputId, exportMetadataInputId, sourceMetadataInputId, reportType: "mesh_details",
+      }, "seabed/svg/mesh-details.svg");
       const adaptId = await runSeabed("seabed_adapt", {
-        modelInputId, sourceMetadataInputId,
+        modelInputId, sourceMetadataInputId, reportType: "size_field",
       }, "seabed/adaptive/size-field.csv");
       const adaptedInputs = await first.request("/scientific-inputs/reusable-artifacts");
       const fieldCsvInputId = adaptedInputs.find((item) =>
@@ -793,7 +793,7 @@ if (process.env.TEST_MESH_ENABLED === "true") {
         "Поле ADAPT-01 должно быть доступно следующим заданиям");
       const adaptiveInput = {
         modelInputId, exportMetadataInputId, fieldCsvInputId,
-        fieldReportInputId, coastlineInputId: coastline.id, boundaryDetail: 2000,
+        fieldReportInputId, coastlineInputId: coastline.id, boundaryDetail: 2000, maxSourceDistance: 50000,
         maxCells: 20000, generatorTimeoutMinutes: 1,
       };
       await runSeabed("seabed_generate_adaptive", {
@@ -844,7 +844,7 @@ console.log("Невалидная для Go геометрия завершил�
 const cancelled = await first.request(
   "/calculations",
   "POST",
-  { kind: "erosion", input: { steps: 48 } },
+  { kind: "dimension", input: {} },
   201,
 );
 await first.request(
@@ -922,6 +922,13 @@ assert.equal(selectedReport.source_sha256, wholeSea.sha256);
 await second.request(`/scientific-inputs/${savedLines[0].id}/coastline-preview`, "GET", undefined, 404);
 console.log("Каталог всего моря: приватная копия, повтор/гонка, квота, проверка Go, область и сохранённые линии S3 проверены");
 assert.ok(swagger.paths["/api/calculations"].post);
+const createCalculationSchema = swagger.paths["/api/calculations"].post.requestBody.content["application/json"].schema;
+assert.deepEqual(createCalculationSchema.properties.input.properties.reportType.enum, ["bathymetry_overview", "size_field", "mesh_details", "coastline_box_counting", "box_counting_regression"]);
+assert.deepEqual(createCalculationSchema.oneOf.find((branch) => branch.properties.kind.enum[0] === "seabed_render").properties.input.properties.reportType.enum, ["bathymetry_overview", "mesh_details"]);
+assert.deepEqual(createCalculationSchema.oneOf.find((branch) => branch.properties.kind.enum[0] === "seabed_adapt").properties.input.properties.reportType.enum, ["size_field"]);
+for (const kind of ["dimension", "dimension_dataset", "dimension_file"]) {
+  assert.deepEqual(createCalculationSchema.oneOf.find((branch) => branch.properties.kind.enum[0] === kind).properties.input.properties.reportType.enum, ["coastline_box_counting", "box_counting_regression"]);
+}
 assert.ok(swagger.paths["/api/scientific-inputs/catalogue"].get);
 assert.ok(swagger.paths["/api/scientific-inputs/catalogue/{id}"].post);
 assert.ok(swagger.components.schemas.ScientificCatalogueEntryResponse.properties.geometryKind);

@@ -3,7 +3,7 @@ import { geoMercator, geoPath } from "d3-geo";
 import type { CoastlinePreviewDto, CoastlineRegionBoundsDto } from "@litora/contracts";
 import { api } from "@/shared/api/client";
 import { Button } from "@/shared/shadcn/components/ui/button";
-import { Input } from "@/shared/shadcn/components/ui/input";
+import { NumericCalculationInput } from "./numeric-calculation-input";
 import { Label } from "@/shared/shadcn/components/ui/label";
 import { errorMessage } from "../model/use-calculations";
 
@@ -12,10 +12,11 @@ const sea = { west: 27, south: 40.5, east: 42.5, north: 47.5 };
 
 import { displayLines } from "../model/coastline-display";
 
-export function CoastlineRegionPicker({ value, onChange, sourceId }: {
+export function CoastlineRegionPicker({ value, onChange, sourceId, formId }: {
   value: RegionFields;
   onChange: (value: RegionFields) => void;
   sourceId?: string;
+  formId?: string;
 }) {
   const [preview, setPreview] = useState<CoastlinePreviewDto | null>(null);
   const [error, setError] = useState("");
@@ -66,8 +67,8 @@ export function CoastlineRegionPicker({ value, onChange, sourceId }: {
   const bottomRight = valid ? drawing.projection([bounds.east, bounds.south]) : null;
   const marker = first ? drawing.projection(first) : null;
   return (
-    <section aria-labelledby="coastline-region-heading" className="space-y-4 border-t pt-6">
-      <h3 id="coastline-region-heading" className="text-lg font-semibold">3. Область побережья</h3>
+    <section aria-labelledby="coastline-region-heading" className="space-y-4">
+      <h4 id="coastline-region-heading" className="text-lg font-semibold">Область побережья</h4>
       <p className="text-sm text-muted-foreground">Отметьте два противоположных угла на карте или введите границы ниже. Все попавшие в область участки сохранятся без упрощения и соединения разрывов.</p>
       {loading ? <p role="status">Загружаем полный контур…</p> : error ? <div role="alert" className="rounded-xl border p-4 text-sm text-destructive">
         Не удалось показать выбранный источник: {error}
@@ -91,9 +92,9 @@ export function CoastlineRegionPicker({ value, onChange, sourceId }: {
         <p className="text-xs break-words text-muted-foreground">{preview.source} · {preview.crs} · SHA-256: {preview.sha256.slice(0, 16)}…</p>
       </div>}
       <div className="grid gap-3 sm:grid-cols-2">
-        {([["west", "Западная долгота, °", 27, 42.5], ["east", "Восточная долгота, °", 27, 42.5], ["south", "Южная широта, °", 40.5, 47.5], ["north", "Северная широта, °", 40.5, 47.5]] as const).map(([key, label, min, max]) => <div key={key} className="space-y-2">
+        {([["west", "Западная долгота, °"], ["east", "Восточная долгота, °"], ["south", "Южная широта, °"], ["north", "Северная широта, °"]] as const).map(([key, label]) => <div key={key} className="space-y-2">
           <Label htmlFor={`region-${key}`}>{label}</Label>
-          <Input id={`region-${key}`} type="number" required min={min} max={max} step="any" value={value[key]} onChange={(event) => onChange({ ...value, [key]: event.target.value })} />
+          <NumericCalculationInput kind="coastline_region" parameter={key} form={formId} id={`region-${key}`} value={value[key]} onChange={(event) => onChange({ ...value, [key]: event.target.value })} />
         </div>)}
       </div>
       {!valid && <p role="alert" className="text-sm text-destructive">Задайте запад меньше востока и юг меньше севера в пределах Чёрного моря.</p>}

@@ -16,6 +16,15 @@ export const seabedWorkflows = [
 
 export type SeabedWorkflowId = typeof seabedWorkflows[number]["id"];
 
+export function workflowReportType(workflow: SeabedWorkflowId) {
+  switch (workflow) {
+    case "bathymetry": return "bathymetry_overview";
+    case "size-field": return "size_field";
+    case "mesh-fragments": return "mesh_details";
+    default: return undefined;
+  }
+}
+
 export function parseSeabedWorkflow(value: string | null) {
   return seabedWorkflows.find((item) => item.id === value)?.id;
 }
@@ -62,9 +71,3 @@ export function workflowInputs(
   }
   return result;
 }
-
-export const seabedReportLabels: Record<string, { title: string; description: string }> = {
-  "seabed/svg/bathymetry-overview.svg": { title: "Рисунок 3 · Обзор глубин", description: "Батиметрия, изобаты и зоны рельефа." },
-  "seabed/svg/size-field.svg": { title: "Рисунок 4 · Поле размера ячеек", description: "Цвет показывает целевую длину ребра h(x,y), а не глубину. Новая сетка ещё не построена." },
-  "seabed/svg/mesh-details.svg": { title: "Рисунок 5 · Фактическая сетка", description: "Все ячейки контрольных окон без прореживания; цвет показывает геометрическое качество." },
-};

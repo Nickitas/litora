@@ -60,8 +60,6 @@ var (
 	allOffshoreDistance       float64
 	allMaxChange              float64
 	allMaxBathymetryGap       float64
-	allBlackSeaSochi          bool
-	allOffline                bool
 )
 
 var allCmd = &cobra.Command{
@@ -74,10 +72,9 @@ var allCmd = &cobra.Command{
 3. Одномерное моделирование CERC по загруженному волновому ряду
 4. Пространственный баланс наносов и экспорт результатов
 
-Без файлов команда запускает демонстрационный открытый
-сценарий Сочи со статусом demo. Он не является оценкой годового размыва,
-калибровкой или научным отчётом. Программа принимает данные только для
-Чёрного моря.`,
+Явно укажите --input (или --source-url), --wave-input и --bathymetry.
+Отсутствующие входы не подставляются и не генерируются. Программа принимает
+данные только для Чёрного моря; расчёт не подтверждает их научную пригодность.`,
 	RunE: runAll,
 }
 
@@ -111,8 +108,6 @@ func init() {
 	allCmd.Flags().Float64Var(&allRightBoundaryTransport, "right-boundary-transport", 0, "поток наносов через правую границу, м³/с; положительный направлен из сегмента")
 	allCmd.Flags().StringVar(&allSedimentSources, "sediment-sources", "", "JSON внешних источников и стоков наносов по ячейкам")
 	allCmd.Flags().StringVar(&allStructures, "structures", "", "JSON сооружений, изменяющих пропуск потока между ячейками")
-	allCmd.Flags().BoolVar(&allBlackSeaSochi, "black-sea-sochi", false, "загрузить открытые данные Сочи для демонстрационного конвейера demo")
-	allCmd.Flags().BoolVar(&allOffline, "offline", false, "для демо Сочи использовать только локальный проверенный кэш без сети")
 
 	// Export options
 	allCmd.Flags().StringVar(&allOutputCSV, "output-csv", "", "путь к CSV файлу для экспорта метрик")
@@ -126,42 +121,9 @@ func init() {
 	allCmd.Flags().BoolVar(&allDisableSimplify, "no-model-simplify", false, "отключить упрощение базовой модели")
 }
 
-func runAll(cmd *cobra.Command, args []string) error {
-	// Пустой запуск должен быть воспроизводимым и не использовать обзорную
-	// линию всего Чёрного моря как локальный инженерный участок. Поэтому
-	// выбирается единственный готовый набор с открытыми входами — Сочи.
-	if allInput == "" && allBathymetry == "" && allWaveInput == "" && !allBlackSeaSochi {
-		allBlackSeaSochi = true
-		fmt.Println("✓ Входные файлы не заданы: выбран демонстрационный набор Чёрного моря — Сочи (demo)")
-	}
-	if err := validateSochiOfflineMode(allOffline, allBlackSeaSochi, allSourceURL); err != nil {
+func runAll(_ *cobra.Command, _ []string) error {
+	if err := validateCERCInputs(allInput, allSourceURL, allBathymetry, allWaveInput); err != nil {
 		return err
-	}
-	if allBlackSeaSochi {
-		paths, err := prepareBlackSeaSochiDataWithPolicy(allRefresh, allOffline)
-		if err != nil {
-			return fmt.Errorf("подготовка набора Сочи: %w", err)
-		}
-		allInput = paths.Coastline
-		allBathymetry = paths.Bathymetry
-		allWaveInput = paths.Waves
-		allWaveSource = paths.WaveSource
-		if !cmd.Flags().Changed("structures") {
-			allStructures = paths.Structures
-		}
-		if !cmd.Flags().Changed("max-bathymetry-gap") {
-			allMaxBathymetryGap = 3000
-		}
-		if !cmd.Flags().Changed("bathymetry-resolution") {
-			allBathymetryResolution = 0.005
-		}
-		if allSteps == 0 {
-			allSteps = 24
-		}
-		fmt.Printf("✓ Загружен стартовый набор Сочи: %s\n", blackSeaSochiDataDir)
-		if paths.StructureWarning != "" {
-			fmt.Printf("Предупреждение: %s\n", paths.StructureWarning)
-		}
 	}
 
 	// Load coastline
@@ -221,9 +183,6 @@ func runAll(cmd *cobra.Command, args []string) error {
 
 	// Run erosion simulation
 	fmt.Println("\nВыполнение моделирования волновой эрозии...")
-	if allWaveInput == "" {
-		return fmt.Errorf("укажите --wave-input: полный конвейер не использует вымышленные волновые условия")
-	}
 	climate, err := geometry.LoadWaveClimate(allWaveInput, allWaveSource)
 	if err != nil {
 		return err
@@ -234,7 +193,7 @@ func runAll(cmd *cobra.Command, args []string) error {
 	if err := validateCERCResourceLimits(len(climate.Conditions), len(result.Points), allMaxWaveConditions, allMaxCoastPoints, allMaxSVGFrames); err != nil {
 		return err
 	}
-	scenario := classifyLongshoreScenario(allBlackSeaSochi, climate, modelInputs)
+	scenario := classifyLongshoreScenario()
 	model, err := geometry.RunLongshoreCERC(modelBase, climate, geometry.LongshoreModelConfig{
 		Scenario:                  scenario,
 		Bathymetry:                modelInputs.BathymetryGrid,

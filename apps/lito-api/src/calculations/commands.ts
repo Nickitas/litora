@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { bundledBlackSeaPath } from "./input-provenance.js";
-import { aiNecessityDefaults, allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults, expertSetDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
+import { findCalculationReport, calculationParameterCombinationError, adaptiveParameterDefinitions, aiNecessityDefaults, allFileDefaults, cercCalibrationDefaults, erosionFileDefaults, expertSetDefaults, optionalScientificInputRequirements, retiredCalculationKinds, resolveNumericCalculationParameter, resolveTextCalculationParameter, scientificInputRequirements } from "@litora/contracts";
 import type {
   CalculationKind,
   CalculationKindDto,
@@ -21,9 +21,9 @@ export const calculationKinds: CalculationKindDto[] = [
   { kind: "dimension_file", title: "Размерность полного контура", description: "Box-counting загруженного GeoJSON, включая полный контур Чёрного моря." },
   { kind: "map", title: "Карта Чёрного моря", description: "Полный закреплённый контур MarineRegions: обзорная SVG и GeoJSON." },
   { kind: "map_file", title: "Карта своего контура", description: "Обзорная SVG и GeoJSON по загруженному контуру Чёрного моря." },
-  { kind: "erosion", title: "Эрозия: демонстрационный сценарий Сочи", description: "CERC на закреплённых данных; демонстрация, не прогноз." },
+  { kind: "erosion", title: "Эрозия: историческая демонстрация Сочи", description: "Только чтение прежних результатов. Для нового расчёта выберите собственные входы.", selectable: false },
   { kind: "erosion_file", title: "Эрозия по своим данным", description: "CERC по загруженным контуру, волнам и батиметрии с проверяемым паспортом; не калиброванный прогноз." },
-  { kind: "all_demo", title: "Полный демонстрационный конвейер Сочи", description: "Проверка контура, размерность, CERC и баланс наносов; SVG, JSON, опционально CSV и GIF." },
+  { kind: "all_demo", title: "Исторический демонстрационный конвейер Сочи", description: "Только чтение прежних результатов. Для нового расчёта выберите собственные входы.", selectable: false },
   { kind: "all_file", title: "Полный конвейер по своим данным", description: "Проверка контура, размерность, CERC и баланс наносов по загруженным файлам; не калиброванный прогноз." },
   { kind: "calibrate_cerc", title: "Калибровка CERC по наблюдениям", description: "Сравнение коэффициентов CERC с независимыми годовыми скоростями береговой линии и фактическим годовым волновым рядом." },
   { kind: "shoreline_data_audit", title: "Аудит ряда береговой линии", description: "Проверка дат, пробелов, точности и покрытия волнами в Go; без прогноза." },
@@ -60,7 +60,28 @@ export function scientificReferences(job: CreateCalculationDto) {
   }));
 }
 
+export function listCalculationKinds(heavyEnabled: boolean, includeUnavailable: unknown = undefined): CalculationKindDto[] {
+  if (includeUnavailable !== undefined && includeUnavailable !== "true" && includeUnavailable !== "false")
+    throw new BadRequestException("includeUnavailable должен быть true или false");
+  return calculationKinds
+    .filter((item) => includeUnavailable === "true" || heavyEnabled || resourceProfileForKind(item.kind) === "standard")
+    .map((item) => {
+      if (retiredCalculationKinds.some((kind) => kind === item.kind))
+        return { ...item, available: false, unavailableReason: "Демонстрационный сценарий удалён. Выберите реальные входные данные." };
+      if (!heavyEnabled && resourceProfileForKind(item.kind) === "heavy")
+        return { ...item, available: false, unavailableReason: "Тяжёлые расчёты отключены на сервере. Доступность настраивает администратор." };
+      return { ...item, available: true };
+    });
+}
+
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function reportOptions(kind: CalculationKind, value: unknown): Record<string, string> {
+  if (value === undefined) return {};
+  const report = findCalculationReport(kind, value);
+  if (!report) throw new BadRequestException("Подтип отчёта не поддерживается выбранным расчётом");
+  return { reportType: report.type };
+}
 
 function numberIn(value: unknown, label: string, minimum: number, maximum: number, integer = false) {
   if (
@@ -68,6 +89,23 @@ function numberIn(value: unknown, label: string, minimum: number, maximum: numbe
     value < minimum || value > maximum || (integer && !Number.isInteger(value))
   ) throw new BadRequestException(`Недопустимое значение «${label}»`);
   return value;
+}
+
+function numericParameter(kind: CalculationKind, field: string, value: unknown): number {
+  try { return resolveNumericCalculationParameter(kind, field, value); }
+  catch (error) {
+    throw new BadRequestException(error instanceof Error ? error.message : "Недопустимый числовой параметр");
+  }
+}
+
+function stringParameter(kind: CalculationKind, field: string, value: unknown): string {
+  try { return resolveTextCalculationParameter(kind, field, value); }
+  catch (error) { throw new BadRequestException(error instanceof Error ? error.message : "Недопустимый текстовый параметр"); }
+}
+
+function assertParameterCombination(kind: CalculationKind, input: Record<string, unknown>) {
+  const error = calculationParameterCombinationError(kind, input);
+  if (error) throw new BadRequestException(error);
 }
 
 function rejectUnknown(input: Record<string, unknown>, allowed: string[]) {
@@ -106,37 +144,8 @@ function optionalReferences(input: Record<string, unknown>, kind: keyof typeof o
   return result;
 }
 
-function positiveNumberList(value: unknown, label: string) {
-  if (typeof value !== "string" || !/^[0-9]{1,5}(,[0-9]{1,5}){0,3}$/.test(value))
-    throw new BadRequestException(`Недопустимый список «${label}»`);
-  for (const item of value.split(","))
-    numberIn(Number(item), label, 10, 10000);
-  return value;
-}
 
-function generatorList(value: unknown) {
-  if (typeof value !== "string" ||
-      !["delaunay", "frontal-quad", "parallelograms", "delaunay,frontal-quad", "delaunay,frontal-quad,parallelograms"].includes(value))
-    throw new BadRequestException("Недопустимый набор генераторов Gmsh");
-  return value;
-}
 
-function comparisonLevels(value: unknown) {
-  if (typeof value !== "string") throw new BadRequestException("Уровни должны быть строкой");
-  const levels = value.split(",");
-  if (levels.length < 1 || levels.length > 4)
-    throw new BadRequestException("Допустимо от одного до четырёх уровней");
-  const ids = new Set<string>();
-  for (const level of levels) {
-    const parts = /^([a-z][a-z0-9_-]{0,31}):([0-9]{1,5}):([0-9]{1,5})$/.exec(level);
-    if (!parts || ids.has(parts[1]) ||
-        numberIn(Number(parts[2]), "Минимум уровня", 10, 10000) >=
-          numberIn(Number(parts[3]), "Максимум уровня", 10, 10000))
-      throw new BadRequestException("Уровни: уникальные id:min:max, 10–10000 м и min < max");
-    ids.add(parts[1]);
-  }
-  return value;
-}
 
 function expertOptions(input: Record<string, unknown>, levels: string, generators: string) {
   if (input.generateExpertSet !== undefined && typeof input.generateExpertSet !== "boolean")
@@ -186,18 +195,10 @@ function figureFiveOptions(
   return { generateFigureFive: true, figureFiveLevel: level, figureFiveGenerator: generator };
 }
 
-function isobathList(value: unknown): string {
-  if (typeof value !== "string" || !/^[0-9]{1,5}(\.[0-9]{1,3})?(,[0-9]{1,5}(\.[0-9]{1,3})?){0,15}$/.test(value) ||
-      value.split(",").some((item) => Number(item) <= 0 || Number(item) > 10000))
-    throw new BadRequestException("Изобаты: до 16 глубин больше 0 и не более 10000 м через запятую");
-  return value;
-}
 
 function validateCercOptions(
   input: Record<string, unknown>,
   defaults: CercOptionsDto,
-  maxSteps: number,
-  maxGifSkip: number,
 ): CercOptionsDto {
   if (input.outputCsv !== undefined && typeof input.outputCsv !== "boolean")
     throw new BadRequestException("Недопустимый флаг экспорта CSV");
@@ -206,40 +207,34 @@ function validateCercOptions(
   if (input.outputGif !== undefined && typeof input.outputGif !== "boolean")
     throw new BadRequestException("Недопустимый флаг экспорта GIF");
   const ownFullSeries = defaults.svgMaxFrames !== undefined;
-  const steps = numberIn(input.steps ?? defaults.steps, "Шаги", ownFullSeries ? 0 : 1, maxSteps, true);
+  const steps = numericParameter("erosion_file", "steps", input.steps);
   const svgMaxFrames = ownFullSeries
-    ? numberIn(input.svgMaxFrames ?? defaults.svgMaxFrames, "Число SVG", 0, 128, true)
+    ? numericParameter("erosion_file", "svgMaxFrames", input.svgMaxFrames)
     : undefined;
-  if (steps === 0 && (svgMaxFrames === undefined || svgMaxFrames < 2))
-    throw new BadRequestException("Для полного волнового ряда укажите от 2 до 128 SVG");
   const outputGif = input.outputGif ?? defaults.outputGif;
   const outputCsv = input.outputCsv ?? defaults.outputCsv;
   const csvFormat = input.csvFormat ?? defaults.csvFormat;
-  if (steps === 0 && outputGif)
-    throw new BadRequestException("GIF для полного волнового ряда недоступен из-за расхода памяти");
-  if (steps > 48 && outputGif)
-    throw new BadRequestException("Для ряда длиннее 48 часов используйте интерактивный реплей вместо GIF");
-  if (steps === 0 && outputCsv && csvFormat === "wide")
-    throw new BadRequestException("Для полного волнового ряда используйте длинный CSV");
-  return {
+  const options: CercOptionsDto = {
     steps,
     ...(svgMaxFrames !== undefined ? { svgMaxFrames } : {}),
-    breakingIndex: numberIn(input.breakingIndex ?? defaults.breakingIndex, "Индекс разрушения", 0.55, 1.2),
-    bermHeight: numberIn(input.bermHeight ?? defaults.bermHeight, "Высота бермы", 0.001, 100),
-    closureDepth: numberIn(input.closureDepth ?? defaults.closureDepth, "Глубина замыкания", 0.001, 1000),
-    porosity: numberIn(input.porosity ?? defaults.porosity, "Пористость", 0.000001, 0.699999),
-    cercCoefficient: numberIn(input.cercCoefficient ?? defaults.cercCoefficient, "Коэффициент CERC", 0.000001, 1),
-    offshoreSampleDistance: numberIn(input.offshoreSampleDistance ?? defaults.offshoreSampleDistance, "Отбор глубины", 1, 100000),
-    maxShorelineChange: numberIn(input.maxShorelineChange ?? defaults.maxShorelineChange, "Предел смещения", 0.001, 1000),
-    maxBathymetryGap: numberIn(input.maxBathymetryGap ?? defaults.maxBathymetryGap, "Радиус батиметрии", 1, 100000),
-    leftBoundaryTransport: numberIn(input.leftBoundaryTransport ?? defaults.leftBoundaryTransport, "Левый граничный поток", -1_000_000, 1_000_000),
-    rightBoundaryTransport: numberIn(input.rightBoundaryTransport ?? defaults.rightBoundaryTransport, "Правый граничный поток", -1_000_000, 1_000_000),
+    breakingIndex: numericParameter("erosion_file", "breakingIndex", input.breakingIndex),
+    bermHeight: numericParameter("erosion_file", "bermHeight", input.bermHeight),
+    closureDepth: numericParameter("erosion_file", "closureDepth", input.closureDepth),
+    porosity: numericParameter("erosion_file", "porosity", input.porosity),
+    cercCoefficient: numericParameter("erosion_file", "cercCoefficient", input.cercCoefficient),
+    offshoreSampleDistance: numericParameter("erosion_file", "offshoreSampleDistance", input.offshoreSampleDistance),
+    maxShorelineChange: numericParameter("erosion_file", "maxShorelineChange", input.maxShorelineChange),
+    maxBathymetryGap: numericParameter("erosion_file", "maxBathymetryGap", input.maxBathymetryGap),
+    leftBoundaryTransport: numericParameter("erosion_file", "leftBoundaryTransport", input.leftBoundaryTransport),
+    rightBoundaryTransport: numericParameter("erosion_file", "rightBoundaryTransport", input.rightBoundaryTransport),
     outputCsv,
     csvFormat,
     outputGif,
-    gifFps: numberIn(input.gifFps ?? defaults.gifFps, "Частота GIF", 1, 30, true),
-    gifSkip: numberIn(input.gifSkip ?? defaults.gifSkip, "Пропуск кадров", 1, maxGifSkip, true),
+    gifFps: numericParameter("erosion_file", "gifFps", input.gifFps),
+    gifSkip: numericParameter("erosion_file", "gifSkip", input.gifSkip),
   };
+  assertParameterCombination("erosion_file", { ...options });
+  return options;
 }
 
 function cercArguments(input: Record<string, string | number | boolean | undefined>) {
@@ -264,19 +259,17 @@ function cercArguments(input: Record<string, string | number | boolean | undefin
 function validateAllOptions(
   input: Record<string, unknown>,
   defaults: AllOptionsDto,
-  maxSteps: number,
 ): AllOptionsDto {
   if (input.noModelSimplify !== undefined && typeof input.noModelSimplify !== "boolean")
     throw new BadRequestException("Недопустимый флаг упрощения модели");
-  const modelMaxPoints = numberIn(input.modelMaxPoints ?? defaults.modelMaxPoints, "Число точек модели", 0, 10000, true);
-  if (modelMaxPoints === 1) throw new BadRequestException("Модель должна содержать не менее двух точек");
-  if (modelMaxPoints > 0 && input.noModelSimplify === true)
-    throw new BadRequestException("Отключение упрощения несовместимо с заданным числом точек");
-  return {
-    ...validateCercOptions(input, defaults, maxSteps, maxSteps),
+  const modelMaxPoints = numericParameter("all_file", "modelMaxPoints", input.modelMaxPoints);
+  const options: AllOptionsDto = {
+    ...validateCercOptions(input, defaults),
     modelMaxPoints,
     noModelSimplify: input.noModelSimplify ?? defaults.noModelSimplify,
   };
+  assertParameterCombination("all_file", { ...options });
+  return options;
 }
 
 function allExportArguments(input: Record<string, string | number | boolean | undefined>) {
@@ -288,32 +281,21 @@ function allExportArguments(input: Record<string, string | number | boolean | un
   ];
 }
 
-function calibrationCoefficients(value: unknown) {
-  if (typeof value !== "string" || value.length > 96)
-    throw new BadRequestException("Коэффициенты CERC задаются числами через запятую");
-  const items = value.split(",").map((item) => item.trim());
-  if (items.length < 1 || items.length > 8 || items.some((item) =>
-    !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(item) ||
-    !Number.isFinite(Number(item)) || Number(item) <= 0 || Number(item) > 1
-  )) throw new BadRequestException("Коэффициенты CERC должны содержать от одного до восьми чисел в диапазоне (0;1]");
-  return items.join(",");
-}
 
 function validateCalibrationOptions(input: Record<string, unknown>): CercCalibrationOptionsDto {
-  const defaults = cercCalibrationDefaults;
   return {
-    bathymetryResolution: numberIn(input.bathymetryResolution, "Шаг батиметрии", 0.000000001, 1),
-    cercCoefficients: calibrationCoefficients(input.cercCoefficients ?? defaults.cercCoefficients),
-    maxObservationDistance: numberIn(input.maxObservationDistance ?? defaults.maxObservationDistance, "Удаление наблюдения", 1, 100000),
-    minWaveHours: numberIn(input.minWaveHours ?? defaults.minWaveHours, "Покрытие волнового ряда", 8766, 100000),
-    breakingIndex: numberIn(input.breakingIndex ?? defaults.breakingIndex, "Индекс разрушения", 0.55, 1.2),
-    bermHeight: numberIn(input.bermHeight ?? defaults.bermHeight, "Высота бермы", 0.001, 100),
-    closureDepth: numberIn(input.closureDepth ?? defaults.closureDepth, "Глубина замыкания", 0.001, 1000),
-    porosity: numberIn(input.porosity ?? defaults.porosity, "Пористость", 0.000001, 0.699999),
-    offshoreSampleDistance: numberIn(input.offshoreSampleDistance ?? defaults.offshoreSampleDistance, "Отбор глубины", 1, 100000),
-    maxBathymetryGap: numberIn(input.maxBathymetryGap ?? defaults.maxBathymetryGap, "Радиус батиметрии", 1, 100000),
-    leftBoundaryTransport: numberIn(input.leftBoundaryTransport ?? defaults.leftBoundaryTransport, "Левый граничный поток", -1_000_000, 1_000_000),
-    rightBoundaryTransport: numberIn(input.rightBoundaryTransport ?? defaults.rightBoundaryTransport, "Правый граничный поток", -1_000_000, 1_000_000),
+    bathymetryResolution: numericParameter("calibrate_cerc", "bathymetryResolution", input.bathymetryResolution),
+    cercCoefficients: stringParameter("calibrate_cerc", "cercCoefficients", input.cercCoefficients),
+    maxObservationDistance: numericParameter("calibrate_cerc", "maxObservationDistance", input.maxObservationDistance),
+    minWaveHours: numericParameter("calibrate_cerc", "minWaveHours", input.minWaveHours),
+    breakingIndex: numericParameter("calibrate_cerc", "breakingIndex", input.breakingIndex),
+    bermHeight: numericParameter("calibrate_cerc", "bermHeight", input.bermHeight),
+    closureDepth: numericParameter("calibrate_cerc", "closureDepth", input.closureDepth),
+    porosity: numericParameter("calibrate_cerc", "porosity", input.porosity),
+    offshoreSampleDistance: numericParameter("calibrate_cerc", "offshoreSampleDistance", input.offshoreSampleDistance),
+    maxBathymetryGap: numericParameter("calibrate_cerc", "maxBathymetryGap", input.maxBathymetryGap),
+    leftBoundaryTransport: numericParameter("calibrate_cerc", "leftBoundaryTransport", input.leftBoundaryTransport),
+    rightBoundaryTransport: numericParameter("calibrate_cerc", "rightBoundaryTransport", input.rightBoundaryTransport),
   };
 }
 
@@ -321,6 +303,8 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
   if (!body || typeof body !== "object" || Array.isArray(body))
     throw new BadRequestException("Ожидается объект расчёта");
   const data = body as Record<string, unknown>;
+  if (retiredCalculationKinds.some((kind) => kind === data.kind))
+    throw new BadRequestException("Демонстрационный сценарий удалён. Выберите реальные входные данные для erosion_file или all_file.");
   if (Object.keys(data).some((key) => !["kind", "input"].includes(key)) ||
       !calculationKinds.some((item) => item.kind === data.kind))
     throw new BadRequestException("Неизвестный тип расчёта или поле");
@@ -331,50 +315,46 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
   switch (data.kind) {
     case "coastline_region": {
       rejectUnknown(p, ["west", "south", "east", "north", "coastlineInputId"]);
-      const west = numberIn(p.west, "Западная долгота", 27, 42.5);
-      const east = numberIn(p.east, "Восточная долгота", 27, 42.5);
-      const south = numberIn(p.south, "Южная широта", 40.5, 47.5);
-      const north = numberIn(p.north, "Северная широта", 40.5, 47.5);
-      if (west >= east || south >= north) throw new BadRequestException("Запад должен быть меньше востока, а юг — меньше севера");
+      const west = numericParameter(data.kind as CalculationKind, "west", p.west);
+      const east = numericParameter(data.kind as CalculationKind, "east", p.east);
+      const south = numericParameter(data.kind as CalculationKind, "south", p.south);
+      const north = numericParameter(data.kind as CalculationKind, "north", p.north);
+      assertParameterCombination("coastline_region", { west, east, south, north });
       return { kind: "coastline_region", input: { west, east, south, north, ...optionalReferences(p, "coastline_region") } };
     }
     case "dimension":
+      rejectUnknown(p, ["reportType"]);
+      return { kind: data.kind, input: reportOptions(data.kind, p.reportType) };
     case "map":
       rejectUnknown(p, []);
       return { kind: data.kind, input: {} };
     case "dimension_dataset":
+      rejectUnknown(p, ["datasetId", "reportType"]);
+      return { kind: data.kind, input: { ...references(p, { datasetId: "coastline_geojson" }), ...reportOptions(data.kind, p.reportType) } };
     case "dataset_validation":
       rejectUnknown(p, ["datasetId"]);
       return { kind: data.kind, input: references(p, { datasetId: "coastline_geojson" }) };
     case "dimension_file":
-      rejectUnknown(p, ["coastlineInputId"]);
-      return { kind: "dimension_file", input: references(p, scientificInputFields.dimension_file) };
+      rejectUnknown(p, ["coastlineInputId", "reportType"]);
+      return { kind: "dimension_file", input: { ...references(p, scientificInputFields.dimension_file), ...reportOptions(data.kind, p.reportType) } };
     case "source_file":
     case "coastline_validation":
     case "map_file":
       rejectUnknown(p, ["coastlineInputId"]);
       return { kind: data.kind, input: references(p, scientificInputFields[data.kind]) };
-    case "erosion": {
-      rejectUnknown(p, Object.keys(erosionDemoDefaults));
-      return { kind: "erosion", input: { ...validateCercOptions(p, erosionDemoDefaults, 168, 48) } };
-    }
     case "erosion_file": {
       const fields = scientificInputFields.erosion_file;
       rejectUnknown(p, [...Object.keys(fields), ...Object.keys(optionalScientificInputRequirements.erosion_file), ...Object.keys(erosionFileDefaults)]);
       return { kind: "erosion_file", input: {
         ...references(p, fields),
         ...optionalReferences(p, "erosion_file"),
-        ...validateCercOptions(p, erosionFileDefaults, 48, 48),
+        ...validateCercOptions(p, erosionFileDefaults),
       } };
-    }
-    case "all_demo": {
-      rejectUnknown(p, Object.keys(allDemoDefaults));
-      return { kind: "all_demo", input: { ...validateAllOptions(p, allDemoDefaults, 24) } };
     }
     case "all_file": {
       const fields = scientificInputFields.all_file;
       rejectUnknown(p, [...Object.keys(fields), ...Object.keys(optionalScientificInputRequirements.all_file), ...Object.keys(allFileDefaults)]);
-      const options = validateAllOptions(p, allFileDefaults, 48);
+      const options = validateAllOptions(p, allFileDefaults);
       const optional = optionalReferences(p, "all_file");
       if (Object.keys(optional).length && (!options.noModelSimplify || options.modelMaxPoints !== 0))
         throw new BadRequestException("Индексные профили требуют отключить упрощение модели и оставить лимит точек равным 0");
@@ -403,18 +383,17 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
     case "mesh": {
       const fields = scientificInputFields.mesh;
       rejectUnknown(p, [...Object.keys(fields), "cellSizes", "boundaryDetails", "generators", "maxCells", "allowLarge", "generatorTimeoutMinutes"]);
-      const cellSizes = positiveNumberList(p.cellSizes ?? "1000", "Длины рёбер");
-      const boundaryDetails = positiveNumberList(p.boundaryDetails ?? "1000", "Детализация берега");
-      if (boundaryDetails.split(",").length !== 1 && boundaryDetails.split(",").length !== cellSizes.split(",").length)
-        throw new BadRequestException("Количество детализаций должно быть равно числу размеров или одному");
+      const cellSizes = stringParameter("mesh", "cellSizes", p.cellSizes);
+      const boundaryDetails = stringParameter("mesh", "boundaryDetails", p.boundaryDetails);
+      assertParameterCombination("mesh", { cellSizes, boundaryDetails });
       if (p.allowLarge !== undefined && typeof p.allowLarge !== "boolean")
         throw new BadRequestException("Недопустимый флаг большого расчёта");
       return { kind: "mesh", input: {
         ...references(p, fields), cellSizes, boundaryDetails,
-        generators: generatorList(p.generators ?? "frontal-quad"),
-        maxCells: numberIn(p.maxCells ?? 5_000_000, "Лимит ячеек", 1000, 25_000_000, true),
+        generators: stringParameter(data.kind as CalculationKind, "generators", p.generators),
+        maxCells: numericParameter(data.kind as CalculationKind, "maxCells", p.maxCells),
         allowLarge: p.allowLarge ?? false,
-        generatorTimeoutMinutes: numberIn(p.generatorTimeoutMinutes ?? 20, "Время Gmsh", 1, 120, true),
+        generatorTimeoutMinutes: numericParameter(data.kind as CalculationKind, "generatorTimeoutMinutes", p.generatorTimeoutMinutes),
       } };
     }
     case "seabed_build": {
@@ -425,98 +404,84 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
           throw new BadRequestException(`Недопустимый флаг «${key}»`);
       return { kind: "seabed_build", input: {
         ...references(p, fields),
-        boundaryDetail: numberIn(p.boundaryDetail ?? 1000, "Детализация берега", 10, 10000),
-        maxSourceDistance: numberIn(p.maxSourceDistance ?? 50000, "Поиск батиметрии", 100, 100000),
-        coastTransition: numberIn(p.coastTransition ?? 0, "Переход у берега", 0, 100000),
+        boundaryDetail: numericParameter(data.kind as CalculationKind, "boundaryDetail", p.boundaryDetail),
+        maxSourceDistance: numericParameter(data.kind as CalculationKind, "maxSourceDistance", p.maxSourceDistance),
+        coastTransition: numericParameter(data.kind as CalculationKind, "coastTransition", p.coastTransition),
         recoverWgs84: p.recoverWgs84 !== false,
-        maxNodes: numberIn(p.maxNodes ?? 5_000_000, "Лимит узлов", 1000, 25_000_000, true),
-        maxCells: numberIn(p.maxCells ?? 5_000_000, "Лимит ячеек", 1000, 25_000_000, true),
-        maxOutputMiB: numberIn(p.maxOutputMiB ?? 2048, "Лимит результата", 1, 8192, true),
+        maxNodes: numericParameter(data.kind as CalculationKind, "maxNodes", p.maxNodes),
+        maxCells: numericParameter(data.kind as CalculationKind, "maxCells", p.maxCells),
+        maxOutputMiB: numericParameter(data.kind as CalculationKind, "maxOutputMiB", p.maxOutputMiB),
         allowLarge: p.allowLarge === true,
       } };
     }
     case "seabed_render": {
       const fields = scientificInputFields.seabed_render;
-      rejectUnknown(p, [...Object.keys(fields), "isobaths", "verticalExaggeration", "controlPoints"]);
-      const isobaths = isobathList(p.isobaths ?? "20,50,100,200,500,1000,1500,2000");
+      rejectUnknown(p, [...Object.keys(fields), "isobaths", "verticalExaggeration", "controlPoints", "reportType"]);
+      const isobaths = stringParameter(data.kind as CalculationKind, "isobaths", p.isobaths);
       if (p.controlPoints !== undefined && typeof p.controlPoints !== "boolean")
         throw new BadRequestException("Недопустимый параметр контрольных точек");
       return { kind: "seabed_render", input: {
-        ...references(p, fields), isobaths,
-        verticalExaggeration: numberIn(p.verticalExaggeration ?? 40, "Вертикальное преувеличение", 1, 200),
+        ...references(p, fields), ...reportOptions("seabed_render", p.reportType), isobaths,
+        verticalExaggeration: numericParameter(data.kind as CalculationKind, "verticalExaggeration", p.verticalExaggeration),
         controlPoints: p.controlPoints ?? true,
       } };
     }
     case "seabed_adapt": {
       const fields = scientificInputFields.seabed_adapt;
-      const options = [
-        ["minSize", 200, 1, 100000], ["coastSize", 300, 1, 100000],
-        ["shelfSize", 500, 1, 100000], ["deepSize", 1000, 1, 100000],
-        ["coastInfluence", 25000, 1, 1000000],
-        ["curvatureReference", 30, 0.001, 180],
-        ["slopeReference", 10, 0.001, 90],
-        ["flatDeepSlope", 1, 0.001, 90],
-        ["maxNeighbourRatio", 1.25, 1.000001, 100],
-        ["maxSizeGradient", 0.15, 0.000001, 100],
-      ] as const;
-      rejectUnknown(p, [...Object.keys(fields), ...options.map(([key]) => key)]);
-      const result: Record<string, string | number> = references(p, fields);
-      for (const [key, fallback, minimum, maximum] of options)
-        result[key] = numberIn(p[key] ?? fallback, key, minimum, maximum);
-      if (!(Number(result.minSize) <= Number(result.coastSize) &&
-            Number(result.coastSize) <= Number(result.shelfSize) &&
-            Number(result.shelfSize) <= Number(result.deepSize)))
-        throw new BadRequestException("Размеры должны удовлетворять min ≤ coast ≤ shelf ≤ deep");
+      const options = Object.entries(adaptiveParameterDefinitions);
+      rejectUnknown(p, [...Object.keys(fields), ...options.map(([key]) => key), "reportType"]);
+      const result: Record<string, string | number> = { ...references(p, fields), ...reportOptions("seabed_adapt", p.reportType) };
+      for (const [key] of options)
+        result[key] = numericParameter("seabed_adapt", key, p[key]);
+      assertParameterCombination("seabed_adapt", result);
       return { kind: "seabed_adapt", input: result };
     }
     case "seabed_generate_adaptive": {
       const fields = scientificInputFields.seabed_generate_adaptive;
       rejectUnknown(p, [...Object.keys(fields), "boundaryDetail", "generator", "maxCells", "allowLarge", "generatorTimeoutMinutes"]);
-      const generator = p.generator ?? "delaunay";
-      if (!["delaunay", "frontal-quad", "parallelograms"].includes(String(generator)))
-        throw new BadRequestException("Недопустимый генератор Gmsh");
+      const generator = stringParameter("seabed_generate_adaptive", "generator", p.generator);
       if (p.allowLarge !== undefined && typeof p.allowLarge !== "boolean")
         throw new BadRequestException("Недопустимый флаг большого расчёта");
       return { kind: "seabed_generate_adaptive", input: {
         ...references(p, fields), generator: String(generator),
-        boundaryDetail: numberIn(p.boundaryDetail ?? 200, "Детализация берега", 10, 10000),
-        maxCells: numberIn(p.maxCells ?? 5_000_000, "Лимит ячеек", 1000, 25_000_000, true),
+        boundaryDetail: numericParameter(data.kind as CalculationKind, "boundaryDetail", p.boundaryDetail),
+        maxCells: numericParameter(data.kind as CalculationKind, "maxCells", p.maxCells),
         allowLarge: p.allowLarge === true,
-        generatorTimeoutMinutes: numberIn(p.generatorTimeoutMinutes ?? 20, "Время Gmsh", 1, 120, true),
+        generatorTimeoutMinutes: numericParameter(data.kind as CalculationKind, "generatorTimeoutMinutes", p.generatorTimeoutMinutes),
       } };
     }
     case "seabed_validate": {
       const fields = scientificInputFields.seabed_validate;
       rejectUnknown(p, [...Object.keys(fields), "isobaths", "worstCells", "maxNearestDistance"]);
-      const isobaths = isobathList(p.isobaths ?? "20,200,1000,2000");
+      const isobaths = stringParameter(data.kind as CalculationKind, "isobaths", p.isobaths);
       return { kind: "seabed_validate", input: {
         ...references(p, fields), isobaths,
-        worstCells: numberIn(p.worstCells ?? 20, "Число худших ячеек", 1, 1000, true),
-        maxNearestDistance: numberIn(p.maxNearestDistance ?? 0, "Предел поиска глубины", 0, 100000),
+        worstCells: numericParameter(data.kind as CalculationKind, "worstCells", p.worstCells),
+        maxNearestDistance: numericParameter(data.kind as CalculationKind, "maxNearestDistance", p.maxNearestDistance),
       } };
     }
     case "seabed_compare_adaptive": {
       const fields = scientificInputFields.seabed_compare_adaptive;
       rejectUnknown(p, [...Object.keys(fields), "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "maxCells", "allowLarge", "generatorTimeoutMinutes", "detailPreset", "generateExpertSet", "expertLevels", "expertSeed", "generateFigureFive", "figureFiveLevel", "figureFiveGenerator"]);
-      const generators = generatorList(p.generators ?? "delaunay,frontal-quad");
-      const detailPreset = p.detailPreset ?? "kizilirmak";
-      if (detailPreset !== "none" && detailPreset !== "kizilirmak")
-        throw new BadRequestException("Недопустимое окно детализации сетки");
+      const generators = stringParameter(data.kind as CalculationKind, "generators", p.generators);
+      const detailPreset = stringParameter("seabed_compare_adaptive", "detailPreset", p.detailPreset);
       if (p.allowLarge !== undefined && typeof p.allowLarge !== "boolean")
         throw new BadRequestException("Недопустимый флаг большого расчёта");
       if (p.levels !== undefined && (p.levelMin !== undefined || p.levelMax !== undefined))
         throw new BadRequestException("Укажите либо список уровней, либо один диапазон");
-      const levels = comparisonLevels(p.levels ??
-        `detailed:${numberIn(p.levelMin ?? 125, "Минимальный размер", 10, 10000)}:${numberIn(p.levelMax ?? 250, "Максимальный размер", 10, 10000)}`);
+      const legacyLevels = p.levelMin !== undefined || p.levelMax !== undefined
+        ? `detailed:${numberIn(p.levelMin === undefined ? 125 : p.levelMin, "Минимальный размер", 10, 10000)}:${numberIn(p.levelMax === undefined ? 250 : p.levelMax, "Максимальный размер", 10, 10000)}`
+        : undefined;
+      const levels = stringParameter("seabed_compare_adaptive", "levels", p.levels === undefined ? legacyLevels : p.levels);
       const expert = expertOptions(p, levels, generators);
       const figureFive = figureFiveOptions(p, levels, generators, expert);
       return { kind: "seabed_compare_adaptive", input: {
         ...references(p, fields),
-        boundaryDetail: numberIn(p.boundaryDetail ?? 50, "Детализация берега", 10, 10000),
+        boundaryDetail: numericParameter(data.kind as CalculationKind, "boundaryDetail", p.boundaryDetail),
         generators, levels, detailPreset, ...expert, ...figureFive,
-        maxCells: numberIn(p.maxCells ?? 25_000_000, "Лимит ячеек", 1000, 25_000_000, true),
+        maxCells: numericParameter(data.kind as CalculationKind, "maxCells", p.maxCells),
         allowLarge: p.allowLarge ?? false,
-        generatorTimeoutMinutes: numberIn(p.generatorTimeoutMinutes ?? 20, "Время Gmsh", 1, 120, true),
+        generatorTimeoutMinutes: numericParameter(data.kind as CalculationKind, "generatorTimeoutMinutes", p.generatorTimeoutMinutes),
       } };
     }
     case "seabed_assess_ml": {
@@ -524,29 +489,27 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
       rejectUnknown(p, [...Object.keys(fields), ...Object.keys(aiNecessityDefaults)]);
       return { kind: "seabed_assess_ml", input: {
         ...references(p, fields),
-        minExpertsPerCard: numberIn(p.minExpertsPerCard ?? aiNecessityDefaults.minExpertsPerCard, "Эксперты на карточку", 2, 10, true),
-        minTraining: numberIn(p.minTraining ?? aiNecessityDefaults.minTraining, "Карточки обучения", 2, 96, true),
-        minEvaluation: numberIn(p.minEvaluation ?? aiNecessityDefaults.minEvaluation, "Карточки проверки", 2, 96, true),
-        ridgeLambda: numberIn(p.ridgeLambda ?? aiNecessityDefaults.ridgeLambda, "Ridge-регуляризация", 0.000001, 1000),
-        minRmseImprovement: numberIn(p.minRmseImprovement ?? aiNecessityDefaults.minRmseImprovement, "Улучшение RMSE", 0.001, 0.99),
+        minExpertsPerCard: numericParameter(data.kind as CalculationKind, "minExpertsPerCard", p.minExpertsPerCard),
+        minTraining: numericParameter(data.kind as CalculationKind, "minTraining", p.minTraining),
+        minEvaluation: numericParameter(data.kind as CalculationKind, "minEvaluation", p.minEvaluation),
+        ridgeLambda: numericParameter(data.kind as CalculationKind, "ridgeLambda", p.ridgeLambda),
+        minRmseImprovement: numericParameter(data.kind as CalculationKind, "minRmseImprovement", p.minRmseImprovement),
       } };
     }
     case "seabed_check_full": {
       const fields = scientificInputFields.seabed_check_full;
       rejectUnknown(p, [...Object.keys(fields), "generator", "targetEdge", "boundaryDetail", "maxSourceDistance", "coastTransition", "isobaths", "verticalExaggeration", "controlPoints"]);
-      const generator = p.generator ?? "frontal-quad";
-      if (generator !== "delaunay" && generator !== "frontal-quad" && generator !== "parallelograms")
-        throw new BadRequestException("Недопустимый генератор контрольной сетки");
+      const generator = stringParameter("seabed_check_full", "generator", p.generator);
       if (p.controlPoints !== undefined && typeof p.controlPoints !== "boolean")
         throw new BadRequestException("Недопустимый параметр контрольных точек");
       return { kind: "seabed_check_full", input: {
         ...references(p, fields), generator,
-        targetEdge: numberIn(p.targetEdge ?? 1000, "Контрольное ребро", 10, 10000),
-        boundaryDetail: numberIn(p.boundaryDetail ?? 1000, "Детализация берега", 10, 10000),
-        maxSourceDistance: numberIn(p.maxSourceDistance ?? 50000, "Поиск батиметрии", 100, 100000),
-        coastTransition: numberIn(p.coastTransition ?? 0, "Переход у берега", 0, 100000),
-        isobaths: isobathList(p.isobaths ?? "20,50,100,200,500,1000,1500,2000"),
-        verticalExaggeration: numberIn(p.verticalExaggeration ?? 40, "Вертикальное преувеличение", 1, 200),
+        targetEdge: numericParameter(data.kind as CalculationKind, "targetEdge", p.targetEdge),
+        boundaryDetail: numericParameter(data.kind as CalculationKind, "boundaryDetail", p.boundaryDetail),
+        maxSourceDistance: numericParameter(data.kind as CalculationKind, "maxSourceDistance", p.maxSourceDistance),
+        coastTransition: numericParameter(data.kind as CalculationKind, "coastTransition", p.coastTransition),
+        isobaths: stringParameter(data.kind as CalculationKind, "isobaths", p.isobaths),
+        verticalExaggeration: numericParameter(data.kind as CalculationKind, "verticalExaggeration", p.verticalExaggeration),
         controlPoints: p.controlPoints ?? true,
       } };
     }
@@ -555,7 +518,7 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
 }
 
 export function commandArguments(
-  job: CreateCalculationDto,
+  job: unknown,
   output: string,
   datasetPath?: string,
   files: Record<string, string> = {},
@@ -597,22 +560,12 @@ export function commandArguments(
       return ["map", "black-sea", "--input", bundledBlackSeaPath, "--output", output];
     case "map_file":
       return ["map", "black-sea", "--input", required("coastlineInputId"), "--output", output];
-    case "erosion":
-      return ["erosion", "--black-sea-sochi", "--offline", ...cercArguments(input),
-        "--svg-max-frames", "12",
-        ...(input.outputCsv ? ["--output-csv", "erosion-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
-        ...(input.outputGif ? ["--output-gif", "erosion-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
-        "--output", output];
     case "erosion_file":
       return ["erosion", "--input", required("coastlineInputId"),
         "--wave-input", required("waveInputId"), "--wave-source", requiredSource("waveInputId"),
         "--bathymetry", required("bathymetryInputId"), ...cercArguments(input), ...cercProfileArguments(),
         ...(input.outputCsv ? ["--output-csv", "erosion-metrics.csv", "--csv-format", String(input.csvFormat)] : []),
         ...(input.outputGif ? ["--output-gif", "erosion-animation.gif", "--gif-fps", String(input.gifFps), "--gif-skip", String(input.gifSkip)] : []),
-        "--output", output];
-    case "all_demo":
-      return ["all", "--black-sea-sochi", "--offline", ...cercArguments(input),
-        ...allExportArguments(input),
         "--output", output];
     case "all_file":
       return ["all", "--input", required("coastlineInputId"),

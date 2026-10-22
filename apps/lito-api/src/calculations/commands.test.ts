@@ -1,7 +1,35 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allDemoDefaults, allFileDefaults, cercCalibrationDefaults, erosionDemoDefaults, erosionFileDefaults } from "@litora/contracts";
-import { commandArguments, resourceProfileForKind, scientificReferences, validateCalculation } from "./commands.js";
+import { allFileDefaults, cercCalibrationDefaults, cercSiteParameterNames, erosionFileDefaults } from "@litora/contracts";
+import { calculationKinds, commandArguments, listCalculationKinds, resourceProfileForKind, scientificReferences, validateCalculation } from "./commands.js";
+
+// Явные значения транспортных тестов; не рекомендация для реального участка.
+const cercFixture = Object.fromEntries(cercSiteParameterNames.map((key) => [key, erosionFileDefaults[key]]));
+
+test("каталог сохраняет прежнюю фильтрацию и объясняет выключенные сценарии по явному запросу", () => {
+  const legacy = listCalculationKinds(false);
+  assert.deepEqual(legacy.map((item) => item.kind), calculationKinds.filter((item) => resourceProfileForKind(item.kind) === "standard").map((item) => item.kind));
+  assert.deepEqual(listCalculationKinds(false, "false"), legacy);
+  const complete = listCalculationKinds(false, "true");
+  assert.equal(complete.length, calculationKinds.length);
+  assert.equal(complete.find((item) => item.kind === "dimension")?.available, true);
+  assert.equal(complete.find((item) => item.kind === "mesh")?.available, false);
+  assert.match(complete.find((item) => item.kind === "mesh")?.unavailableReason ?? "", /Тяжёлые расчёты отключены/);
+  assert.equal(listCalculationKinds(true, "true").find((item) => item.kind === "mesh")?.available, true);
+  for (const enabled of [true, false]) {
+    for (const kind of ["erosion", "all_demo"] as const) {
+      const entry = listCalculationKinds(enabled, "true").find((item) => item.kind === kind);
+      assert.equal(entry?.selectable, false);
+      assert.equal(entry?.available, false);
+    }
+  }
+  assert.ok(!calculationKinds.some((item) => item.available !== undefined));
+});
+
+test("каталог отклоняет неверные внешние значения includeUnavailable", () => {
+  for (const value of [true, false, "1", "", ["true"], { includeUnavailable: "true" }])
+    assert.throws(() => listCalculationKinds(false, value), /includeUnavailable должен быть true или false/);
+});
 
 test("пользователь не может передать shell, пути или URL в CLI", () => {
   for (const input of [
@@ -21,26 +49,6 @@ test("допустимый запрос преобразуется в фикси
     assert.equal(args[args.indexOf("--input") + 1], "data/coastline/black-sea.geojson");
     assert.ok(!args.includes("--source-url"));
   }
-  assert.deepEqual(commandArguments({ kind: "erosion" }, "/tmp/job"), [
-    "erosion",
-    "--black-sea-sochi",
-    "--offline",
-    "--steps",
-    "168",
-    "--breaking-index", "0.78",
-    "--berm-height", "2",
-    "--closure-depth", "8",
-    "--porosity", "0.4",
-    "--cerc-coefficient", "0.39",
-    "--offshore-sample-distance", "300",
-    "--max-shoreline-change", "25",
-    "--max-bathymetry-gap", "3000",
-    "--left-boundary-transport", "0",
-    "--right-boundary-transport", "0",
-    "--svg-max-frames", "12",
-    "--output",
-    "/tmp/job",
-  ]);
   assert.deepEqual(validateCalculation({ kind: "map" }), {
     kind: "map",
     input: {},
@@ -75,45 +83,22 @@ test("аудит ряда принимает только приватные UUI
   }
 });
 
-test("демо CERC принимает ограниченные параметры и экспортирует CSV в каталог worker", () => {
-  assert.equal(validateCalculation({ kind: "erosion", input: { steps: 168 } }).input?.steps, 168);
-  assert.throws(() => validateCalculation({ kind: "erosion", input: { steps: 169 } }));
-  assert.throws(() => validateCalculation({ kind: "erosion", input: { steps: 168, outputGif: true } }));
-  const job = validateCalculation({ kind: "erosion", input: {
-    steps: 12, breakingIndex: 0.85, cercCoefficient: 0.5,
-    leftBoundaryTransport: 0.02, rightBoundaryTransport: -0.01,
-    outputCsv: true, csvFormat: "wide", outputGif: true, gifFps: 8, gifSkip: 2,
-  } });
-  assert.deepEqual(job.input, {
-    ...erosionDemoDefaults, steps: 12, breakingIndex: 0.85,
-    cercCoefficient: 0.5, leftBoundaryTransport: 0.02, rightBoundaryTransport: -0.01,
-    outputCsv: true, csvFormat: "wide", outputGif: true, gifFps: 8, gifSkip: 2,
-  });
-  const args = commandArguments(job, "/tmp/job");
-  assert.deepEqual(args.slice(-12), [
-    "--output-csv", "erosion-metrics.csv", "--csv-format", "wide",
-    "--output-gif", "erosion-animation.gif", "--gif-fps", "8", "--gif-skip", "2", "--output", "/tmp/job",
-  ]);
-  assert.ok(args.includes("--offline"));
-  assert.deepEqual(args.slice(args.indexOf("--left-boundary-transport"), args.indexOf("--left-boundary-transport") + 4),
-    ["--left-boundary-transport", "0.02", "--right-boundary-transport", "-0.01"]);
-  assert.ok(!args.includes("--source-url"));
-  for (const input of [
-    { breakingIndex: 0.5 }, { porosity: 0.7 }, { cercCoefficient: 0 },
-    { offshoreSampleDistance: -1 }, { maxBathymetryGap: Infinity },
-    { outputCsv: "true" }, { csvFormat: "../../wide" }, { outputGif: "true" },
-    { gifFps: 0 }, { gifSkip: 49 },
-    { leftBoundaryTransport: "0.02" }, { leftBoundaryTransport: Infinity },
-    { rightBoundaryTransport: NaN }, { rightBoundaryTransport: 1_000_001 },
-    { outputCsv: true, outputPath: "/etc/passwd" },
-  ]) assert.throws(() => validateCalculation({ kind: "erosion", input }));
+test("исторические демо нельзя создать или преобразовать в команду worker", () => {
+  for (const kind of ["erosion", "all_demo"] as const) {
+    assert.equal(calculationKinds.find((item) => item.kind === kind)?.selectable, false);
+    for (const input of [undefined, {}, { steps: 3, outputCsv: true }, { coastlineInputId: "33333333-3333-4333-8333-333333333333" }]) {
+      const job = { kind, input };
+      assert.throws(() => validateCalculation(job), /Демонстрационный сценарий удалён.*реальные входные данные/);
+      assert.throws(() => commandArguments(job, "/tmp/job"), /Демонстрационный сценарий удалён/);
+    }
+  }
 });
 
 test("CERC по своим данным принимает только четыре UUID и ограниченные параметры", () => {
   const id = "33333333-3333-4333-8333-333333333333";
   const ids = { coastlineInputId: id, waveInputId: id, bathymetryInputId: id, bathymetryMetadataInputId: id };
-  const job = validateCalculation({ kind: "erosion_file", input: { ...ids, outputGif: true } });
-  assert.deepEqual(job.input, { ...ids, ...erosionFileDefaults, outputGif: true });
+  const job = validateCalculation({ kind: "erosion_file", input: { ...cercFixture, ...ids, outputGif: true } });
+  assert.deepEqual(job.input, { ...cercFixture, ...ids, ...erosionFileDefaults, outputGif: true });
   assert.equal(resourceProfileForKind(job.kind), "heavy");
   assert.deepEqual(scientificReferences(job).map(({ role }) => role), [
     "coastline_geojson", "wave_climate", "bathymetry_grid_json", "bathymetry_grid_metadata_json",
@@ -131,11 +116,11 @@ test("CERC по своим данным принимает только четы
   assert.ok(!args.includes("--black-sea-sochi"));
   assert.ok(!args.includes("--source-url"));
   for (const bad of [
-    { ...ids, waveInputId: "/etc/passwd" },
-    { ...ids, waveInputId: "https://internal.example" },
-    { ...ids, outputPath: "/tmp/out" },
-    { ...ids, steps: 49 },
-    { ...ids, maxBathymetryGap: Infinity },
+    { ...cercFixture, ...ids, waveInputId: "/etc/passwd" },
+    { ...cercFixture, ...ids, waveInputId: "https://internal.example" },
+    { ...cercFixture, ...ids, outputPath: "/tmp/out" },
+    { ...cercFixture, ...ids, steps: 49 },
+    { ...cercFixture, ...ids, maxBathymetryGap: Infinity },
   ]) assert.throws(() => validateCalculation({ kind: "erosion_file", input: bad }));
 });
 
@@ -148,7 +133,7 @@ test("полный волновой ряд по своим входам огра
   };
   for (const kind of ["erosion_file", "all_file"] as const) {
     const job = validateCalculation({ kind, input: {
-      ...ids, steps: 0, svgMaxFrames: 64, outputCsv: true, csvFormat: "long",
+      ...cercFixture, ...ids, steps: 0, svgMaxFrames: 64, outputCsv: true, csvFormat: "long",
     } });
     const input = job.input;
     assert.ok(input);
@@ -166,45 +151,21 @@ test("полный волновой ряд по своим входам огра
       { svgMaxFrames: 64, maxWaveConditions: 100000 },
       { svgMaxFrames: 64, maxCoastPoints: 100000 },
       { svgMaxFrames: 64, outputPath: "/tmp/foreign" },
-    ]) assert.throws(() => validateCalculation({ kind, input: { ...ids, steps: 0, ...extra } }));
+    ]) assert.throws(() => validateCalculation({ kind, input: { ...cercFixture, ...ids, steps: 0, ...extra } }));
   }
   assert.throws(() => validateCalculation({ kind: "erosion", input: { steps: 0, svgMaxFrames: 64 } }));
   assert.throws(() => validateCalculation({ kind: "all_demo", input: { steps: 0, svgMaxFrames: 64 } }));
-});
-
-test("составной демо-конвейер принимает только числовые параметры и фиксированные экспорты", () => {
-  const job = validateCalculation({ kind: "all_demo", input: {
-    steps: 12, outputCsv: true, csvFormat: "wide", outputGif: true,
-    gifFps: 8, gifSkip: 2, modelMaxPoints: 500,
-  } });
-  assert.deepEqual(job.input, {
-    ...allDemoDefaults, steps: 12, outputCsv: true, csvFormat: "wide",
-    outputGif: true, gifFps: 8, gifSkip: 2, modelMaxPoints: 500,
-  });
-  const args = commandArguments(job, "/tmp/job");
-  assert.deepEqual(args.slice(0, 4), ["all", "--black-sea-sochi", "--offline", "--steps"]);
-  assert.ok(args.includes("all-metrics.csv"));
-  assert.ok(args.includes("all-animation.gif"));
-  assert.ok(args.includes("--model-max-points"));
-  assert.ok(!args.includes("--source-url"));
-  assert.deepEqual(args.slice(-2), ["--output", "/tmp/job"]);
-  for (const input of [
-    { steps: 25 }, { outputGif: "true" }, { gifFps: 0 }, { gifSkip: 25 },
-    { modelMaxPoints: 1 }, { modelMaxPoints: 200, noModelSimplify: true },
-    { outputGif: true, outputPath: "/etc/passwd" },
-    { sourceUrl: "http://internal" }, { maxBathymetryGap: Infinity },
-  ]) assert.throws(() => validateCalculation({ kind: "all_demo", input }));
 });
 
 test("полный конвейер по своим данным использует четыре приватных входа, а не демо Сочи", () => {
   const id = "33333333-3333-4333-8333-333333333333";
   const ids = { coastlineInputId: id, waveInputId: id, bathymetryInputId: id, bathymetryMetadataInputId: id };
   const job = validateCalculation({ kind: "all_file", input: {
-    ...ids, steps: 48, outputCsv: true, outputGif: true, modelMaxPoints: 250,
+    ...cercFixture, ...ids, steps: 48, outputCsv: true, outputGif: true, modelMaxPoints: 250,
     leftBoundaryTransport: 0.04, rightBoundaryTransport: 0.03,
   } });
   assert.deepEqual(job.input, {
-    ...ids, ...allFileDefaults, steps: 48, outputCsv: true, outputGif: true, modelMaxPoints: 250,
+    ...cercFixture, ...ids, ...allFileDefaults, steps: 48, outputCsv: true, outputGif: true, modelMaxPoints: 250,
     leftBoundaryTransport: 0.04, rightBoundaryTransport: 0.03,
   });
   assert.equal(resourceProfileForKind(job.kind), "heavy");
@@ -227,12 +188,12 @@ test("полный конвейер по своим данным использ�
   assert.ok(!args.includes("--black-sea-sochi"));
   assert.ok(!args.includes("--source-url"));
   for (const bad of [
-    { ...ids, waveInputId: "/etc/passwd" },
-    { ...ids, steps: 0 },
-    { ...ids, steps: 49 },
-    { ...ids, noModelSimplify: true, modelMaxPoints: 250 },
-    { ...ids, sourceUrl: "https://internal.example" },
-    { ...ids, outputPath: "/tmp/out" },
+    { ...cercFixture, ...ids, waveInputId: "/etc/passwd" },
+    { ...cercFixture, ...ids, steps: 0 },
+    { ...cercFixture, ...ids, steps: 49 },
+    { ...cercFixture, ...ids, noModelSimplify: true, modelMaxPoints: 250 },
+    { ...cercFixture, ...ids, sourceUrl: "https://internal.example" },
+    { ...cercFixture, ...ids, outputPath: "/tmp/out" },
   ]) assert.throws(() => validateCalculation({ kind: "all_file", input: bad }));
 });
 
@@ -243,7 +204,7 @@ test("калибровка CERC требует пять собственных �
     bathymetryMetadataInputId: id, observationsInputId: id,
   };
   const job = validateCalculation({ kind: "calibrate_cerc", input: {
-    ...ids, bathymetryResolution: 0.005, cercCoefficients: "0.2,0.39,0.6",
+    ...cercCalibrationDefaults, ...ids, bathymetryResolution: 0.005, cercCoefficients: "0.2,0.39,0.6",
   } });
   assert.deepEqual(job.input, { ...ids, ...cercCalibrationDefaults,
     bathymetryResolution: 0.005, cercCoefficients: "0.2,0.39,0.6" });
@@ -266,16 +227,16 @@ test("калибровка CERC требует пять собственных �
   assert.ok(args.includes("--bathymetry-resolution"));
   assert.ok(!args.includes("--source-url"));
   const smallCoefficientJob = validateCalculation({ kind: "calibrate_cerc", input: {
-    ...ids, bathymetryResolution: 0.005, cercCoefficients: "1e-12, +0.39",
+    ...cercCalibrationDefaults, ...ids, bathymetryResolution: 0.005, cercCoefficients: "1e-12, +0.39",
   } });
   assert.equal(smallCoefficientJob.input?.cercCoefficients, "1e-12,+0.39");
   for (const bad of [
-    { ...ids },
-    { ...ids, bathymetryResolution: 0, observationsInputId: "/etc/passwd" },
-    { ...ids, bathymetryResolution: 0.005, minWaveHours: 100 },
-    { ...ids, bathymetryResolution: 0.005, cercCoefficients: "0.2;echo" },
-    { ...ids, bathymetryResolution: 0.005, cercCoefficients: "1.1" },
-    { ...ids, bathymetryResolution: 0.005, outputPath: "/tmp/report" },
+    { ...cercFixture, ...ids },
+    { ...cercCalibrationDefaults, ...ids, bathymetryResolution: 0, observationsInputId: "/etc/passwd" },
+    { ...cercCalibrationDefaults, ...ids, bathymetryResolution: 0.005, minWaveHours: 100 },
+    { ...cercCalibrationDefaults, ...ids, bathymetryResolution: 0.005, cercCoefficients: "0.2;echo" },
+    { ...cercCalibrationDefaults, ...ids, bathymetryResolution: 0.005, cercCoefficients: "1.1" },
+    { ...cercCalibrationDefaults, ...ids, bathymetryResolution: 0.005, outputPath: "/tmp/report" },
   ]) assert.throws(() => validateCalculation({ kind: "calibrate_cerc", input: bad }));
 });
 
@@ -285,7 +246,7 @@ test("индексные профили CERC передаются только �
   const ids = { coastlineInputId: id, waveInputId: id, bathymetryInputId: id, bathymetryMetadataInputId: id };
   const optional = { sedimentSourcesInputId: profileId, structuresInputId: profileId };
   for (const kind of ["erosion_file", "all_file", "calibrate_cerc"] as const) {
-    const input = { ...ids, ...(kind === "calibrate_cerc" ? { observationsInputId: id, bathymetryResolution: 0.005 } : {}),
+    const input = { ...(kind === "calibrate_cerc" ? cercCalibrationDefaults : cercFixture), ...ids, ...(kind === "calibrate_cerc" ? { observationsInputId: id, bathymetryResolution: 0.005 } : {}),
       ...(kind === "all_file" ? { noModelSimplify: true, modelMaxPoints: 0 } : {}), ...optional };
     const job = validateCalculation({ kind, input });
     assert.deepEqual(scientificReferences(job).slice(-2), [
@@ -302,7 +263,7 @@ test("индексные профили CERC передаются только �
       assert.throws(() => validateCalculation({ kind, input: { ...input, sedimentSourcesInputId: value } }));
   }
   for (const options of [{}, { noModelSimplify: true, modelMaxPoints: 50 }, { noModelSimplify: false, modelMaxPoints: 0 }])
-    assert.throws(() => validateCalculation({ kind: "all_file", input: { ...ids, ...options, ...optional } }));
+    assert.throws(() => validateCalculation({ kind: "all_file", input: { ...cercFixture, ...ids, ...options, ...optional } }));
   assert.throws(() => validateCalculation({ kind: "erosion", input: optional }));
 });
 
@@ -388,7 +349,7 @@ test("полная цепочка сетка → модель дна испол�
   ]);
   const build = validateCalculation({
     kind: "seabed_build",
-    input: { flatMeshInputId: id, bathymetryInputId: id, bathymetryMetadataInputId: id, coastlineInputId: id },
+    input: { flatMeshInputId: id, bathymetryInputId: id, bathymetryMetadataInputId: id, coastlineInputId: id, maxSourceDistance: 50000 },
   });
   assert.equal(scientificReferences(build).length, 4);
   assert.deepEqual(commandArguments(build, "/job/output", undefined, {
@@ -443,6 +404,50 @@ test("научные сценарии принимают только UUID фа�
     { ...input, controlPoints: "true" },
   ])
     assert.throws(() => validateCalculation({ kind: "seabed_render", input: bad }));
+});
+
+test("подтипы отчёта сохраняются только у совместимого расчёта и не становятся CLI-флагами", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const inputs = {
+    seabed_render: { modelInputId: id, exportMetadataInputId: id, sourceMetadataInputId: id },
+    seabed_adapt: { modelInputId: id, sourceMetadataInputId: id },
+  };
+  for (const [kind, types] of [["seabed_render", ["bathymetry_overview", "mesh_details"]], ["seabed_adapt", ["size_field"]]] as const) {
+    const legacy = validateCalculation({ kind, input: inputs[kind] });
+    assert.equal(Object.hasOwn(legacy.input!, "reportType"), false);
+    const paths = { modelInputId: "/job/model.msh", exportMetadataInputId: "/job/export.json", sourceMetadataInputId: "/job/source.json" };
+    for (const reportType of types) {
+      const selected = validateCalculation({ kind, input: { ...inputs[kind], reportType } });
+      assert.equal(selected.input?.reportType, reportType);
+      assert.deepEqual(commandArguments(selected, "/job/output", undefined, paths), commandArguments(legacy, "/job/output", undefined, paths));
+      assert.deepEqual(scientificReferences(selected), scientificReferences(legacy));
+    }
+    for (const reportType of [null, true, 3, {}, [], "", "../mesh.svg", "mesh_details;curl", ...(kind === "seabed_render" ? ["size_field"] : ["mesh_details", "bathymetry_overview"])]) {
+      assert.throws(() => validateCalculation({ kind, input: { ...inputs[kind], reportType } }), /Подтип отчёта/);
+    }
+  }
+  assert.throws(() => validateCalculation({ kind: "dimension", input: { reportType: "mesh_details" } }));
+});
+
+test("два отчёта box-counting используют прежние входы и CLI всех трёх сценариев", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  for (const kind of ["dimension", "dimension_dataset", "dimension_file"] as const) {
+    const input = kind === "dimension_dataset" ? { datasetId: id } : kind === "dimension_file" ? { coastlineInputId: id } : {};
+    const legacy = validateCalculation({ kind, input });
+    assert.equal(Object.hasOwn(legacy.input!, "reportType"), false);
+    for (const reportType of ["coastline_box_counting", "box_counting_regression"]) {
+      const selected = validateCalculation({ kind, input: { ...input, reportType } });
+      assert.equal(selected.input?.reportType, reportType);
+      assert.deepEqual(commandArguments(selected, "/job/output", "/job/dataset.json", { coastlineInputId: "/job/coastline.json" }), commandArguments(legacy, "/job/output", "/job/dataset.json", { coastlineInputId: "/job/coastline.json" }));
+      assert.deepEqual(scientificReferences(selected), scientificReferences(legacy));
+    }
+    for (const reportType of [null, false, [], {}, 1, "", "size_field", "mesh_details", "../regression.svg"]) {
+      assert.throws(() => validateCalculation({ kind, input: { ...input, reportType } }), /Подтип отчёта/);
+    }
+  }
+  for (const kind of ["map", "dataset_validation", "coastline_validation", "seabed_render", "seabed_adapt"]) {
+    assert.throws(() => validateCalculation({ kind, input: { reportType: "box_counting_regression" } }));
+  }
 });
 
 test("сравнение Gmsh ограничивает алгоритмы, размеры и разрешение крупного запуска", () => {
@@ -630,7 +635,7 @@ test("QA-03 получает только пять приватных входо
   const id = "33333333-3333-4333-8333-333333333333";
   const input = {
     flatMeshInputId: id, meshReportInputId: id, coastlineInputId: id,
-    bathymetryInputId: id, bathymetryMetadataInputId: id,
+    bathymetryInputId: id, bathymetryMetadataInputId: id, maxSourceDistance: 50000,
   };
   const job = validateCalculation({ kind: "seabed_check_full", input });
   assert.equal(resourceProfileForKind(job.kind), "heavy");

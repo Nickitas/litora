@@ -25,7 +25,7 @@ func CoastlineValidation() Identity {
 
 // BoxCounting — текущая ревизия оценки фрактальной размерности и её отчётов.
 func BoxCounting() Identity {
-	return Identity{ID: "box-counting", Revision: "reports-2"}
+	return Identity{ID: "box-counting", Revision: "reports-3"}
 }
 
 // OverviewMap — текущая ревизия построения обзорной карты.

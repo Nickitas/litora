@@ -14,6 +14,8 @@ import {
   ServiceUnavailableException,
   UseGuards,
 } from "@nestjs/common";
+import { calculationParameterSchemas, calculationRequiredInputFields } from "./calculation-parameter-schema.js";
+import { retiredCalculationKinds, calculationReports } from "@litora/contracts";
 import {
   ApiBearerAuth,
   ApiBody,
@@ -25,7 +27,7 @@ import {
 } from "@nestjs/swagger";
 import { CalculationsRepository } from "./calculations.repository.js";
 import { CalculationDeletionService } from "./calculation-deletion.service.js";
-import { calculationKinds, resourceProfileForKind, validateCalculation } from "./commands.js";
+import { calculationKinds, listCalculationKinds, resourceProfileForKind, validateCalculation } from "./commands.js";
 import { environment } from "../config/environment.js";
 import { AuthGuard, type AuthRequest } from "../auth/auth.guard.js";
 import {
@@ -65,10 +67,10 @@ export class CalculationsController {
 
   @Get("kinds")
   @ApiOperation({ summary: "Доступные вычислительные сценарии" })
+  @ApiQuery({ name: "includeUnavailable", required: false, enum: ["true", "false"], description: "true включает выключенные сценарии с available=false и причиной; не разрешает запуск" })
   @ApiResponse({ status: 200, type: [CalculationKindResponse] })
-  kinds() {
-    return calculationKinds.filter((item) =>
-      environment.heavyEnabled || resourceProfileForKind(item.kind) === "standard");
+  kinds(@Query("includeUnavailable") includeUnavailable?: unknown) {
+    return listCalculationKinds(environment.heavyEnabled, includeUnavailable);
   }
 
   @Get("coastline-preview")
@@ -86,44 +88,24 @@ export class CalculationsController {
       properties: {
         kind: {
           type: "string",
-          enum: calculationKinds.map((item) => item.kind),
+          enum: calculationKinds.filter((item) => !retiredCalculationKinds.some((kind) => kind === item.kind)).map((item) => item.kind),
         },
         input: {
           type: "object",
           additionalProperties: false,
           properties: {
-            west: { type: "number", minimum: 27, maximum: 42.5, description: "coastline_region: западная долгота" },
-            east: { type: "number", minimum: 27, maximum: 42.5, description: "coastline_region: восточная долгота" },
-            south: { type: "number", minimum: 40.5, maximum: 47.5, description: "coastline_region: южная широта" },
-            north: { type: "number", minimum: 40.5, maximum: 47.5, description: "coastline_region: северная широта" },
-            steps: {
-              type: "integer",
-              minimum: 0,
-              maximum: 168,
-              description: "Для erosion: 1–168, по умолчанию 168; для all_demo: 1–24; для erosion_file/all_file: 1–48 либо 0 (весь ряд с ограничениями)",
+            ...calculationParameterSchemas,
+            reportType: {
+              type: "string", enum: calculationReports.map((report) => report.type),
+              description: "Основной отчёт: dimension/dimension_dataset/dimension_file — coastline_box_counting или box_counting_regression; seabed_render — bathymetry_overview или mesh_details; seabed_adapt — size_field. Необязателен для прежних клиентов; все артефакты Go сохраняются.",
             },
-            svgMaxFrames: { type: "integer", minimum: 0, maximum: 128, description: "Только erosion_file/all_file: 0 при обычном расчёте; при steps=0 — 2–128 SVG эрозии, включая первый и последний" },
-            breakingIndex: { type: "number", minimum: 0.55, maximum: 1.2, description: "CERC и all: индекс разрушения волн, default 0.78" },
-            bermHeight: { type: "number", minimum: 0.001, maximum: 100, description: "erosion: высота бермы, м; default 2" },
-            closureDepth: { type: "number", minimum: 0.001, maximum: 1000, description: "erosion: глубина замыкания, м; default 8" },
-            porosity: { type: "number", minimum: 0.000001, maximum: 0.699999, description: "erosion: пористость; default 0.4" },
-            cercCoefficient: { type: "number", minimum: 0.000001, maximum: 1, description: "erosion: коэффициент CERC; default 0.39" },
-            offshoreSampleDistance: { type: "number", minimum: 1, maximum: 100000, description: "erosion: расстояние отбора глубины, м; default 300" },
-            maxShorelineChange: { type: "number", minimum: 0.001, maximum: 1000, description: "erosion: предел смещения за состояние волн, м; default 25" },
-            maxBathymetryGap: { type: "number", minimum: 1, maximum: 100000, description: "erosion: радиус поиска глубины, м; default 3000 для демо" },
+
             outputCsv: { type: "boolean", description: "CERC и all: сохранить CSV метрик в каталоге результата" },
             csvFormat: { type: "string", enum: ["long", "wide"], description: "CERC и all: формат CSV; default long" },
             outputGif: { type: "boolean", description: "CERC и all: сохранить GIF" },
-            gifFps: { type: "integer", minimum: 1, maximum: 30, description: "CERC и all: кадров в секунду" },
-            gifSkip: { type: "integer", minimum: 1, maximum: 48, description: "erosion/all_file (1–48), all_demo (1–24): шаг кадров" },
-            modelMaxPoints: { type: "integer", minimum: 0, maximum: 10000, description: "all_demo/all_file: ограничение точек модели; 0 — автоматически" },
-            noModelSimplify: { type: "boolean", description: "all_demo/all_file: не упрощать базовую линию при modelMaxPoints=0" },
-            bathymetryResolution: { type: "number", minimum: 0.000000001, maximum: 1, description: "calibrate_cerc: фактический шаг батиметрии в градусах; обязателен и проверяется Go против паспорта" },
-            cercCoefficients: { type: "string", description: "calibrate_cerc: от одного до восьми коэффициентов (0;1] через запятую" },
-            maxObservationDistance: { type: "number", minimum: 1, maximum: 100000, description: "calibrate_cerc: допустимая дистанция наблюдения до берега, м" },
-            minWaveHours: { type: "number", minimum: 8766, maximum: 100000, description: "calibrate_cerc: минимальное покрытие волнового ряда, ч" },
-            leftBoundaryTransport: { type: "number", minimum: -1000000, maximum: 1000000, description: "erosion, all и calibrate_cerc: поток через левую границу, м³/с; положительный входит в сегмент" },
-            rightBoundaryTransport: { type: "number", minimum: -1000000, maximum: 1000000, description: "erosion, all и calibrate_cerc: поток через правую границу, м³/с; положительный выходит из сегмента" },
+
+            noModelSimplify: { type: "boolean", description: "all_file: не упрощать базовую линию при modelMaxPoints=0" },
+
             datasetId: {
               type: "string",
               format: "uuid",
@@ -151,54 +133,42 @@ export class CalculationsController {
             ratingsInputId: { type: "string", format: "uuid", description: "AI-02: заполненный TSV экспертных оценок" },
             organizerKeyInputId: { type: "string", format: "uuid", description: "AI-02: закрытый ключ AI-01, доступный только владельцу" },
             comparisonReportInputId: { type: "string", format: "uuid", description: "AI-02: принятый отчёт ADAPT-03 из того же набора карточек" },
-            minExpertsPerCard: { type: "integer", minimum: 2, maximum: 10, description: "AI-02: независимых экспертов на карточку" },
-            minTraining: { type: "integer", minimum: 2, maximum: 96, description: "AI-02: минимум карточек обучения" },
-            minEvaluation: { type: "integer", minimum: 2, maximum: 96, description: "AI-02: минимум карточек независимой проверки" },
-            ridgeLambda: { type: "number", minimum: 0.000001, maximum: 1000, description: "AI-02: регуляризация ridge-кандидата" },
-            minRmseImprovement: { type: "number", minimum: 0.001, maximum: 0.99, description: "AI-02: минимальное относительное улучшение RMSE" },
-            isobaths: { type: "string", description: "seabed_render/QA-03: глубины в метрах через запятую" },
-            verticalExaggeration: { type: "number", minimum: 1, maximum: 200 },
+
             controlPoints: { type: "boolean" },
-            worstCells: { type: "integer", minimum: 1, maximum: 1000 },
-            maxNearestDistance: { type: "number", minimum: 0, maximum: 100000 },
-            minSize: { type: "number", minimum: 1 },
-            coastSize: { type: "number", minimum: 1 },
-            shelfSize: { type: "number", minimum: 1 },
-            deepSize: { type: "number", minimum: 1 },
-            coastInfluence: { type: "number", minimum: 1 },
-            curvatureReference: { type: "number", minimum: 0.001 },
-            slopeReference: { type: "number", minimum: 0.001 },
-            flatDeepSlope: { type: "number", minimum: 0.001 },
-            maxNeighbourRatio: { type: "number", minimum: 1.000001 },
-            maxSizeGradient: { type: "number", minimum: 0.000001 },
-            cellSizes: { type: "string", description: "mesh: длины рёбер в метрах через запятую" },
-            boundaryDetails: { type: "string", description: "mesh: детализации берега через запятую" },
-            boundaryDetail: { type: "number", minimum: 10, maximum: 10000 },
-            targetEdge: { type: "number", minimum: 10, maximum: 10000, description: "QA-03: контрольное ребро MSH, м" },
-            maxSourceDistance: { type: "number", minimum: 100, maximum: 100000 },
-            coastTransition: { type: "number", minimum: 0, maximum: 100000 },
+
             recoverWgs84: { type: "boolean" },
-            maxNodes: { type: "integer", minimum: 1000, maximum: 25000000 },
-            maxOutputMiB: { type: "integer", minimum: 1, maximum: 8192 },
-            generators: { type: "string", enum: ["delaunay", "frontal-quad", "parallelograms", "delaunay,frontal-quad", "delaunay,frontal-quad,parallelograms"] },
-            generator: { type: "string", enum: ["delaunay", "frontal-quad", "parallelograms"] },
+
             levelMin: { type: "number", minimum: 10, maximum: 10000 },
             levelMax: { type: "number", minimum: 10, maximum: 10000 },
-            levels: { type: "string", description: "compare-adaptive: до четырёх уровней id:min:max через запятую" },
-            detailPreset: { type: "string", enum: ["none", "kizilirmak"], description: "Подробное окно сравнения сеток" },
+
             generateExpertSet: { type: "boolean", description: "compare-adaptive: подготовить приватный экспертный набор AI-01 после принятого ADAPT-03" },
             expertLevels: { type: "string", description: "AI-01: до четырёх ID уровней из levels через запятую; пусто — все" },
             expertSeed: { type: "string", minLength: 1, maxLength: 80, description: "AI-01: строка анонимизации (латиница, цифры, дефис, подчёркивание)" },
             generateFigureFive: { type: "boolean", description: "Рисунок 5: собрать три фактические карточки после AI-01" },
             figureFiveLevel: { type: "string", description: "Рисунок 5: ID уровня из экспертного набора AI-01" },
             figureFiveGenerator: { type: "string", enum: ["delaunay", "frontal-quad", "parallelograms"], description: "Рисунок 5: генератор из выбранного сравнения" },
-            maxCells: { type: "integer", minimum: 1000, maximum: 25000000 },
+
             allowLarge: { type: "boolean" },
-            generatorTimeoutMinutes: { type: "integer", minimum: 1, maximum: 120 },
+
           },
         },
       },
-      example: { kind: "erosion", input: { steps: 168 } },
+      oneOf: calculationKinds.filter((item) => !retiredCalculationKinds.some((kind) => kind === item.kind)).map(({ kind }) => {
+        const required = calculationRequiredInputFields(kind);
+        return {
+          properties: {
+            kind: { enum: [kind] },
+            input: {
+              type: "object" as const, ...(required.length ? { required } : {}),
+              ...(calculationReports.some((report) => report.kinds.some((allowed) => allowed === kind)) ? {
+                properties: { reportType: { type: "string" as const, enum: calculationReports.filter((report) => report.kinds.some((allowed) => allowed === kind)).map((report) => report.type) } },
+              } : {}),
+            },
+          },
+          ...(required.length ? { required: ["input"] } : {}),
+        };
+      }),
+      example: { kind: "dimension", input: {} },
     },
   })
   @ApiResponse({
@@ -206,6 +176,7 @@ export class CalculationsController {
     type: CalculationResponse,
     description: "Создано задание со статусом queued",
   })
+  @ApiResponse({ status: 400, description: "Неверный параметр или отсутствует явное значение участка. Технические диапазоны не подтверждают научную пригодность; её проверяет Go." })
   create(@Req() req: AuthRequest, @Body() body: unknown) {
     const job = validateCalculation(body);
     if (!environment.heavyEnabled && resourceProfileForKind(job.kind) === "heavy")

@@ -264,15 +264,31 @@ export type CalculationKind =
   | "seabed_compare_adaptive"
   | "seabed_assess_ml"
   | "seabed_check_full";
+
+/** Виды, сохраняемые для чтения истории; новые запуски запрещены. */
+export const retiredCalculationKinds = ["erosion", "all_demo"] as const;
+/** Вычислительные виды для новых заданий; история использует CalculationKind. */
+export type RunnableCalculationKind = Exclude<CalculationKind, typeof retiredCalculationKinds[number]>;
+
 export interface CreateCalculationDto {
-  kind: CalculationKind;
+  kind: RunnableCalculationKind;
   input?: Record<string, string | number | boolean | undefined>;
 }
+export { seabedReports, findSeabedReport } from "./seabed-reports.js";
+export type { SeabedReportType } from "./seabed-reports.js";
+export { calculationReports, dimensionReports, findCalculationReport } from "./calculation-reports.js";
+export type { CalculationReportType } from "./calculation-reports.js";
 export interface CalculationKindDto {
   kind: CalculationKind;
   title: string;
   description: string;
   selectable?: boolean;
+  available?: boolean;
+  unavailableReason?: string;
+}
+
+export interface CalculationKindListQueryDto {
+  includeUnavailable?: boolean;
 }
 
 export interface CoastlineRegionBoundsDto {
@@ -302,6 +318,11 @@ export interface ScientificInputFormatDto {
 }
 
 /** Управляемые параметры CERC; научный расчёт выполняет только Go. */
+export { adaptiveParameterDefinitions, calculationNumericParameters, calculationParameterCombinationError, cercSiteParameterNames, resolveNumericCalculationParameter } from "./calculation-parameters.js";
+export type { NumericCalculationParameter } from "./calculation-parameters.js";
+export { calculationTextParameters, resolveTextCalculationParameter } from "./calculation-text-parameters.js";
+export type { TextCalculationParameter } from "./calculation-text-parameters.js";
+
 export interface CercOptionsDto {
   steps: number;
   /** Для собственных входов: 0 — все SVG при обычном расчёте. */
@@ -326,6 +347,7 @@ export interface CercOptionsDto {
 /** Совместимое имя контракта демонстрационного сценария. */
 export type ErosionDemoOptionsDto = CercOptionsDto;
 
+/** Параметры исторических демо для чтения и экспорта прежних результатов. */
 export const erosionDemoDefaults: CercOptionsDto = {
   steps: 168,
   breakingIndex: 0.78,
@@ -345,7 +367,7 @@ export const erosionDemoDefaults: CercOptionsDto = {
   gifSkip: 1,
 };
 
-/** Параметры CERC для собственного контура, волнового ряда и батиметрии. */
+/** Исторические начальные параметры CERC. Новый запуск требует явных значений участка. */
 export const erosionFileDefaults: CercOptionsDto = {
   ...erosionDemoDefaults,
   steps: 3,
@@ -362,6 +384,7 @@ export interface AllOptionsDto extends CercOptionsDto {
 /** Совместимое имя контракта демонстрационного сценария. */
 export type AllDemoOptionsDto = AllOptionsDto;
 
+/** Параметры исторических демо; не разрешают новый запуск. */
 export const allDemoDefaults: AllOptionsDto = {
   ...erosionDemoDefaults,
   steps: 24,
@@ -369,7 +392,7 @@ export const allDemoDefaults: AllOptionsDto = {
   noModelSimplify: false,
 };
 
-/** Параметры полного конвейера по собственным проверяемым входным файлам. */
+/** Исторические начальные параметры конвейера. Не подставляются вместо неизвестных условий участка. */
 export const allFileDefaults: AllOptionsDto = {
   ...allDemoDefaults,
   steps: 3,
@@ -393,6 +416,7 @@ export interface CercCalibrationOptionsDto {
   rightBoundaryTransport: number;
 }
 
+/** Исторические параметры калибровки; сохраняются для чтения старых результатов, не для новой формы. */
 export const cercCalibrationDefaults: Omit<CercCalibrationOptionsDto, "bathymetryResolution"> = {
   cercCoefficients: "0.2,0.3,0.39,0.5,0.6",
   maxObservationDistance: 500,

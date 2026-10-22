@@ -144,6 +144,8 @@ export class CalculationKindResponse implements CalculationKindDto {
   @ApiProperty({ type: String }) title!: string;
   @ApiProperty({ type: String }) description!: string;
   @ApiProperty({ type: Boolean, required: false, description: "false скрывает служебный вид из обычного выбора нового расчёта" }) selectable?: boolean;
+  @ApiProperty({ type: Boolean, required: false, description: "Доступность запуска по конфигурации сервера; не проверка работоспособности worker" }) available?: boolean;
+  @ApiProperty({ type: String, required: false, description: "Причина недоступности сценария" }) unavailableReason?: string;
 }
 
 export class CoastlineValidationResponse implements CoastlineValidationDto {

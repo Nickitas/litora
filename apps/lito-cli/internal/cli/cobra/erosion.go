@@ -60,8 +60,6 @@ var (
 	erosionOffshoreDistance       float64
 	erosionMaxChange              float64
 	erosionMaxBathymetryGap       float64
-	erosionBlackSeaSochi          bool
-	erosionOffline                bool
 )
 
 var erosionCmd = &cobra.Command{
@@ -70,9 +68,9 @@ var erosionCmd = &cobra.Command{
 	Long: `Выполняет инженерную one-line модель CERC по загруженному волновому ряду.
 Расчёт включает дисперсию, рефракцию, shoaling, разрушение волн и
 уравнение неразрывности вдольберегового транспорта. Батиметрия и волновой ряд
-обязательны; без аргументов используется демонстрационный открытый набор Сочи.
-Автоматический сценарий получает статус demo и не является оценкой годового
-размыва, калибровкой или научным отчётом.`,
+обязательны. Явно укажите --input (или --source-url), --wave-input и --bathymetry.
+Отсутствующие входы не подставляются и не генерируются. Пригодность данных
+и параметров для прогноза требует независимой проверки.`,
 	RunE: runErosion,
 }
 
@@ -106,8 +104,6 @@ func init() {
 	erosionCmd.Flags().Float64Var(&erosionRightBoundaryTransport, "right-boundary-transport", 0, "поток наносов через правую границу, м³/с; положительный направлен из сегмента")
 	erosionCmd.Flags().StringVar(&erosionSedimentSources, "sediment-sources", "", "JSON внешних источников и стоков наносов по ячейкам")
 	erosionCmd.Flags().StringVar(&erosionStructures, "structures", "", "JSON сооружений, изменяющих пропуск потока между ячейками")
-	erosionCmd.Flags().BoolVar(&erosionBlackSeaSochi, "black-sea-sochi", false, "загрузить открытые данные Сочи и выполнить демонстрационный расчёт demo")
-	erosionCmd.Flags().BoolVar(&erosionOffline, "offline", false, "для демо Сочи использовать только локальный проверенный кэш без сети")
 
 	// Export options
 	erosionCmd.Flags().StringVar(&erosionOutputCSV, "output-csv", "", "путь к CSV файлу для экспорта метрик")
@@ -117,41 +113,9 @@ func init() {
 	erosionCmd.Flags().IntVar(&erosionGIFSkip, "gif-skip", 1, "пропускать каждые N кадров")
 }
 
-func runErosion(cmd *cobra.Command, args []string) error {
-	// Пустой запуск выбирает проверяемый сценарий Сочи, а не синтетические
-	// условия и не обзорную береговую линию другого масштаба.
-	if erosionInput == "" && erosionBathymetry == "" && erosionWaveInput == "" && !erosionBlackSeaSochi {
-		erosionBlackSeaSochi = true
-		fmt.Println("✓ Входные файлы не заданы: выбран демонстрационный набор Чёрного моря — Сочи (demo)")
-	}
-	if err := validateSochiOfflineMode(erosionOffline, erosionBlackSeaSochi, erosionSourceURL); err != nil {
+func runErosion(_ *cobra.Command, _ []string) error {
+	if err := validateCERCInputs(erosionInput, erosionSourceURL, erosionBathymetry, erosionWaveInput); err != nil {
 		return err
-	}
-	if erosionBlackSeaSochi {
-		paths, err := prepareBlackSeaSochiDataWithPolicy(erosionRefresh, erosionOffline)
-		if err != nil {
-			return fmt.Errorf("подготовка набора Сочи: %w", err)
-		}
-		erosionInput = paths.Coastline
-		erosionBathymetry = paths.Bathymetry
-		erosionWaveInput = paths.Waves
-		erosionWaveSource = paths.WaveSource
-		if !cmd.Flags().Changed("structures") {
-			erosionStructures = paths.Structures
-		}
-		if !cmd.Flags().Changed("max-bathymetry-gap") {
-			erosionMaxBathymetryGap = 3000
-		}
-		if !cmd.Flags().Changed("bathymetry-resolution") {
-			erosionBathymetryResolution = 0.005
-		}
-		if erosionSteps == 0 {
-			erosionSteps = 24
-		}
-		fmt.Printf("✓ Загружен стартовый набор Сочи: %s\n", blackSeaSochiDataDir)
-		if paths.StructureWarning != "" {
-			fmt.Printf("Предупреждение: %s\n", paths.StructureWarning)
-		}
 	}
 
 	result, err := coastline.Load(coastline.LoadOptions{
@@ -185,9 +149,6 @@ func runErosion(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if erosionWaveInput == "" {
-		return fmt.Errorf("укажите --wave-input: модель не использует вымышленные волновые условия")
-	}
 	climate, err := geometry.LoadWaveClimate(erosionWaveInput, erosionWaveSource)
 	if err != nil {
 		return err
@@ -198,7 +159,7 @@ func runErosion(cmd *cobra.Command, args []string) error {
 	if err := validateCERCResourceLimits(len(climate.Conditions), len(result.Points), erosionMaxWaveConditions, erosionMaxCoastPoints, erosionMaxSVGFrames); err != nil {
 		return err
 	}
-	scenario := classifyLongshoreScenario(erosionBlackSeaSochi, climate, modelInputs)
+	scenario := classifyLongshoreScenario()
 	model, err := geometry.RunLongshoreCERC(result.Points, climate, geometry.LongshoreModelConfig{
 		Scenario:                  scenario,
 		Bathymetry:                modelInputs.BathymetryGrid,

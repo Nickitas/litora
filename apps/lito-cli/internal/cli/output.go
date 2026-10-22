@@ -652,18 +652,20 @@ func logLogPlotOptionsFromAnalysis(analysis fractal.BoxCountingAnalysis) svgrend
 		points = append(points, svgrender.LogLogPoint{
 			LogInverseScale: sample.LogInvScale,
 			LogBoxes:        sample.LogBoxes,
+			BoxesCovered:    sample.BoxesCovered,
 			BoxSizeMeters:   sample.BoxSizeMeters,
 			InRegression:    index >= analysis.RegressionStart && index <= analysis.RegressionEnd,
 		})
 	}
 	return svgrender.LogLogPlotOptions{
-		Title:          "Аудит box-counting — наблюдаемая линия",
-		Subtitle:       "Все масштабы ε и значения N(ε); пунктир — окно линейной регрессии",
-		Points:         points,
-		Dimension:      analysis.Dimension,
-		RSquared:       analysis.RegressionRSquared,
-		RegressionFrom: analysis.RegressionStart,
-		RegressionTo:   analysis.RegressionEnd,
+		Title:               "Аудит box-counting — наблюдаемая линия",
+		Subtitle:            "ε — размер ячейки; ε_rel = ε/L; N — среднее по сдвигам; пунктир — регрессия",
+		Points:              points,
+		Dimension:           analysis.Dimension,
+		RSquared:            analysis.RegressionRSquared,
+		RegressionIntercept: analysis.RegressionIntercept,
+		RegressionFrom:      analysis.RegressionStart,
+		RegressionTo:        analysis.RegressionEnd,
 	}
 }
 
