@@ -97,7 +97,7 @@ export class CalculationsController {
             ...calculationParameterSchemas,
             reportType: {
               type: "string", enum: calculationReports.map((report) => report.type),
-              description: "Основной отчёт: dimension/dimension_dataset/dimension_file — coastline_box_counting или box_counting_regression; seabed_render — bathymetry_overview или mesh_details; seabed_adapt — size_field. Необязателен для прежних клиентов; все артефакты Go сохраняются.",
+              description: "Основной отчёт: dimension/dimension_dataset/dimension_file — coastline_box_counting или box_counting_regression; seabed_render — bathymetry_overview или mesh_details; seabed_adapt — size_field; seabed_compare_adaptive — adaptive_mesh_overviews, adaptive_mesh_windows (detailPreset=kizilirmak) или expert_fragment_cards (generateExpertSet=true). Необязателен для прежних клиентов; все артефакты Go сохраняются.",
             },
 
             outputCsv: { type: "boolean", description: "CERC и all: сохранить CSV метрик в каталоге результата" },

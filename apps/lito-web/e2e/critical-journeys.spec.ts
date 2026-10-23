@@ -684,6 +684,167 @@ async function chooseOption(page: Page, label: string, option: string) {
   await page.getByRole("option", { name: option, exact: true }).click();
 }
 
+for (const theme of ["light", "dark"] as const) {
+  for (const [reportType, title] of [
+    ["adaptive_mesh_overviews", "Обзоры построенных сеток"],
+    ["adaptive_mesh_windows", "Подробные окна сеток"],
+    ["expert_fragment_cards", "Анонимные карточки AI-01"],
+  ] as const) {
+    test(`представление сравнения сохраняет входы и параметры · ${reportType} · ${theme}`, async ({ page }) => {
+      const submissions: unknown[] = [];
+      const observed = await mockArticleCalculations(page, submissions);
+      await page.setViewportSize({ width: 360, height: 780 });
+      await openNewCalculation(page, theme);
+      await chooseOption(page, "Что рассчитать", "Сравнение сеток");
+      const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
+      for (const [field, index] of [["modelInputId", 0], ["exportMetadataInputId", 2], ["fieldCsvInputId", 3], ["fieldReportInputId", 4], ["coastlineInputId", 5]] as const)
+        await selectArticleInput(page, field, index);
+      await dialog.locator("#compare-levels").fill("custom:2000:10000");
+      const picker = dialog.getByRole("combobox", { name: "Вид отчёта сравнения сеток" });
+      await picker.focus();
+      await page.keyboard.press("Enter");
+      await page.getByRole("option", { name: title, exact: true }).focus();
+      await page.keyboard.press("Enter");
+      await expect(picker).toBeFocused();
+      await expect(picker).toContainText(title);
+      await expect(dialog.locator("#compare-levels")).toHaveValue("custom:2000:10000");
+      await expect(dialog.locator("#scientific-modelInputId")).toContainText("Архивный вход 1");
+      if (reportType === "adaptive_mesh_windows") {
+        await expect(dialog.locator("#compare-detail-preset")).toBeDisabled();
+        await expect(dialog.locator("#compare-detail-preset")).toContainText("4,2 × 2,6 км");
+      }
+      if (reportType === "expert_fragment_cards") {
+        await expect(dialog.getByRole("checkbox", { name: "Подготовить экспертные SVG-карточки AI-01" })).toBeChecked();
+        await expect(dialog.getByRole("checkbox", { name: "Подготовить экспертные SVG-карточки AI-01" })).toBeDisabled();
+        await expect(dialog).toContainText("E-номер действует только внутри текущего набора");
+        await chooseOption(page, "Генераторы Gmsh", "Только Delaunay");
+        await expect(dialog.getByRole("button", { name: "Запустить расчёт" })).toBeDisabled();
+        await expect(dialog.getByRole("region", { name: "4. Результат" })).toContainText("минимум два генератора");
+        await chooseOption(page, "Генераторы Gmsh", "Delaunay и Frontal-Delaunay for Quads");
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+      if (reportType === "expert_fragment_cards") await page.screenshot({ path: `/private/tmp/litora-0080-${theme}-form.png` });
+      await dialog.getByRole("button", { name: "Запустить расчёт" }).click();
+      await expect.poll(() => submissions.length).toBe(1);
+      expect(submissions[0]).toMatchObject({ kind: "seabed_compare_adaptive", input: {
+        reportType, modelInputId: articleInputs[0].id, exportMetadataInputId: articleInputs[2].id,
+        fieldCsvInputId: articleInputs[3].id, fieldReportInputId: articleInputs[4].id, coastlineInputId: articleInputs[5].id,
+        levels: "custom:2000:10000", generateExpertSet: reportType === "expert_fragment_cards",
+        ...(reportType === "adaptive_mesh_windows" ? { detailPreset: "kizilirmak" } : {}),
+      } });
+      expect(observed.unexpected).toEqual([]);
+      expect(observed.pageErrors).toEqual([]);
+    });
+  }
+}
+
+function adaptiveReportJob() {
+  const filename = "seabed/expert-set/cards/E-009.svg";
+  const indexFilename = "seabed/expert-set/expert-visual-reports.json";
+  const index = { schema_version: "lito-adaptive-visual-reports/v1", comparison_report_sha256: "b".repeat(64), reports: [{
+    report_type: "expert_fragment_cards", filename, sha256: "c".repeat(64),
+    title: "Карточка E-009 · Кызылырмакская коса", description: "Окно 28000 × 28000 м LAEA; 25 ячеек, 7 сегментов изобат. Генератор и уровень скрыты.",
+  }] };
+  const stored: CalculationJobDto = { ...job, kind: "seabed_compare_adaptive", status: "succeeded",
+    input: { reportType: "expert_fragment_cards", generateExpertSet: true },
+    resultSummary: { metrics: { "expert-visual-reports.json": index } },
+    artifacts: [filename, indexFilename, "seabed/adaptive/comparison/adaptive-generator-comparison.json"].map((name, i) => ({
+      id: `99999999-9999-4999-8999-${String(i + 1).padStart(12, "0")}`, category: "output", filename: name,
+      sha256: (i === 0 ? "c" : "b").repeat(64), contentType: i === 0 ? "image/svg+xml" : "application/json", sizeBytes: 100,
+      downloadUrl: i === 0 ? "/test/adaptive-card.svg" : "/test/passport.json",
+    })),
+  };
+  return { stored, index };
+}
+
+for (const status of ["queued", "running", "failed", "cancelled"] as const) {
+  test(`выбранный AI-01 объясняет состояние без SVG · ${status}`, async ({ page }) => {
+    const { stored } = adaptiveReportJob();
+    stored.status = status;
+    stored.artifacts = [];
+    stored.resultSummary = null;
+    await mockApi(page, (path) => {
+      if (path === "/api/auth/refresh") return { body: session };
+      if (path === "/api/calculations/kinds") return { body: kinds };
+      if (path === `/api/calculations/${stored.id}`) return { body: stored };
+    });
+    await page.goto(`/lab/calculations/${stored.id}`);
+    const section = page.getByRole("region", { name: "Выбранный отчёт: Анонимные карточки AI-01" });
+    if (status === "queued" || status === "running") await expect(section.getByRole("status")).toContainText("после завершения расчёта");
+    else await expect(section).toContainText(status === "cancelled" ? "Расчёт отменён" : "Расчёт завершён с ошибкой");
+    await expect(section.getByRole("img")).toHaveCount(0);
+  });
+}
+
+for (const type of ["adaptive_mesh_overviews", "adaptive_mesh_windows"] as const) {
+  test(`выбранный ADAPT-03 использует текущий индекс · ${type}`, async ({ page }) => {
+    const { stored, index } = adaptiveReportJob();
+    stored.input = { reportType: type };
+    const filename = `seabed/adaptive/comparison/local/delaunay/${type === "adaptive_mesh_overviews" ? "mesh-preview" : "mesh-window-kizilirmak"}.svg`;
+    const title = "Delaunay · local · 1000–10000 м";
+    const entry = { ...index.reports[0], report_type: type, filename, title };
+    stored.resultSummary = { metrics: { "comparison-visual-reports.json": { ...index, reports: [entry] } } };
+    stored.artifacts[0] = { ...stored.artifacts[0], filename };
+    stored.artifacts[1] = { ...stored.artifacts[1], filename: "seabed/adaptive/comparison/comparison-visual-reports.json" };
+    await page.route("**/test/adaptive-card.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720"/>' }));
+    await mockApi(page, (path) => {
+      if (path === "/api/auth/refresh") return { body: session };
+      if (path === "/api/calculations/kinds") return { body: kinds };
+      if (path === `/api/calculations/${stored.id}`) return { body: stored };
+    });
+    await page.goto(`/lab/calculations/${stored.id}`);
+    const section = page.getByRole("region", { name: `Выбранный отчёт: ${type === "adaptive_mesh_overviews" ? "Обзоры построенных сеток" : "Подробные окна сеток"}` });
+    await expect(section.getByRole("img", { name: title })).toBeVisible();
+    await expect(section.getByRole("alert")).toHaveCount(0);
+  });
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`AI-01 показывает подпись текущего Go-индекса · ${theme}`, async ({ page }) => {
+    const { stored } = adaptiveReportJob();
+    await page.route("**/test/adaptive-card.svg", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720"><title>Транспортная фикстура UI</title></svg>' }));
+    const observed = await mockApi(page, (path) => {
+      if (path === "/api/auth/refresh") return { body: session };
+      if (path === "/api/calculations/kinds") return { body: [...kinds, { kind: "seabed_compare_adaptive", title: "Сравнение сеток", description: "ADAPT-03" }] };
+      if (path === `/api/calculations/${stored.id}`) return { body: stored };
+    });
+    await page.setViewportSize({ width: 360, height: 780 });
+    await page.goto(`/lab/calculations/${stored.id}`);
+    await chooseTheme(page, theme);
+    const section = page.getByRole("region", { name: "Выбранный отчёт: Анонимные карточки AI-01" });
+    await expect(section.getByRole("img", { name: "Карточка E-009 · Кызылырмакская коса" })).toBeVisible();
+    await expect(section).toContainText("25 ячеек, 7 сегментов изобат");
+    await expect(section).not.toContainText(/delaunay|frontal|coarse|organizer-key/);
+    expect(await page.getByRole("img", { name: "Карточка E-009 · Кызылырмакская коса" }).count()).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+    await section.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `/private/tmp/litora-0080-${theme}-result.png` });
+    expect(observed.unexpected).toEqual([]);
+    expect(observed.pageErrors).toEqual([]);
+  });
+}
+
+for (const reason of ["passport", "svg", "index", "unsafe-path", "duplicate", "missing-index-file"] as const) {
+  test(`AI-01 не подставляет неподтверждённый SVG · ${reason}`, async ({ page }) => {
+    const { stored, index } = adaptiveReportJob();
+    if (reason === "passport") index.comparison_report_sha256 = "d".repeat(64);
+    if (reason === "svg") index.reports[0].sha256 = "d".repeat(64);
+    if (reason === "index") stored.resultSummary = {};
+    if (reason === "unsafe-path") index.reports[0].filename = "../cards/E-009.svg";
+    if (reason === "duplicate") index.reports.push({ ...index.reports[0] });
+    if (reason === "missing-index-file") stored.artifacts.splice(1, 1);
+    await mockApi(page, (path) => {
+      if (path === "/api/auth/refresh") return { body: session };
+      if (path === "/api/calculations/kinds") return { body: kinds };
+      if (path === `/api/calculations/${stored.id}`) return { body: stored };
+    });
+    await page.goto(`/lab/calculations/${stored.id}`);
+    const section = page.getByRole("region", { name: "Выбранный отчёт: Анонимные карточки AI-01" });
+    await expect(section.getByRole("alert")).toContainText("не подтверждён паспортом и контрольными суммами");
+    await expect(section.getByRole("img")).toHaveCount(0);
+  });
+}
+
 async function chooseTheme(page: Page, mode: "light" | "dark" | "system") {
   const button = page.getByRole("button", { name: /^Тема оформления:/ });
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -3480,7 +3641,7 @@ test("пресет рисунка 4 переносит точные параме
   expect(observed.pageErrors).toEqual([]);
 });
 
-test("пресет рисунков 6–7 задаёт архивный уровень и не разрешает большой запуск", async ({
+test("архивный пресет задаёт диапазон без обещания повтора рисунков 6–7", async ({
   page,
 }) => {
   const submissions: unknown[] = [];
@@ -3491,10 +3652,10 @@ test("пресет рисунков 6–7 задаёт архивный уров
   await chooseOption(page, "Что рассчитать", "Сравнение сеток");
   const dialog = page.getByRole("dialog", { name: "Новый расчёт" });
   await dialog
-    .getByRole("button", { name: "Заполнить как рисунки 6–7: сетки 125–250 м" })
+    .getByRole("button", { name: "Архив статьи: сетки 125–250 м" })
     .click();
   await expect(dialog.getByRole("region", { name: "3. Параметры" }).getByRole("status")).toContainText(
-    "Большой расчёт не разрешён автоматически"
+    "большой расчёт не разрешён автоматически"
   );
   await expect(
     dialog.getByText("значительных ресурсов", { exact: false })
@@ -3523,6 +3684,7 @@ test("пресет рисунков 6–7 задаёт архивный уров
   expect(submissions[0]).toEqual({
     kind: "seabed_compare_adaptive",
     input: {
+      reportType: "adaptive_mesh_overviews",
       modelInputId: articleInputs[0].id,
       exportMetadataInputId: articleInputs[2].id,
       fieldCsvInputId: articleInputs[3].id,
@@ -3559,7 +3721,7 @@ test("рисунок 5 собирается из AI-01 с выбранными �
     })
     .click();
   await expect(dialog.getByRole("region", { name: "3. Параметры" }).getByRole("status")).toContainText(
-    "Для рисунка 5 выбраны уровень coarse, Delaunay и карточки AI-01"
+    "Для компоновки трёх фрагментов выбраны уровень coarse, Delaunay и карточки AI-01"
   );
   await expect(
     dialog.getByRole("checkbox", {
@@ -3671,6 +3833,7 @@ test("AI-01 сохраняется в паспорте и восстанавли
   page,
 }) => {
   const storedInput = {
+    reportType: "expert_fragment_cards",
     modelInputId: articleInputs[0].id,
     exportMetadataInputId: articleInputs[2].id,
     fieldCsvInputId: articleInputs[3].id,

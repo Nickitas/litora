@@ -147,7 +147,7 @@ function optionalReferences(input: Record<string, unknown>, kind: keyof typeof o
 
 
 
-function expertOptions(input: Record<string, unknown>, levels: string, generators: string) {
+function expertOptions(input: Record<string, unknown>, levels: string) {
   if (input.generateExpertSet !== undefined && typeof input.generateExpertSet !== "boolean")
     throw new BadRequestException("Недопустимый флаг экспертных карточек");
   if (input.generateExpertSet !== true) {
@@ -155,8 +155,6 @@ function expertOptions(input: Record<string, unknown>, levels: string, generator
       throw new BadRequestException("Параметры AI-01 требуют включить экспертные карточки");
     return { generateExpertSet: false };
   }
-  if (generators.split(",").length < 2)
-    throw new BadRequestException("Для экспертных карточек нужны минимум два генератора");
   const selected = input.expertLevels ?? expertSetDefaults.expertLevels;
   if (typeof selected !== "string" || (selected !== "" && !/^[a-z][a-z0-9_-]{0,31}(,[a-z][a-z0-9_-]{0,31}){0,3}$/.test(selected)))
     throw new BadRequestException("Недопустимый список уровней AI-01");
@@ -462,7 +460,8 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
     }
     case "seabed_compare_adaptive": {
       const fields = scientificInputFields.seabed_compare_adaptive;
-      rejectUnknown(p, [...Object.keys(fields), "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "maxCells", "allowLarge", "generatorTimeoutMinutes", "detailPreset", "generateExpertSet", "expertLevels", "expertSeed", "generateFigureFive", "figureFiveLevel", "figureFiveGenerator"]);
+      rejectUnknown(p, [...Object.keys(fields), "reportType", "boundaryDetail", "generators", "levels", "levelMin", "levelMax", "maxCells", "allowLarge", "generatorTimeoutMinutes", "detailPreset", "generateExpertSet", "expertLevels", "expertSeed", "generateFigureFive", "figureFiveLevel", "figureFiveGenerator"]);
+      const report = reportOptions(data.kind, p.reportType);
       const generators = stringParameter(data.kind as CalculationKind, "generators", p.generators);
       const detailPreset = stringParameter("seabed_compare_adaptive", "detailPreset", p.detailPreset);
       if (p.allowLarge !== undefined && typeof p.allowLarge !== "boolean")
@@ -473,12 +472,13 @@ export function validateCalculation(body: unknown): CreateCalculationDto {
         ? `detailed:${numberIn(p.levelMin === undefined ? 125 : p.levelMin, "Минимальный размер", 10, 10000)}:${numberIn(p.levelMax === undefined ? 250 : p.levelMax, "Максимальный размер", 10, 10000)}`
         : undefined;
       const levels = stringParameter("seabed_compare_adaptive", "levels", p.levels === undefined ? legacyLevels : p.levels);
-      const expert = expertOptions(p, levels, generators);
+      const expert = expertOptions(p, levels);
       const figureFive = figureFiveOptions(p, levels, generators, expert);
+      assertParameterCombination("seabed_compare_adaptive", { ...report, generators, detailPreset, ...expert });
       return { kind: "seabed_compare_adaptive", input: {
         ...references(p, fields),
         boundaryDetail: numericParameter(data.kind as CalculationKind, "boundaryDetail", p.boundaryDetail),
-        generators, levels, detailPreset, ...expert, ...figureFive,
+        ...report, generators, levels, detailPreset, ...expert, ...figureFive,
         maxCells: numericParameter(data.kind as CalculationKind, "maxCells", p.maxCells),
         allowLarge: p.allowLarge ?? false,
         generatorTimeoutMinutes: numericParameter(data.kind as CalculationKind, "generatorTimeoutMinutes", p.generatorTimeoutMinutes),

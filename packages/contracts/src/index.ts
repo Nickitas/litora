@@ -276,7 +276,9 @@ export interface CreateCalculationDto {
 }
 export { seabedReports, findSeabedReport } from "./seabed-reports.js";
 export type { SeabedReportType } from "./seabed-reports.js";
-export { calculationReports, dimensionReports, findCalculationReport } from "./calculation-reports.js";
+export { calculationReports, dimensionReports, adaptiveComparisonReports, findCalculationReport } from "./calculation-reports.js";
+export { readAdaptiveVisualReports } from "./adaptive-visual-reports.js";
+export type { AdaptiveVisualReportDto, AdaptiveVisualReportsDto } from "./adaptive-visual-reports.js";
 export type { CalculationReportType } from "./calculation-reports.js";
 export interface CalculationKindDto {
   kind: CalculationKind;

@@ -249,6 +249,15 @@ build/render/validate/check-full обозначают соответствующ
 расширен для `dimension`, `dimension_dataset`, `dimension_file`:
 `coastline_box_counting` и `box_counting_regression`. UUID и CLI-флаги
 не расширены. Доступные сочетания задаёт общий каталог `calculationReports`.
+В [0080](features/0080-adaptive-comparison-report-selection.md) у
+`seabed_compare_adaptive` добавлены `adaptive_mesh_overviews`,
+`adaptive_mesh_windows` и `expert_fragment_cards`. Для окон API требует
+`detailPreset=kizilirmak`, для карточек — `generateExpertSet=true` с прежней
+проверкой минимум двух генераторов. Форма включает необходимую опцию при выборе;
+смена представления сохраняет UUID, уровни и параметры. Основной отчёт — набор
+SVG из открытого индекса Go, связанного SHA с текущим ADAPT-03. Номер E не
+расшифровывается. Окна ADAPT-03 отбирают центры ячеек внутри 4,2 × 2,625 км;
+AI-01 показывает пересекающие окно ячейки в восьми географических фрагментах.
 
 | Поле | CLI | Единица | Предел API | Default web/API | Выбор для исследования |
 | --- | --- | --- | --- | --- | --- |

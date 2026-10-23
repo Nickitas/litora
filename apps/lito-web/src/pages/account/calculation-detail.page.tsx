@@ -28,7 +28,7 @@ import { CalculationMetadataDownload } from "./ui/calculation-metadata-download"
 import { CalculationTitle } from "./ui/calculation-title";
 import { findCalculationReport } from "@litora/contracts";
 import { RequestedCalculationReport } from "./ui/requested-calculation-report";
-import { calculationReportLabels } from "./model/calculation-reports";
+import { calculationReportLabels, requestedCalculationReports } from "./model/calculation-reports";
 import { SeabedNextSteps } from "./ui/seabed-next-steps";
 import { CoastlineRegionResults } from "./ui/coastline-region-results";
 
@@ -273,7 +273,8 @@ function CalculationDetail({ jobId }: { jobId: string }) {
 
   const summary = job?.resultSummary;
   const requestedReport = job && findCalculationReport(job.kind, job.input.reportType);
-  const images = job?.artifacts.filter((file) => isPreviewableImage(file) && (!requestedReport || file.category !== "output" || file.filename !== requestedReport.filename));
+  const requestedIds = new Set(job ? requestedCalculationReports(job).map(({ file }) => file.id) : []);
+  const images = job?.artifacts.filter((file) => isPreviewableImage(file) && !requestedIds.has(file.id));
 
   return (
     <section className="min-w-0 space-y-6" aria-label="Результат расчёта">

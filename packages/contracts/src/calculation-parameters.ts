@@ -130,6 +130,14 @@ export function resolveNumericCalculationParameter(kind: CalculationKind, name: 
 
 /** Проверяет зависимые transport-параметры; не проверяет научную пригодность данных. */
 export function calculationParameterCombinationError(kind: CalculationKind, input: Record<string, unknown>): string | undefined {
+  if (kind === "seabed_compare_adaptive") {
+    if (input.reportType === "adaptive_mesh_windows" && input.detailPreset !== "kizilirmak")
+      return "Для выбранного отчёта включите подробное окно Кызылырмакской косы";
+    if (input.reportType === "expert_fragment_cards" && input.generateExpertSet !== true)
+      return "Для выбранного отчёта включите подготовку карточек AI-01";
+    if (input.generateExpertSet === true && typeof input.generators === "string" && input.generators.split(",").length < 2)
+      return "Для экспертных карточек нужны минимум два генератора";
+  }
   if (kind === "mesh" && typeof input.cellSizes === "string" && typeof input.boundaryDetails === "string" &&
     input.boundaryDetails.split(",").length !== 1 && input.boundaryDetails.split(",").length !== input.cellSizes.split(",").length)
     return "Количество детализаций должно быть равно числу размеров или одному";

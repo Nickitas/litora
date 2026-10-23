@@ -450,6 +450,32 @@ test("два отчёта box-counting используют прежние вх�
   }
 });
 
+test("представления сравнения требуют совместимых выходов и не меняют CLI", () => {
+  const id = "33333333-3333-4333-8333-333333333333";
+  const input = { modelInputId: id, exportMetadataInputId: id, fieldCsvInputId: id, fieldReportInputId: id, coastlineInputId: id };
+  const paths = Object.fromEntries(Object.keys(input).map((field) => [field, `/job/${field}`]));
+  const kind = "seabed_compare_adaptive";
+  assert.equal(Object.hasOwn(validateCalculation({ kind, input }).input!, "reportType"), false);
+  for (const options of [
+    { reportType: "adaptive_mesh_overviews" },
+    { reportType: "adaptive_mesh_windows", detailPreset: "kizilirmak" },
+    { reportType: "expert_fragment_cards", generateExpertSet: true },
+  ]) {
+    const selected = validateCalculation({ kind, input: { ...input, ...options } });
+    const { reportType, ...parameters } = options;
+    assert.equal(selected.input?.reportType, reportType);
+    assert.deepEqual(commandArguments(selected, "/job/output", undefined, paths),
+      commandArguments({ kind, input: { ...input, ...parameters } }, "/job/output", undefined, paths));
+  }
+  for (const options of [
+    { reportType: "adaptive_mesh_windows", detailPreset: "none" },
+    { reportType: "expert_fragment_cards", generateExpertSet: false },
+    { reportType: "expert_fragment_cards", generateExpertSet: true, generators: "delaunay" },
+    ...[null, true, [], {}, 1, "", "mesh_details", "../expert.svg", "E-009"].map((reportType) => ({ reportType })),
+  ]) assert.throws(() => validateCalculation({ kind, input: { ...input, ...options } }));
+  assert.throws(() => validateCalculation({ kind: "dimension", input: { reportType: "expert_fragment_cards" } }));
+});
+
 test("сравнение Gmsh ограничивает алгоритмы, размеры и разрешение крупного запуска", () => {
   const id = "33333333-3333-4333-8333-333333333333";
   const input = {

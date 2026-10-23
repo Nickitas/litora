@@ -99,7 +99,7 @@ export function CalculationImagePreview({
         </div>
       )}
       <figcaption className={cn("text-sm break-all", compact ? "p-2" : "p-3")}>
-        {caption && <p className="font-medium">{caption}</p>}
+        {caption && <p className="font-medium break-normal [overflow-wrap:anywhere]">{caption}</p>}
         {description && <p className="mt-1 text-sm break-normal text-muted-foreground">{description}</p>}
         <p className={caption ? "mt-2 text-xs text-muted-foreground" : undefined}>{file.filename}</p>
       </figcaption>

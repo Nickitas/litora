@@ -16,7 +16,7 @@ import type {
   ScientificInputQuotaDto,
   ScientificInputRole,
 } from "@litora/contracts";
-import { calculationReports, dimensionReports, findCalculationReport, findSeabedReport, seabedReports, calculationParameterCombinationError, calculationNumericParameters, calculationTextParameters, resolveNumericCalculationParameter, resolveTextCalculationParameter, aiNecessityDefaults, expertSetDefaults, figureFiveDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
+import { calculationReports, dimensionReports, adaptiveComparisonReports, findCalculationReport, findSeabedReport, seabedReports, calculationParameterCombinationError, calculationNumericParameters, calculationTextParameters, resolveNumericCalculationParameter, resolveTextCalculationParameter, aiNecessityDefaults, expertSetDefaults, figureFiveDefaults, optionalScientificInputRequirements, scientificInputRequirements } from "@litora/contracts";
 import { defaultCoastlineDataset, defaultCoastlineExample, findSavedExample } from "@litora/generated-data";
 import { Database, FilePlus2, X } from "lucide-react";
 import { api } from "@/shared/api/client";
@@ -713,6 +713,7 @@ export function NewCalculationDialog({
     } : {}),
     ...(kind === "seabed_check_full" ? fullOptions : {}),
     ...(kind === "seabed_compare_adaptive" ? {
+      reportType: selectedReport?.type,
       boundaryDetail, generators, levels: compareLevels, detailPreset,
       maxCells, allowLarge, generatorTimeoutMinutes,
       generateExpertSet: expertOptions.generateExpertSet,
@@ -955,6 +956,18 @@ export function NewCalculationDialog({
                     onChange={(next) => {
                       const report = findCalculationReport(kind, next);
                       if (report) setReportType(report.type);
+                      setSubmitError("");
+                    }} />
+                </div>}
+                {kind === "seabed_compare_adaptive" && selectedReport && <div className="mt-4">
+                  <CalculationReportPicker id="comparison-report-type" label="Вид отчёта сравнения сеток"
+                    options={adaptiveComparisonReports} value={selectedReport.type} disabled={busy || !scenarioAvailable}
+                    onChange={(next) => {
+                      const report = findCalculationReport(kind, next);
+                      if (!report) return;
+                      setReportType(report.type);
+                      if (report.type === "adaptive_mesh_windows") setDetailPreset("kizilirmak");
+                      if (report.type === "expert_fragment_cards") setExpertOptions((current) => ({ ...current, generateExpertSet: true }));
                       setSubmitError("");
                     }} />
                 </div>}
@@ -1618,19 +1631,19 @@ export function NewCalculationDialog({
                         <h4 className="text-lg font-semibold">Сравнение генераторов</h4>
                         <div className="space-y-2 rounded-xl border bg-muted/35 p-4 text-sm">
                           <Button type="button" variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal text-left" onClick={() => applyArticleComparisonPreset(false)}>
-                            Заполнить как рисунки 6–7: сетки 125–250 м
+                            Архив статьи: сетки 125–250 м
                           </Button>
                           <Button type="button" variant="outline" className="h-auto min-h-11 max-w-full whitespace-normal text-left" onClick={() => applyArticleComparisonPreset(true)}>
                             Компоновка AI-01: три фрагмента 125–250 м
                           </Button>
                           <p className="text-muted-foreground">
-                            Нужны совместимые модель дна, поле размера, контур и паспорта. Расчёт требует Gmsh и значительных ресурсов; совпадение с архивными SVG зависит от входов и версии генератора.
+                            Нужны совместимые модель дна, поле размера, контур и паспорта. Расчёт требует Gmsh и значительных ресурсов. Диапазон 125–250 м относится к архиву статьи; точные параметры рисунков 6–7 без согласованных MSH, ADAPT-03 и ключа не подтверждены.
                           </p>
                           {articlePresetApplied === "compare" && (
-                            <p role="status">Параметры рисунков 6–7 заполнены. Большой расчёт не разрешён автоматически.</p>
+                            <p role="status">Архивный пресет 125–250 м заполнен. Точный повтор примеров не подтверждён; большой расчёт не разрешён автоматически.</p>
                           )}
                           {articlePresetApplied === "figure-five" && (
-                            <p role="status">Для рисунка 5 выбраны уровень coarse, Delaunay и карточки AI-01. Входные файлы не выбраны; большой расчёт не разрешён автоматически.</p>
+                            <p role="status">Для компоновки трёх фрагментов выбраны уровень coarse, Delaunay и карточки AI-01. Это отдельный отчёт; пример рисунка 5 показывает подробности модели дна. Проверьте исходные файлы и ресурсы.</p>
                           )}
                         </div>
                         <div className="space-y-2">
@@ -1677,7 +1690,7 @@ export function NewCalculationDialog({
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="compare-detail-preset">Подробные рисунки сетки</Label>
-                          <Select value={detailPreset} onValueChange={(value) => {
+                          <Select value={detailPreset} disabled={selectedReport?.type === "adaptive_mesh_windows"} onValueChange={(value) => {
                             setDetailPreset(value);
                             setArticlePresetApplied(null);
                           }}>
@@ -1700,7 +1713,7 @@ export function NewCalculationDialog({
                         </label>
                         <div className="space-y-3 rounded-xl border bg-muted/35 p-4">
                           <label className="flex min-h-11 items-center gap-3 text-sm">
-                            <input type="checkbox" checked={expertOptions.generateExpertSet}
+                            <input type="checkbox" checked={expertOptions.generateExpertSet} disabled={selectedReport?.type === "expert_fragment_cards"}
                               onChange={(event) => {
                                 setExpertOptions((current) => ({ ...current, generateExpertSet: event.target.checked }));
                                 if (!event.target.checked) setFigureFiveOptions((current) => ({ ...current, generateFigureFive: false }));

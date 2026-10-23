@@ -14,6 +14,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"coastal-geometry/internal/cli"
 	adaptivemodel "coastal-geometry/internal/domain/adaptive"
 	"coastal-geometry/internal/domain/coastline"
 	"coastal-geometry/internal/domain/geometry"
@@ -258,6 +259,9 @@ func executeSeabedExpertSet(options expertSetOptions) (expertSetResult, error) {
 	}
 	logPath := filepath.Join(directory, "expert-set.log")
 	if err := writeExpertSetLog(logPath, manifest); err != nil {
+		return expertSetResult{}, err
+	}
+	if err := cli.WriteExpertVisualReports(options.OutputRoot, manifest); err != nil {
 		return expertSetResult{}, err
 	}
 	return expertSetResult{directory: directory, ratingTemplate: ratingTemplate, instructions: instructions, organizerKey: organizerKey, log: logPath, manifest: manifest, comparison: report}, nil

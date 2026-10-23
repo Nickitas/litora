@@ -768,6 +768,24 @@ if (process.env.TEST_MESH_ENABLED === "true") {
           assert.ok(svg.includes(marker), `SVG ${filename} не содержит ${marker}`);
           assert.equal(createHash("sha256").update(svg).digest("hex"), figure.sha256);
         }
+        if (kind === "seabed_compare_adaptive") {
+          const indexName = "seabed/adaptive/comparison/comparison-visual-reports.json";
+          const indexFile = state.artifacts.find((file) => file.category === "output" && file.filename === indexName);
+          assert.ok(indexFile, "Нет открытого индекса ADAPT-03");
+          const indexResponse = await fetch(indexFile.downloadUrl);
+          assert.equal(indexResponse.status, 200);
+          const indexBytes = Buffer.from(await indexResponse.arrayBuffer());
+          assert.equal(createHash("sha256").update(indexBytes).digest("hex"), indexFile.sha256);
+          const index = JSON.parse(indexBytes.toString("utf8"));
+          assert.equal(index.schema_version, "lito-adaptive-visual-reports/v1");
+          assert.equal(index.comparison_report_sha256, artifact.sha256);
+          assert.deepEqual(state.resultSummary.metrics["comparison-visual-reports.json"], index);
+          assert.ok(index.reports.some((entry) => entry.report_type === input.reportType));
+          for (const entry of index.reports) {
+            const svgFile = state.artifacts.find((file) => file.category === "output" && file.filename === entry.filename);
+            assert.equal(svgFile?.sha256, entry.sha256);
+          }
+        }
         await second.request(`/calculations/${next.id}`, "GET", undefined, 404);
         console.log(`${kind}: готово, ${state.artifacts.length} файлов`);
         return next.id;
@@ -801,7 +819,7 @@ if (process.env.TEST_MESH_ENABLED === "true") {
       }, "seabed/adaptive/gmsh/black-sea-adaptive.msh");
       await runSeabed("seabed_compare_adaptive", {
         ...adaptiveInput, generators: "delaunay,frontal-quad,parallelograms",
-        levels: "local:200:1000", detailPreset: "none",
+        levels: "local:200:1000", detailPreset: "none", reportType: "adaptive_mesh_overviews",
       }, "seabed/adaptive/comparison/adaptive-generator-comparison.json");
     }
   }
@@ -923,7 +941,8 @@ await second.request(`/scientific-inputs/${savedLines[0].id}/coastline-preview`,
 console.log("Каталог всего моря: приватная копия, повтор/гонка, квота, проверка Go, область и сохранённые линии S3 проверены");
 assert.ok(swagger.paths["/api/calculations"].post);
 const createCalculationSchema = swagger.paths["/api/calculations"].post.requestBody.content["application/json"].schema;
-assert.deepEqual(createCalculationSchema.properties.input.properties.reportType.enum, ["bathymetry_overview", "size_field", "mesh_details", "coastline_box_counting", "box_counting_regression"]);
+assert.deepEqual(createCalculationSchema.properties.input.properties.reportType.enum, ["bathymetry_overview", "size_field", "mesh_details", "coastline_box_counting", "box_counting_regression", "adaptive_mesh_overviews", "adaptive_mesh_windows", "expert_fragment_cards"]);
+assert.deepEqual(createCalculationSchema.oneOf.find((branch) => branch.properties.kind.enum[0] === "seabed_compare_adaptive").properties.input.properties.reportType.enum, ["adaptive_mesh_overviews", "adaptive_mesh_windows", "expert_fragment_cards"]);
 assert.deepEqual(createCalculationSchema.oneOf.find((branch) => branch.properties.kind.enum[0] === "seabed_render").properties.input.properties.reportType.enum, ["bathymetry_overview", "mesh_details"]);
 assert.deepEqual(createCalculationSchema.oneOf.find((branch) => branch.properties.kind.enum[0] === "seabed_adapt").properties.input.properties.reportType.enum, ["size_field"]);
 for (const kind of ["dimension", "dimension_dataset", "dimension_file"]) {

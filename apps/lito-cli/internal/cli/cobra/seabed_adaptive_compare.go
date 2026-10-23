@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"coastal-geometry/internal/cli"
 	adaptivemodel "coastal-geometry/internal/domain/adaptive"
 	"coastal-geometry/internal/domain/coastline"
 	mesh2d "coastal-geometry/internal/domain/mesh"
@@ -332,6 +333,9 @@ func runSeabedAdaptiveCompare(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	if err := adaptivemodel.WriteComparisonTSV(tsvPath, report); err != nil {
+		return err
+	}
+	if err := cli.WriteComparisonVisualReports(seabedAdaptiveCompareOutput, jsonPath, report); err != nil {
 		return err
 	}
 	if !quiet {
